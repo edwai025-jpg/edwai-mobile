@@ -94,3 +94,25 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+### `artifacts/mobile` (`@workspace/mobile`)
+
+EdwAI mobile app built with Expo React Native (expo-router). Frontend-only phase — all API calls are stubbed. Play Store/App Store compliant (no payment buttons, plan management is plain text only).
+
+**Auth flow:** Login → OTP verification → Complete Profile → Bottom tabs
+**Auth state:** AsyncStorage keys `edwai_auth` and `edwai_profile` via `context/auth.tsx`
+
+**Screens:**
+- `app/index.tsx` — Login screen: Phone OTP / Email OTP tabs, +91 prefix input, Google Sign-in, trust badge
+- `app/otp.tsx` — OTP verification: 6-digit input boxes with auto-advance, resend timer
+- `app/complete-profile.tsx` — 2-step profile setup: Step 1 (name), Step 2 (State → Board → Class cascading pickers, privacy checkbox)
+- `app/(tabs)/index.tsx` — Home: textbook picker (Class/Subject/Textbook), Q&A with streaming animation, Answer from Book / Learn Concept modes
+- `app/(tabs)/my-docs.tsx` — Phase 2 placeholder: PDF upload, YouTube video analysis coming soon
+- `app/(tabs)/history.tsx` — Question history: empty state + sample data preview
+- `app/(tabs)/profile.tsx` — Avatar, plan badge, usage progress bar, plain-text plan notice, settings menu, logout/delete
+
+**Design system:** `constants/colors.ts` — EdwAI indigo/purple palette, primary #667eea, secondary #764ba2
+**Tab bar:** NativeTabs with Liquid Glass on iOS 26+, expo-blur BlurView fallback on older iOS, plain white on Android
+**Backend:** Not yet connected. Future: https://edwai-api-953672603784.asia-south1.run.app
+
+Bundle ID: `com.edwai.app` | Scheme: `edwai`
