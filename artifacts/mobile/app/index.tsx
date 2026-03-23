@@ -15,6 +15,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { EdwAILogo } from "@/components/EdwAILogo";
+import { MadeInIndia } from "@/components/MadeInIndia";
 import { Colors } from "@/constants/colors";
 
 type LoginTab = "phone" | "email";
@@ -118,8 +120,7 @@ export default function LoginScreen() {
 
           <View style={styles.card}>
             <View style={styles.logoRow}>
-              <Text style={styles.logoEdw}>Edw</Text>
-              <Text style={styles.logoAI}>AI</Text>
+              <EdwAILogo size="lg" />
             </View>
             <Text style={styles.cardSub}>AI Assistant for Exam Preparation</Text>
 
@@ -237,10 +238,7 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          <View style={styles.madeInIndia}>
-            <Text style={styles.madeInIndiaText}>Made in India</Text>
-            <Text style={styles.indiaFlag}> </Text>
-          </View>
+          <MadeInIndia />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { EdwAILogo } from "@/components/EdwAILogo";
 import { Colors } from "@/constants/colors";
 
 type HistoryItem = {
@@ -110,10 +111,7 @@ export default function HistoryScreen() {
       />
 
       <View style={[styles.header, { paddingTop: topInset + 12 }]}>
-        <View style={styles.logoRow}>
-          <Text style={styles.logoEdw}>Edw</Text>
-          <Text style={styles.logoAI}>AI</Text>
-        </View>
+        <EdwAILogo size="sm" />
         <Text style={styles.screenTitle}>History</Text>
         {data.length > 0 && (
           <View style={styles.countBadge}>

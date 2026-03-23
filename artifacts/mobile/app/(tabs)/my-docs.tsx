@@ -10,9 +10,30 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { EdwAILogo } from "@/components/EdwAILogo";
 import { Colors } from "@/constants/colors";
 
-const FEATURES = [
+type FeatureItem =
+  | {
+      iconSet: "MaterialCommunity";
+      icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+      title: string;
+      desc: string;
+    }
+  | {
+      iconSet: "Ionicons";
+      icon: React.ComponentProps<typeof Ionicons>["name"];
+      title: string;
+      desc: string;
+    }
+  | {
+      iconSet: "Feather";
+      icon: React.ComponentProps<typeof Feather>["name"];
+      title: string;
+      desc: string;
+    };
+
+const FEATURES: FeatureItem[] = [
   {
     icon: "file-pdf-box",
     iconSet: "MaterialCommunity",
@@ -48,10 +69,7 @@ export default function MyDocsScreen() {
       />
 
       <View style={[styles.header, { paddingTop: topInset + 12 }]}>
-        <View style={styles.logoRow}>
-          <Text style={styles.logoEdw}>Edw</Text>
-          <Text style={styles.logoAI}>AI</Text>
-        </View>
+        <EdwAILogo size="sm" />
         <Text style={styles.screenTitle}>My Docs</Text>
       </View>
 
@@ -92,14 +110,14 @@ export default function MyDocsScreen() {
             <View style={styles.featureIconWrap}>
               {f.iconSet === "MaterialCommunity" ? (
                 <MaterialCommunityIcons
-                  name={f.icon as any}
+                  name={f.icon}
                   size={24}
                   color={Colors.primary}
                 />
               ) : f.iconSet === "Ionicons" ? (
-                <Ionicons name={f.icon as any} size={24} color="#FF0000" />
+                <Ionicons name={f.icon} size={24} color="#FF0000" />
               ) : (
-                <Feather name={f.icon as any} size={24} color={Colors.primary} />
+                <Feather name={f.icon} size={24} color={Colors.primary} />
               )}
             </View>
             <View style={styles.featureText}>

@@ -13,8 +13,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { EdwAILogo } from "@/components/EdwAILogo";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
+
+type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
 type Source = "textbooks" | "own";
 
@@ -235,10 +238,7 @@ export default function HomeScreen() {
 
       <View style={[styles.topBar, { paddingTop: topInset + 10 }]}>
         <View style={styles.topLeft}>
-          <View style={styles.logoRow}>
-            <Text style={styles.logoEdw}>Edw</Text>
-            <Text style={styles.logoAI}>AI</Text>
-          </View>
+          <EdwAILogo size="md" />
           {user?.className && (
             <View style={styles.classBadge}>
               <MaterialIcons name="school" size={12} color={Colors.primary} />
@@ -488,17 +488,19 @@ export default function HomeScreen() {
         {!answer && !loading && (
           <View style={styles.howToCard}>
             <Text style={styles.howToTitle}>How to use EdwAI</Text>
-            {[
-              { icon: "book-outline", text: "Select your class, subject, and textbook from the dropdowns" },
-              { icon: "help-circle-outline", text: "Type your question in the text area above" },
-              { icon: "search-outline", text: "Choose Answer from Book to get exact text from your book" },
-              { icon: "bulb-outline", text: "Choose Learn Concept to get AI-powered explanations" },
-            ].map((item, i) => (
+            {(
+              [
+                { icon: "book-outline" as IoniconsName, text: "Select your class, subject, and textbook from the dropdowns" },
+                { icon: "help-circle-outline" as IoniconsName, text: "Type your question in the text area above" },
+                { icon: "search-outline" as IoniconsName, text: "Choose Answer from Book to get exact text from your book" },
+                { icon: "bulb-outline" as IoniconsName, text: "Choose Learn Concept to get AI-powered explanations" },
+              ] as Array<{ icon: IoniconsName; text: string }>
+            ).map((item, i) => (
               <View key={i} style={styles.howToRow}>
                 <View style={styles.howToNum}>
                   <Text style={styles.howToNumText}>{i + 1}</Text>
                 </View>
-                <Ionicons name={item.icon as any} size={16} color={Colors.primary} />
+                <Ionicons name={item.icon} size={16} color={Colors.primary} />
                 <Text style={styles.howToText}>{item.text}</Text>
               </View>
             ))}

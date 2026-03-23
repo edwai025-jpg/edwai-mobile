@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { EdwAILogo } from "@/components/EdwAILogo";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 
@@ -120,8 +121,7 @@ export default function OTPScreen() {
 
           <View style={styles.card}>
             <View style={styles.logoRow}>
-              <Text style={styles.logoEdw}>Edw</Text>
-              <Text style={styles.logoAI}>AI</Text>
+              <EdwAILogo size="md" />
             </View>
 
             {isGoogle ? (

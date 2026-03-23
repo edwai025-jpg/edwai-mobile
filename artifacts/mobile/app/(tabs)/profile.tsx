@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
   Alert,
+  DimensionValue,
   Platform,
   Pressable,
   ScrollView,
@@ -12,8 +13,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { EdwAILogo } from "@/components/EdwAILogo";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
+
+type MaterialIconName = React.ComponentProps<typeof MaterialIcons>["name"];
 
 function Avatar({ name }: { name: string }) {
   const initials = name
@@ -150,10 +154,7 @@ export default function ProfileScreen() {
       />
 
       <View style={[styles.header, { paddingTop: topInset + 12 }]}>
-        <View style={styles.logoRow}>
-          <Text style={styles.logoEdw}>Edw</Text>
-          <Text style={styles.logoAI}>AI</Text>
-        </View>
+        <EdwAILogo size="sm" />
         <Text style={styles.screenTitle}>Profile</Text>
       </View>
 
@@ -218,7 +219,7 @@ export default function ProfileScreen() {
               </Text>
             </View>
             <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${usagePct}%` as any }]} />
+              <View style={[styles.progressFill, { width: `${usagePct}%` as DimensionValue }]} />
             </View>
             <Text style={styles.usageRemaining}>
               {limit - used} questions remaining this month
@@ -236,15 +237,17 @@ export default function ProfileScreen() {
         {user?.state && (
           <View style={styles.detailsCard}>
             <Text style={styles.detailsTitle}>Academic Details</Text>
-            {[
-              { label: "State", value: user.state, icon: "location-on" },
-              { label: "Board", value: user.board, icon: "school" },
-              { label: "Class", value: user.className, icon: "class" },
-            ]
+            {(
+              [
+                { label: "State", value: user.state, icon: "location-on" as MaterialIconName },
+                { label: "Board", value: user.board, icon: "school" as MaterialIconName },
+                { label: "Class", value: user.className, icon: "class" as MaterialIconName },
+              ] as Array<{ label: string; value: string | undefined; icon: MaterialIconName }>
+            )
               .filter((d) => d.value)
               .map((d, i) => (
                 <View key={i} style={styles.detailRow}>
-                  <MaterialIcons name={d.icon as any} size={15} color={Colors.primary} />
+                  <MaterialIcons name={d.icon} size={15} color={Colors.primary} />
                   <Text style={styles.detailLabel}>{d.label}</Text>
                   <Text style={styles.detailValue} numberOfLines={1}>
                     {d.value}

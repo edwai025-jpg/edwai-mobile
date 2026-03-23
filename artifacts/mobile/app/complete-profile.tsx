@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { EdwAILogo } from "@/components/EdwAILogo";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 
@@ -262,11 +263,10 @@ export default function CompleteProfileScreen() {
             <Text style={styles.setupBadgeText}>SETUP YOUR PROFILE</Text>
           </View>
 
-          <Text style={styles.title}>
-            Welcome to{" "}
-            <Text style={{ color: Colors.primary }}>Edw</Text>
-            <Text style={styles.title}>AI</Text>
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 8 }}>
+            <Text style={styles.welcomeText}>Welcome to</Text>
+            <EdwAILogo size="lg" />
+          </View>
           <Text style={styles.subtitle}>
             Tell us about yourself to personalise your experience
           </Text>
@@ -436,6 +436,12 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: Colors.primary,
     letterSpacing: 1,
+  },
+  welcomeText: {
+    fontSize: 28,
+    fontFamily: "Inter_700Bold",
+    color: Colors.gray900,
+    textAlign: "center",
   },
   title: {
     fontSize: 28,

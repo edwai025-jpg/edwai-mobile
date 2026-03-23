@@ -33,7 +33,7 @@ function RootLayoutNav() {
 
     if (!isLoggedIn && inAuthGroup) {
       router.replace("/");
-    } else if (isLoggedIn && !isProfileComplete && !inProfile && !inOtp) {
+    } else if (isLoggedIn && !isProfileComplete && !inProfile) {
       router.replace("/complete-profile");
     } else if (isLoggedIn && isProfileComplete && (inLogin || inOtp || inProfile)) {
       router.replace("/(tabs)");
