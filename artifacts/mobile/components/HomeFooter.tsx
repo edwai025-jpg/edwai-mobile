@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import {
   Alert,
@@ -26,23 +27,26 @@ const SOCIAL = [
     name: "YouTube",
     icon: "youtube" as const,
     href: "https://youtube.com/@edwai",
-    color: "#FF0000",
   },
   {
     name: "Telegram",
     icon: "send" as const,
     href: "https://t.me/edwai",
-    color: "#229ED9",
   },
   {
     name: "Instagram",
     icon: "instagram" as const,
     href: "https://instagram.com/edwai",
-    color: "#E1306C",
   },
 ];
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
+
+const BG = "#1e2235";
+const BG_CARD = "#272b3f";
+const TEXT_MUTED = "#8b92b5";
+const TEXT_DIM = "#6b7280";
+const DIVIDER = "#2e3450";
 
 function openLink(href: string) {
   Linking.openURL(href).catch(() =>
@@ -55,117 +59,133 @@ interface HomeFooterProps {
 }
 
 export function HomeFooter({ parentPadding = 24 }: HomeFooterProps) {
+  const px = parentPadding + 4;
   return (
-    <View style={[styles.root, { marginHorizontal: -parentPadding, paddingHorizontal: parentPadding + 4 }]}>
-      <View style={styles.topDivider} />
+    <View style={[styles.wrapper, { marginHorizontal: -parentPadding }]}>
+      <LinearGradient
+        colors={["transparent", BG]}
+        style={[styles.fadeIn, { pointerEvents: "none" }]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+      />
 
-      <View style={styles.columns}>
-        <View style={styles.col}>
-          <Text style={styles.colHeader}>QUICK LINKS</Text>
-          {QUICK_LINKS.map((link) => (
-            <Pressable
-              key={link.label}
-              style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.7 }]}
-              onPress={() => openLink(link.href)}
-            >
-              <Text style={styles.bullet}>›</Text>
-              <Text style={styles.linkText}>{link.label}</Text>
-              {link.isNew && (
-                <View style={styles.newBadge}>
-                  <Text style={styles.newBadgeText}>NEW</Text>
-                </View>
-              )}
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={styles.dividerV} />
-
-        <View style={styles.col}>
-          <Text style={styles.colHeader}>CONTACT US</Text>
-
-          <View style={styles.contactSection}>
-            <Text style={styles.contactLabel}>EMAIL</Text>
-            <Pressable
-              style={({ pressed }) => [styles.contactRow, pressed && { opacity: 0.7 }]}
-              onPress={() => openLink("mailto:support@edwai.com")}
-            >
-              <Feather name={"mail" as FeatherIconName} size={13} color={Colors.primaryLight} />
-              <Text style={styles.contactValue}>support@edwai.com</Text>
-            </Pressable>
+      <View style={[styles.body, { paddingHorizontal: px }]}>
+        <View style={styles.columns}>
+          <View style={styles.col}>
+            <Text style={styles.colHeader}>QUICK LINKS</Text>
+            {QUICK_LINKS.map((link) => (
+              <Pressable
+                key={link.label}
+                style={({ pressed }) => [
+                  styles.linkRow,
+                  pressed && { opacity: 0.65 },
+                ]}
+                onPress={() => openLink(link.href)}
+              >
+                <Text style={styles.bullet}>›</Text>
+                <Text style={styles.linkText}>{link.label}</Text>
+                {link.isNew && (
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>NEW</Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
           </View>
 
-          <View style={styles.contactSection}>
-            <Text style={styles.contactLabel}>LOCATION</Text>
-            <View style={styles.contactRow}>
-              <Feather name={"map-pin" as FeatherIconName} size={13} color={Colors.primaryLight} />
-              <Text style={styles.contactValue}>India 🇮🇳</Text>
+          <View style={styles.dividerV} />
+
+          <View style={styles.col}>
+            <Text style={styles.colHeader}>CONTACT US</Text>
+
+            <View style={styles.contactSection}>
+              <Text style={styles.contactLabel}>EMAIL</Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.contactRow,
+                  pressed && { opacity: 0.65 },
+                ]}
+                onPress={() => openLink("mailto:support@edwai.com")}
+              >
+                <Feather
+                  name={"mail" as FeatherIconName}
+                  size={13}
+                  color={Colors.primaryLight}
+                />
+                <Text style={styles.contactValue}>support@edwai.com</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.contactSection}>
+              <Text style={styles.contactLabel}>LOCATION</Text>
+              <View style={styles.contactRow}>
+                <Feather
+                  name={"map-pin" as FeatherIconName}
+                  size={13}
+                  color={Colors.primaryLight}
+                />
+                <Text style={styles.contactValue}>India 🇮🇳</Text>
+              </View>
+            </View>
+
+            <View style={styles.contactSection}>
+              <Text style={styles.contactLabel}>FOLLOW US</Text>
+              <View style={styles.socialRow}>
+                {SOCIAL.map((s) => (
+                  <Pressable
+                    key={s.name}
+                    style={({ pressed }) => [
+                      styles.socialBtn,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                    onPress={() => openLink(s.href)}
+                    accessibilityLabel={s.name}
+                  >
+                    <Feather name={s.icon} size={16} color={TEXT_MUTED} />
+                  </Pressable>
+                ))}
+              </View>
             </View>
           </View>
-
-          <View style={styles.contactSection}>
-            <Text style={styles.contactLabel}>FOLLOW US</Text>
-            <View style={styles.socialRow}>
-              {SOCIAL.map((s) => (
-                <Pressable
-                  key={s.name}
-                  style={({ pressed }) => [
-                    styles.socialBtn,
-                    pressed && { opacity: 0.75 },
-                  ]}
-                  onPress={() => openLink(s.href)}
-                  accessibilityLabel={s.name}
-                >
-                  <Feather name={s.icon} size={16} color={styles.socialIcon.color} />
-                </Pressable>
-              ))}
-            </View>
-          </View>
         </View>
-      </View>
 
-      <View style={styles.bottomDivider} />
+        <View style={styles.bottomDivider} />
 
-      <View style={styles.bottomBar}>
-        <Text style={styles.copyright}>© 2025 EdwAI. All rights reserved.</Text>
-        <View style={styles.legalLinks}>
-          <Pressable onPress={() => openLink("https://edwai.com/privacy")}>
-            <Text style={styles.legalLink}>Privacy Policy</Text>
-          </Pressable>
-          <Text style={styles.legalDot}>·</Text>
-          <Pressable onPress={() => openLink("https://edwai.com/terms")}>
-            <Text style={styles.legalLink}>Terms of Service</Text>
-          </Pressable>
-          <Text style={styles.legalDot}>·</Text>
-          <Pressable onPress={() => openLink("https://edwai.com/refund")}>
-            <Text style={styles.legalLink}>Refund Policy</Text>
-          </Pressable>
+        <View style={styles.bottomBar}>
+          <Text style={styles.copyright}>© 2025 EdwAI. All rights reserved.</Text>
+          <View style={styles.legalLinks}>
+            <Pressable onPress={() => openLink("https://edwai.com/privacy")}>
+              <Text style={styles.legalLink}>Privacy Policy</Text>
+            </Pressable>
+            <Text style={styles.legalDot}>·</Text>
+            <Pressable onPress={() => openLink("https://edwai.com/terms")}>
+              <Text style={styles.legalLink}>Terms of Service</Text>
+            </Pressable>
+            <Text style={styles.legalDot}>·</Text>
+            <Pressable onPress={() => openLink("https://edwai.com/refund")}>
+              <Text style={styles.legalLink}>Refund Policy</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </View>
   );
 }
 
-const BG = "#1e2235";
-const BG_CARD = "#272b3f";
-const TEXT_MUTED = "#8b92b5";
-const TEXT_DIM = "#6b7280";
-const DIVIDER = "#2e3450";
-
 const styles = StyleSheet.create({
-  root: {
-    backgroundColor: BG,
-    paddingTop: 28,
-    paddingBottom: 20,
+  wrapper: {
+    marginTop: 36,
+    overflow: "hidden",
   },
-  topDivider: {
-    height: 1,
-    backgroundColor: DIVIDER,
-    marginBottom: 24,
+  fadeIn: {
+    height: 48,
+  },
+  body: {
+    backgroundColor: BG,
+    paddingBottom: 24,
   },
   columns: {
     flexDirection: "row",
-    gap: 0,
   },
   col: {
     flex: 1,
@@ -247,9 +267,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: DIVIDER,
-  },
-  socialIcon: {
-    color: TEXT_MUTED,
   },
   bottomDivider: {
     height: 1,
