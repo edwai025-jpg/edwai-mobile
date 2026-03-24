@@ -1,14 +1,15 @@
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import {
   Alert,
+  Dimensions,
   Linking,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Path, Svg } from "react-native-svg";
 
 import { Colors } from "@/constants/colors";
 
@@ -23,21 +24,9 @@ const QUICK_LINKS = [
 ];
 
 const SOCIAL = [
-  {
-    name: "YouTube",
-    icon: "youtube" as const,
-    href: "https://youtube.com/@edwai",
-  },
-  {
-    name: "Telegram",
-    icon: "send" as const,
-    href: "https://t.me/edwai",
-  },
-  {
-    name: "Instagram",
-    icon: "instagram" as const,
-    href: "https://instagram.com/edwai",
-  },
+  { name: "YouTube", icon: "youtube" as const, href: "https://youtube.com/@edwai" },
+  { name: "Telegram", icon: "send" as const, href: "https://t.me/edwai" },
+  { name: "Instagram", icon: "instagram" as const, href: "https://instagram.com/edwai" },
 ];
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
@@ -47,6 +36,7 @@ const BG_CARD = "#272b3f";
 const TEXT_MUTED = "#8b92b5";
 const TEXT_DIM = "#6b7280";
 const DIVIDER = "#2e3450";
+const WAVE_H = 48;
 
 function openLink(href: string) {
   Linking.openURL(href).catch(() =>
@@ -59,15 +49,21 @@ interface HomeFooterProps {
 }
 
 export function HomeFooter({ parentPadding = 24 }: HomeFooterProps) {
+  const screenW = Dimensions.get("window").width;
   const px = parentPadding + 4;
+
+  const wavePath = `M 0 ${WAVE_H} Q ${screenW / 2} 0 ${screenW} ${WAVE_H} L ${screenW} ${WAVE_H} L 0 ${WAVE_H} Z`;
+
   return (
     <View style={[styles.wrapper, { marginHorizontal: -parentPadding }]}>
-      <LinearGradient
-        colors={["transparent", BG]}
-        style={[styles.fadeIn, { pointerEvents: "none" }]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-      />
+      <Svg
+        width={screenW}
+        height={WAVE_H}
+        style={styles.wave}
+        viewBox={`0 0 ${screenW} ${WAVE_H}`}
+      >
+        <Path d={wavePath} fill={BG} />
+      </Svg>
 
       <View style={[styles.body, { paddingHorizontal: px }]}>
         <View style={styles.columns}>
@@ -107,11 +103,7 @@ export function HomeFooter({ parentPadding = 24 }: HomeFooterProps) {
                 ]}
                 onPress={() => openLink("mailto:support@edwai.com")}
               >
-                <Feather
-                  name={"mail" as FeatherIconName}
-                  size={13}
-                  color={Colors.primaryLight}
-                />
+                <Feather name={"mail" as FeatherIconName} size={13} color={Colors.primaryLight} />
                 <Text style={styles.contactValue}>support@edwai.com</Text>
               </Pressable>
             </View>
@@ -119,11 +111,7 @@ export function HomeFooter({ parentPadding = 24 }: HomeFooterProps) {
             <View style={styles.contactSection}>
               <Text style={styles.contactLabel}>LOCATION</Text>
               <View style={styles.contactRow}>
-                <Feather
-                  name={"map-pin" as FeatherIconName}
-                  size={13}
-                  color={Colors.primaryLight}
-                />
+                <Feather name={"map-pin" as FeatherIconName} size={13} color={Colors.primaryLight} />
                 <Text style={styles.contactValue}>India 🇮🇳</Text>
               </View>
             </View>
@@ -174,15 +162,16 @@ export function HomeFooter({ parentPadding = 24 }: HomeFooterProps) {
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginTop: 36,
-    overflow: "hidden",
+    marginTop: 32,
+    overflow: "visible",
   },
-  fadeIn: {
-    height: 48,
+  wave: {
+    display: "flex",
   },
   body: {
     backgroundColor: BG,
-    paddingBottom: 24,
+    paddingBottom: 28,
+    paddingTop: 4,
   },
   columns: {
     flexDirection: "row",
