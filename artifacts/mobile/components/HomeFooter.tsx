@@ -50,9 +50,13 @@ function openLink(href: string) {
   );
 }
 
-export function HomeFooter() {
+interface HomeFooterProps {
+  parentPadding?: number;
+}
+
+export function HomeFooter({ parentPadding = 24 }: HomeFooterProps) {
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { marginHorizontal: -parentPadding, paddingHorizontal: parentPadding + 4 }]}>
       <View style={styles.topDivider} />
 
       <View style={styles.columns}>
@@ -151,8 +155,6 @@ const DIVIDER = "#2e3450";
 const styles = StyleSheet.create({
   root: {
     backgroundColor: BG,
-    marginHorizontal: -16,
-    paddingHorizontal: 20,
     paddingTop: 28,
     paddingBottom: 20,
   },

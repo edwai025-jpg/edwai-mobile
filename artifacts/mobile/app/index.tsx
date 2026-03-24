@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EdwAILogo } from "@/components/EdwAILogo";
+import { HomeFooter } from "@/components/HomeFooter";
 import { MadeInIndia } from "@/components/MadeInIndia";
 import { Colors } from "@/constants/colors";
 
@@ -239,6 +240,8 @@ export default function LoginScreen() {
           </View>
 
           <MadeInIndia />
+
+          <HomeFooter parentPadding={24} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

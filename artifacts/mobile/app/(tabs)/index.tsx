@@ -14,7 +14,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EdwAILogo } from "@/components/EdwAILogo";
-import { HomeFooter } from "@/components/HomeFooter";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 
@@ -508,7 +507,6 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <HomeFooter />
       </ScrollView>
     </View>
   );
