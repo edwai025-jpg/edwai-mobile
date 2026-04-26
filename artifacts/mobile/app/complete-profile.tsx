@@ -1,8 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,47 +14,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import WhatsNewPanel from "@/components/WhatsNewPanel";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
+import api, { ApiError, BoardItem, ClassItem, StateItem } from "@/services/api";
 
-const STATES = [
-  "Andhra Pradesh",
-  "Bihar",
-  "Delhi",
-  "Gujarat",
-  "Haryana",
-  "Karnataka",
-  "Kerala",
-  "Madhya Pradesh",
-  "Maharashtra",
-  "Odisha",
-  "Punjab",
-  "Rajasthan",
-  "Tamil Nadu",
-  "Telangana",
-  "Uttar Pradesh",
-  "West Bengal",
-];
-
-const BOARDS_BY_STATE: Record<string, string[]> = {
-  "Andhra Pradesh": ["Andhra Pradesh School Education", "Andhra University", "JNTU Anantapur"],
-  Telangana: ["Telangana School Education", "Osmania University", "JNTU Hyderabad"],
-  Maharashtra: ["Maharashtra SSC Board", "Maharashtra HSC Board", "Mumbai University"],
-  Karnataka: ["Karnataka SSLC Board", "Karnataka PUC Board", "Bangalore University"],
-  "Tamil Nadu": ["Tamil Nadu SSLC Board", "Tamil Nadu HSC Board", "Anna University"],
-  Delhi: ["CBSE", "Delhi Board of Secondary Education"],
-  default: ["CBSE", "ICSE", "State Board"],
-};
-
-const CLASSES_BY_BOARD: Record<string, string[]> = {
-  "Andhra Pradesh School Education": ["Class 6", "Class 7", "Class 8", "Class 9", "Class 10"],
-  "Telangana School Education": ["Class 6", "Class 7", "Class 8", "Class 9", "Class 10"],
-  "Andhra University": ["BSC 1st Year", "BSC 2nd Year", "BSC 3rd Year"],
-  "Osmania University": ["BSC 1st Year", "BSC 2nd Year", "BSC 3rd Year", "BA 1st Year"],
-  CBSE: ["Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"],
-  ICSE: ["Class 6", "Class 7", "Class 8", "Class 9", "Class 10"],
-  default: ["Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"],
-};
+type PickerItem = { id: number; name: string };
 
 function SectionBadge({ number }: { number: number }) {
   return (
@@ -69,53 +34,57 @@ function SectionBadge({ number }: { number: number }) {
 
 function PickerField({
   label,
-  options,
-  selected,
+  items,
+  selectedId,
   onSelect,
   placeholder,
   disabled,
+  loading: listLoading,
 }: {
   label: string;
-  options: string[];
-  selected: string;
-  onSelect: (v: string) => void;
+  items: PickerItem[];
+  selectedId: number | null;
+  onSelect: (item: PickerItem) => void;
   placeholder: string;
   disabled?: boolean;
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const selectedName = items.find((i) => i.id === selectedId)?.name ?? "";
 
   return (
     <View style={s.pickerWrapper}>
       <Text style={s.fieldLabel}>{label}</Text>
       <Pressable
         style={[s.pickerSelector, disabled && s.pickerDisabled]}
-        onPress={() => !disabled && setOpen(!open)}
+        onPress={() => !disabled && !listLoading && setOpen(!open)}
       >
-        <Text style={[s.pickerText, !selected && s.pickerPlaceholder]}>
-          {selected || placeholder}
-        </Text>
+        {listLoading ? (
+          <ActivityIndicator size="small" color={Colors.primary} style={{ marginRight: 4 }} />
+        ) : (
+          <Text style={[s.pickerText, !selectedId && s.pickerPlaceholder]}>
+            {selectedName || placeholder}
+          </Text>
+        )}
         <Feather
           name={open ? "chevron-up" : "chevron-down"}
           size={16}
           color={disabled ? Colors.gray300 : Colors.gray400}
         />
       </Pressable>
-      {open && (
+      {open && !listLoading && (
         <View style={s.dropdown}>
           <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: 180 }}>
-            {options.map((opt) => (
+            {items.map((item) => (
               <Pressable
-                key={opt}
-                style={[s.dropdownOption, opt === selected && s.dropdownOptionSelected]}
-                onPress={() => {
-                  onSelect(opt);
-                  setOpen(false);
-                }}
+                key={item.id}
+                style={[s.dropdownOption, item.id === selectedId && s.dropdownOptionSelected]}
+                onPress={() => { onSelect(item); setOpen(false); }}
               >
-                <Text style={[s.dropdownOptionText, opt === selected && s.dropdownOptionTextSel]}>
-                  {opt}
+                <Text style={[s.dropdownOptionText, item.id === selectedId && s.dropdownOptionTextSel]}>
+                  {item.name}
                 </Text>
-                {opt === selected && <Feather name="check" size={13} color={Colors.indigo} />}
+                {item.id === selectedId && <Feather name="check" size={13} color={Colors.indigo} />}
               </Pressable>
             ))}
           </ScrollView>
@@ -127,60 +96,109 @@ function PickerField({
 
 export default function CompleteProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { completeProfile } = useAuth();
+  const { completeProfile, user } = useAuth();
 
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [selectedState, setSelectedState] = useState("");
-  const [selectedBoard, setSelectedBoard] = useState("");
-  const [selectedClass, setSelectedClass] = useState("");
+  const [name, setName] = useState(user?.name ?? "");
+  const [phone, setPhone] = useState(user?.phone?.replace("+91", "") ?? "");
+
+  const [states, setStates] = useState<StateItem[]>([]);
+  const [boards, setBoards] = useState<BoardItem[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+
+  const [statesLoading, setStatesLoading] = useState(true);
+  const [boardsLoading, setBoardsLoading] = useState(false);
+  const [classesLoading, setClassesLoading] = useState(false);
+
+  const [selectedState, setSelectedState] = useState<StateItem | null>(null);
+  const [selectedBoard, setSelectedBoard] = useState<BoardItem | null>(null);
+  const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
+
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const boards = BOARDS_BY_STATE[selectedState] ?? BOARDS_BY_STATE.default;
-  const classes = CLASSES_BY_BOARD[selectedBoard] ?? CLASSES_BY_BOARD.default;
+  const topInset = Platform.OS === "web" ? 67 : insets.top;
 
-  const canProceedOwnBooks = name.trim().length > 0 && selectedState.length > 0;
-  const canGetStarted =
-    name.trim().length > 0 &&
-    selectedState.length > 0 &&
-    selectedBoard.length > 0 &&
-    selectedClass.length > 0 &&
-    privacyAccepted;
+  useEffect(() => {
+    api.data.getStates()
+      .then((data) => setStates(data.sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => { /* silent */ })
+      .finally(() => setStatesLoading(false));
+  }, []);
+
+  const handleStateSelect = async (item: StateItem) => {
+    setSelectedState(item);
+    setSelectedBoard(null);
+    setSelectedClass(null);
+    setBoards([]);
+    setClasses([]);
+    setBoardsLoading(true);
+    try {
+      const data = await api.data.getBoards(item.id);
+      setBoards(data.sort((a, b) => a.name.localeCompare(b.name)));
+    } catch {
+      // silent
+    } finally {
+      setBoardsLoading(false);
+    }
+  };
+
+  const handleBoardSelect = async (item: BoardItem) => {
+    setSelectedBoard(item);
+    setSelectedClass(null);
+    setClasses([]);
+    setClassesLoading(true);
+    try {
+      const data = await api.data.getClasses(item.id);
+      setClasses(data.sort((a, b) => a.name.localeCompare(b.name)));
+    } catch {
+      // silent
+    } finally {
+      setClassesLoading(false);
+    }
+  };
+
+  const canProceedOwnBooks = name.trim().length > 0 && !!selectedState;
+  const canGetStarted = name.trim().length > 0 && !!selectedBoard && privacyAccepted;
+
+  const doSubmit = async (boardId: number, classId?: number) => {
+    setErrorMsg("");
+    setLoading(true);
+    try {
+      const phoneDigits = phone.replace(/\D/g, "");
+      const phonePayload =
+        phoneDigits.length === 10 && /^[6-9]/.test(phoneDigits)
+          ? `+91${phoneDigits}`
+          : undefined;
+
+      await completeProfile({
+        name: name.trim(),
+        stateId: selectedState?.id,
+        boardId,
+        classId,
+        phone: phonePayload,
+      });
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Failed to save profile. Please try again.";
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
-    if (!name.trim()) {
-      Alert.alert("Required", "Please enter your full name");
-      return;
-    }
-    if (!selectedState || !selectedBoard || !selectedClass) {
-      Alert.alert("Required", "Please select your state, board and class");
-      return;
-    }
-    if (!privacyAccepted) {
-      Alert.alert("Required", "Please accept the Terms of Service and Privacy Policy");
-      return;
-    }
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    await completeProfile({ name, state: selectedState, board: selectedBoard, className: selectedClass });
-    setLoading(false);
+    if (!name.trim()) { setErrorMsg("Please enter your full name"); return; }
+    if (!selectedBoard) { setErrorMsg("Please select your board"); return; }
+    if (!privacyAccepted) { setErrorMsg("Please accept the Terms of Service and Privacy Policy"); return; }
+    await doSubmit(selectedBoard.id, selectedClass?.id);
   };
 
   const handleProceedOwnBooks = async () => {
     if (!canProceedOwnBooks) return;
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 400));
-    await completeProfile({
-      name,
-      state: selectedState,
-      board: selectedBoard || "CBSE",
-      className: selectedClass || "Class 10",
-    });
-    setLoading(false);
+    if (!privacyAccepted) { setErrorMsg("Please accept the Terms of Service and Privacy Policy to continue"); return; }
+    const boardId = selectedBoard?.id ?? 5;
+    await doSubmit(boardId, selectedClass?.id);
   };
-
-  const topInset = Platform.OS === "web" ? 67 : insets.top;
 
   return (
     <View style={s.root}>
@@ -197,7 +215,7 @@ export default function CompleteProfileScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── SETUP BADGE ── */}
+          {/* ── BADGE ── */}
           <View style={s.setupBadge}>
             <View style={s.setupBadgeDot} />
             <Text style={s.setupBadgeText}>SETUP YOUR PROFILE</Text>
@@ -208,31 +226,34 @@ export default function CompleteProfileScreen() {
             <Text style={s.titleEdw}>Welcome to Edw</Text>
             <Text style={s.titleAI}>AI</Text>
           </Text>
-
-          {/* ── SUBTITLE ── */}
           <Text style={s.subtitle}>Tell us about yourself to personalise your experience</Text>
 
-          {/* ══════ MAIN CARD ══════ */}
+          {/* ── ERROR BANNER ── */}
+          {!!errorMsg && (
+            <View style={s.errorBanner}>
+              <Feather name="alert-circle" size={14} color="#B91C1C" />
+              <Text style={s.errorText}>{errorMsg}</Text>
+            </View>
+          )}
+
+          {/* ══ MAIN CARD ══ */}
           <View style={s.card}>
 
-            {/* ─── SECTION 1 ─── */}
+            {/* ─ SECTION 1 ─ */}
             <SectionBadge number={1} />
 
-            {/* Name */}
             <Text style={s.fieldLabel}>Your Name</Text>
             <TextInput
               style={s.input}
               placeholder="Enter your full name"
               placeholderTextColor={Colors.placeholder}
               value={name}
-              onChangeText={setName}
+              onChangeText={(t) => { setName(t); setErrorMsg(""); }}
               autoCapitalize="words"
             />
 
-            {/* Divider */}
             <View style={s.hr} />
 
-            {/* Mobile Number (optional) */}
             <View style={s.mobileHeaderRow}>
               <Text style={s.fieldLabel}>Mobile Number</Text>
               <View style={s.optionalPill}>
@@ -263,7 +284,7 @@ export default function CompleteProfileScreen() {
               </Pressable>
             </View>
 
-            {/* ─── SECTION 2 ─── */}
+            {/* ─ SECTION 2 ─ */}
             <View style={{ marginTop: 24 }}>
               <SectionBadge number={2} />
             </View>
@@ -272,29 +293,32 @@ export default function CompleteProfileScreen() {
 
             <PickerField
               label="State"
-              options={STATES}
-              selected={selectedState}
-              onSelect={(v) => { setSelectedState(v); setSelectedBoard(""); setSelectedClass(""); }}
+              items={states}
+              selectedId={selectedState?.id ?? null}
+              onSelect={handleStateSelect}
               placeholder="Select State"
+              loading={statesLoading}
             />
             <PickerField
               label="Board / University"
-              options={boards}
-              selected={selectedBoard}
-              onSelect={(v) => { setSelectedBoard(v); setSelectedClass(""); }}
+              items={boards}
+              selectedId={selectedBoard?.id ?? null}
+              onSelect={handleBoardSelect}
               placeholder="Select Board"
               disabled={!selectedState}
+              loading={boardsLoading}
             />
             <PickerField
               label="Class / Year"
-              options={classes}
-              selected={selectedClass}
+              items={classes}
+              selectedId={selectedClass?.id ?? null}
               onSelect={setSelectedClass}
-              placeholder="Select Class"
+              placeholder={classes.length === 0 && selectedBoard ? "No classes available" : "Select Class"}
               disabled={!selectedBoard}
+              loading={classesLoading}
             />
 
-            {/* ─── TERMS CHECKBOX ─── */}
+            {/* ─ TERMS ─ */}
             <Pressable style={s.termsBox} onPress={() => setPrivacyAccepted(!privacyAccepted)}>
               <View style={[s.checkbox, privacyAccepted && s.checkboxChecked]}>
                 {privacyAccepted && <Feather name="check" size={11} color={Colors.white} />}
@@ -308,7 +332,7 @@ export default function CompleteProfileScreen() {
               </Text>
             </Pressable>
 
-            {/* ─── GET STARTED BUTTON ─── */}
+            {/* ─ GET STARTED ─ */}
             <Pressable
               style={[s.getStartedBtn, (!canGetStarted || loading) && s.getStartedBtnDisabled]}
               onPress={handleSubmit}
@@ -320,17 +344,20 @@ export default function CompleteProfileScreen() {
                 end={{ x: 1, y: 0 }}
                 style={s.getStartedBtnGradient}
               >
-                <Text style={s.getStartedBtnText}>
-                  {loading ? "Setting up..." : "Get Started"}
-                </Text>
-                {!loading && <Feather name="check-circle" size={17} color={Colors.white} />}
+                {loading ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <>
+                    <Text style={s.getStartedBtnText}>Get Started</Text>
+                    <Feather name="check-circle" size={17} color={Colors.white} />
+                  </>
+                )}
               </LinearGradient>
             </Pressable>
 
           </View>
-          {/* ══════ END MAIN CARD ══════ */}
 
-          {/* ── USE YOUR OWN RESOURCES CARD ── */}
+          {/* ══ OWN RESOURCES CARD ══ */}
           <View style={s.ownCard}>
             <View style={s.ownCardTopRow}>
               <View style={s.ownIconBox}>
@@ -355,6 +382,9 @@ export default function CompleteProfileScreen() {
             </Pressable>
           </View>
 
+          {/* ══ WHAT'S NEW PANEL ══ */}
+          <WhatsNewPanel />
+
           {/* ── FOOTER ── */}
           <View style={s.footerRow}>
             <Feather name="shield" size={15} color={Colors.greenSuccess} />
@@ -368,393 +398,144 @@ export default function CompleteProfileScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
-
-  scroll: {
-    paddingHorizontal: 16,
-  },
+  scroll: { paddingHorizontal: 16 },
 
   setupBadge: {
-    alignSelf: "center",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#EEF2FF",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.indigoBorder,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    marginBottom: 18,
+    alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "#EEF2FF", borderRadius: 20, borderWidth: 1, borderColor: Colors.indigoBorder,
+    paddingHorizontal: 12, paddingVertical: 5, marginBottom: 18,
   },
-  setupBadgeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.indigo,
-  },
-  setupBadgeText: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.indigo,
-    letterSpacing: 1.2,
-  },
+  setupBadgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.indigo },
+  setupBadgeText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: Colors.indigo, letterSpacing: 1.2 },
 
-  titleLine: {
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  titleEdw: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
-    color: Colors.indigo,
-  },
-  titleAI: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
-  },
-
+  titleLine: { textAlign: "center", marginBottom: 8 },
+  titleEdw: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.indigo },
+  titleAI: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.gray900 },
   subtitle: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray500,
-    textAlign: "center",
-    marginBottom: 24,
-    lineHeight: 20,
+    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.gray500,
+    textAlign: "center", marginBottom: 16, lineHeight: 20,
   },
+
+  errorBanner: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12,
+  },
+  errorText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#B91C1C", lineHeight: 18 },
 
   card: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingTop: 28,
-    paddingHorizontal: 18,
-    paddingBottom: 24,
-    shadowColor: "#4F46E5",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 5,
-    marginBottom: 16,
+    backgroundColor: Colors.white, borderRadius: 16, paddingTop: 28,
+    paddingHorizontal: 18, paddingBottom: 24,
+    shadowColor: "#4F46E5", shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08, shadowRadius: 20, elevation: 5, marginBottom: 16,
   },
 
   sectionBadgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    gap: 12,
+    flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 12,
   },
   sectionCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.indigo,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.indigo,
+    alignItems: "center", justifyContent: "center",
   },
-  sectionCircleNum: {
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-    color: Colors.white,
-  },
-  sectionDivider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.gray200,
-  },
+  sectionCircleNum: { fontSize: 13, fontFamily: "Inter_700Bold", color: Colors.white },
+  sectionDivider: { flex: 1, height: 1, backgroundColor: Colors.gray200 },
 
-  fieldLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    color: Colors.gray700,
-    marginBottom: 7,
-  },
+  fieldLabel: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.gray700, marginBottom: 7 },
 
   input: {
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    borderRadius: 8,
-    backgroundColor: Colors.white,
-    paddingHorizontal: 14,
-    paddingVertical: 0,
-    height: 48,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray900,
-    marginBottom: 16,
+    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 8, backgroundColor: Colors.white,
+    paddingHorizontal: 14, paddingVertical: 0, height: 48,
+    fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.gray900, marginBottom: 16,
   },
 
-  hr: {
-    height: 1,
-    backgroundColor: Colors.gray100,
-    marginBottom: 16,
-  },
+  hr: { height: 1, backgroundColor: Colors.gray100, marginBottom: 16 },
 
-  mobileHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 5,
-  },
-  optionalPill: {
-    backgroundColor: Colors.gray100,
-    borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  optionalPillText: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray500,
-  },
-  mobileDesc: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray400,
-    lineHeight: 18,
-    marginBottom: 10,
-  },
+  mobileHeaderRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 5 },
+  optionalPill: { backgroundColor: Colors.gray100, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
+  optionalPillText: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.gray500 },
+  mobileDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.gray400, lineHeight: 18, marginBottom: 10 },
 
   phoneRow: {
-    flexDirection: "row",
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    borderRadius: 8,
-    height: 48,
-    overflow: "hidden",
-    marginBottom: 8,
+    flexDirection: "row", borderWidth: 1, borderColor: Colors.gray200, borderRadius: 8,
+    height: 48, overflow: "hidden", marginBottom: 8,
   },
   phonePrefix: {
-    width: 52,
-    backgroundColor: Colors.gray100,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRightWidth: 1,
-    borderRightColor: Colors.gray200,
+    width: 52, backgroundColor: Colors.gray100, alignItems: "center", justifyContent: "center",
+    borderRightWidth: 1, borderRightColor: Colors.gray200,
   },
-  phonePrefixText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    color: Colors.gray600,
-  },
+  phonePrefixText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.gray600 },
   phoneInput: {
-    flex: 1,
-    paddingHorizontal: 14,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray900,
-    backgroundColor: Colors.white,
+    flex: 1, paddingHorizontal: 14, fontSize: 15, fontFamily: "Inter_400Regular",
+    color: Colors.gray900, backgroundColor: Colors.white,
   },
 
-  skipRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  skipHint: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray400,
-    flex: 1,
-  },
-  skipLink: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: Colors.indigo,
-  },
+  skipRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  skipHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.gray400, flex: 1 },
+  skipLink: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.indigo },
 
-  findBoardTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
-    marginBottom: 14,
-  },
+  findBoardTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.gray900, marginBottom: 14 },
 
-  pickerWrapper: {
-    marginBottom: 14,
-  },
+  pickerWrapper: { marginBottom: 14 },
   pickerSelector: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    borderRadius: 8,
-    backgroundColor: Colors.white,
-    paddingHorizontal: 14,
-    height: 48,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 8, backgroundColor: Colors.white,
+    paddingHorizontal: 14, height: 48,
   },
-  pickerDisabled: {
-    backgroundColor: Colors.gray50,
-    borderColor: Colors.gray200,
-  },
-  pickerText: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray900,
-  },
-  pickerPlaceholder: {
-    color: Colors.placeholder,
-  },
+  pickerDisabled: { backgroundColor: Colors.gray50, borderColor: Colors.gray200 },
+  pickerText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.gray900 },
+  pickerPlaceholder: { color: Colors.placeholder },
   dropdown: {
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    borderRadius: 8,
-    backgroundColor: Colors.white,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-    overflow: "hidden",
+    marginTop: 4, borderWidth: 1, borderColor: Colors.gray200, borderRadius: 8,
+    backgroundColor: Colors.white, shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12,
+    elevation: 4, overflow: "hidden",
   },
   dropdownOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.gray100,
   },
-  dropdownOptionSelected: {
-    backgroundColor: "#EEF2FF",
-  },
-  dropdownOptionText: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray800,
-  },
-  dropdownOptionTextSel: {
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.indigo,
-  },
+  dropdownOptionSelected: { backgroundColor: "#EEF2FF" },
+  dropdownOptionText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.gray800 },
+  dropdownOptionTextSel: { fontFamily: "Inter_600SemiBold", color: Colors.indigo },
 
   termsBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    backgroundColor: Colors.blueTint,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.blueTintBorder,
-    padding: 14,
-    marginTop: 6,
-    marginBottom: 20,
+    flexDirection: "row", alignItems: "flex-start", gap: 12,
+    backgroundColor: Colors.blueTint, borderRadius: 10, borderWidth: 1, borderColor: Colors.blueTintBorder,
+    padding: 14, marginTop: 6, marginBottom: 20,
   },
   checkbox: {
-    width: 16,
-    height: 16,
-    borderRadius: 3,
-    borderWidth: 1.5,
-    borderColor: Colors.gray300,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 1,
-    backgroundColor: Colors.white,
+    width: 16, height: 16, borderRadius: 3, borderWidth: 1.5, borderColor: Colors.gray300,
+    alignItems: "center", justifyContent: "center", marginTop: 1, backgroundColor: Colors.white,
   },
-  checkboxChecked: {
-    backgroundColor: Colors.indigo,
-    borderColor: Colors.indigo,
-  },
-  termsText: {
-    flex: 1,
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray600,
-    lineHeight: 18,
-  },
-  termsLink: {
-    color: Colors.indigo,
-    fontFamily: "Inter_500Medium",
-  },
+  checkboxChecked: { backgroundColor: Colors.indigo, borderColor: Colors.indigo },
+  termsText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.gray600, lineHeight: 18 },
+  termsLink: { color: Colors.indigo, fontFamily: "Inter_500Medium" },
 
-  getStartedBtn: {
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  getStartedBtnDisabled: {
-    opacity: 0.7,
-  },
+  getStartedBtn: { borderRadius: 10, overflow: "hidden" },
+  getStartedBtnDisabled: { opacity: 0.7 },
   getStartedBtnGradient: {
-    height: 50,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+    height: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
   },
-  getStartedBtnText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.white,
-  },
+  getStartedBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.white },
 
   ownCard: {
-    backgroundColor: Colors.greenSuccessLight,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.greenSuccessBorder,
-    padding: 16,
-    marginBottom: 20,
+    backgroundColor: Colors.greenSuccessLight, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.greenSuccessBorder, padding: 16, marginBottom: 16,
   },
-  ownCardTopRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 14,
-  },
+  ownCardTopRow: { flexDirection: "row", gap: 12, marginBottom: 14 },
   ownIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: "rgba(16,185,129,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
+    width: 40, height: 40, borderRadius: 8, backgroundColor: "rgba(16,185,129,0.12)",
+    alignItems: "center", justifyContent: "center",
   },
-  ownCardTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
-    marginBottom: 4,
-  },
-  ownCardDesc: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray600,
-    lineHeight: 17,
-  },
-  ownCardHint: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray400,
-    marginTop: 4,
-    fontStyle: "italic",
-  },
-  ownBtn: {
-    backgroundColor: Colors.greenSuccess,
-    borderRadius: 24,
-    paddingVertical: 13,
-    alignItems: "center",
-  },
-  ownBtnDisabled: {
-    backgroundColor: Colors.greenSuccessDisabled,
-  },
-  ownBtnText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.white,
-  },
+  ownCardTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: Colors.gray900, marginBottom: 4 },
+  ownCardDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.gray600, lineHeight: 17 },
+  ownCardHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.gray400, marginTop: 4, fontStyle: "italic" },
+  ownBtn: { backgroundColor: Colors.greenSuccess, borderRadius: 24, paddingVertical: 13, alignItems: "center" },
+  ownBtnDisabled: { backgroundColor: Colors.greenSuccessDisabled },
+  ownBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.white },
 
   footerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingBottom: 16,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingBottom: 16,
   },
-  footerText: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray700,
-  },
+  footerText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.gray700 },
 });

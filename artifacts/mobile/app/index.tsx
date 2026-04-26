@@ -1,8 +1,11 @@
 import { Feather, FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -20,62 +23,100 @@ import { FeatureCards } from "@/components/FeatureCards";
 import { HomeFooter } from "@/components/HomeFooter";
 import { MadeInIndia } from "@/components/MadeInIndia";
 import { Colors } from "@/constants/colors";
+import { useAuth } from "@/context/auth";
+import api, { ApiError } from "@/services/api";
 
 type LoginTab = "phone" | "email";
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { loginWithGoogleToken } = useAuth();
   const [activeTab, setActiveTab] = useState<LoginTab>("phone");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const topInset = Platform.OS === "web" ? 67 : insets.top;
+
+  const validatePhone = () => {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length !== 10) return "Please enter a valid 10-digit phone number";
+    if (!/^[6-9]/.test(digits)) return "Phone number must start with 6, 7, 8, or 9";
+    return null;
+  };
+
+  const validateEmail = () => {
+    if (!email.trim()) return "Please enter your email address";
+    if (email.length < 5 || email.length > 254) return "Invalid email address";
+    if ((email.match(/@/g) ?? []).length !== 1) return "Invalid email address";
+    const [local, domain] = email.split("@");
+    if (!local || local.startsWith(".") || local.endsWith(".") || local.includes("..")) return "Invalid email format";
+    if (!domain || !domain.includes(".")) return "Invalid email domain";
+    const tld = domain.split(".").pop() ?? "";
+    if (tld.length < 2) return "Invalid email TLD";
+    return null;
+  };
 
   const handleSendOTP = async () => {
-    const value = activeTab === "phone" ? phone : email;
-    if (!value.trim()) {
-      Alert.alert(
-        "Required",
-        activeTab === "phone"
-          ? "Please enter your phone number"
-          : "Please enter your email address"
-      );
-      return;
-    }
-    if (activeTab === "phone" && phone.replace(/\D/g, "").length !== 10) {
-      Alert.alert("Invalid", "Please enter a valid 10-digit phone number");
-      return;
-    }
-    if (
-      activeTab === "email" &&
-      !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
-    ) {
-      Alert.alert("Invalid", "Please enter a valid email address");
-      return;
+    setErrorMsg("");
+    if (activeTab === "phone") {
+      const err = validatePhone();
+      if (err) { setErrorMsg(err); return; }
+    } else {
+      const err = validateEmail();
+      if (err) { setErrorMsg(err); return; }
     }
 
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setLoading(false);
-
-    router.push({
-      pathname: "/otp",
-      params: {
-        type: activeTab,
-        value: activeTab === "phone" ? `+91${phone}` : email,
-      },
-    });
+    try {
+      const digits = phone.replace(/\D/g, "");
+      if (activeTab === "phone") {
+        await api.auth.sendPhoneOtp(`+91${digits}`);
+        router.push({ pathname: "/otp", params: { type: "phone", value: `+91${digits}` } });
+      } else {
+        await api.auth.sendEmailOtp(email.trim());
+        router.push({ pathname: "/otp", params: { type: "email", value: email.trim() } });
+      }
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Something went wrong. Please try again.";
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleGoogle = () => {
-    router.push({
-      pathname: "/otp",
-      params: { type: "google", value: "google" },
-    });
+  const handleGoogle = async () => {
+    if (Platform.OS === "web") {
+      Linking.openURL(api.googleAuthUrl);
+      return;
+    }
+    setGoogleLoading(true);
+    try {
+      const result = await WebBrowser.openAuthSessionAsync(
+        api.googleAuthUrl,
+        api.googleRedirectBase
+      );
+      if (result.type === "success") {
+        const url = result.url;
+        const tokenMatch = url.match(/[?&]token=([^&]+)/);
+        if (!tokenMatch?.[1]) throw new Error("No token received from Google");
+        const token = tokenMatch[1];
+        const path = url.includes("/complete-profile") ? "complete-profile" : "student";
+        const { profileComplete } = await loginWithGoogleToken(token, path);
+        if (!profileComplete) {
+          router.replace("/complete-profile");
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Google sign-in failed. Please try again.";
+      setErrorMsg(msg);
+    } finally {
+      setGoogleLoading(false);
+    }
   };
-
-  const topInset =
-    Platform.OS === "web" ? 67 : insets.top;
 
   return (
     <View style={styles.root}>
@@ -85,24 +126,12 @@ export default function LoginScreen() {
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-
-      <View
-        style={[
-          styles.orb1,
-          { top: topInset + 20 },
-        ]}
-      />
+      <View style={[styles.orb1, { top: topInset + 20 }]} />
       <View style={styles.orb2} />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingTop: topInset + 40, paddingBottom: insets.bottom + 40 },
-          ]}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: topInset + 40, paddingBottom: insets.bottom + 40 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -115,8 +144,7 @@ export default function LoginScreen() {
               <Text style={styles.heroLine2}>Textbooks with AI</Text>
             </View>
             <Text style={styles.heroSub}>
-              Get precise answers from your textbooks with accurate page
-              citations. Class 6 to PhD level.
+              Get precise answers from your textbooks with accurate page citations. Class 6 to PhD level.
             </Text>
           </View>
 
@@ -126,41 +154,30 @@ export default function LoginScreen() {
             </View>
             <Text style={styles.cardSub}>AI Assistant for Exam Preparation</Text>
 
+            {/* Tab switcher */}
             <View style={styles.tabRow}>
-              <Pressable
-                style={[
-                  styles.tab,
-                  activeTab === "phone" && styles.tabActive,
-                ]}
-                onPress={() => setActiveTab("phone")}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    activeTab === "phone" && styles.tabTextActive,
-                  ]}
+              {(["phone", "email"] as LoginTab[]).map((tab) => (
+                <Pressable
+                  key={tab}
+                  style={[styles.tab, activeTab === tab && styles.tabActive]}
+                  onPress={() => { setActiveTab(tab); setErrorMsg(""); }}
                 >
-                  Login with Phone
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.tab,
-                  activeTab === "email" && styles.tabActive,
-                ]}
-                onPress={() => setActiveTab("email")}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    activeTab === "email" && styles.tabTextActive,
-                  ]}
-                >
-                  Login with Email
-                </Text>
-              </Pressable>
+                  <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                    {tab === "phone" ? "Login with Phone" : "Login with Email"}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
 
+            {/* Error banner */}
+            {!!errorMsg && (
+              <View style={styles.errorBanner}>
+                <Feather name="alert-circle" size={14} color="#B91C1C" />
+                <Text style={styles.errorText}>{errorMsg}</Text>
+              </View>
+            )}
+
+            {/* Input */}
             {activeTab === "phone" ? (
               <View style={styles.phoneRow}>
                 <View style={styles.phonePrefix}>
@@ -172,9 +189,7 @@ export default function LoginScreen() {
                   placeholderTextColor={Colors.placeholder}
                   keyboardType="phone-pad"
                   value={phone}
-                  onChangeText={(t) =>
-                    setPhone(t.replace(/\D/g, "").slice(0, 10))
-                  }
+                  onChangeText={(t) => { setPhone(t.replace(/\D/g, "").slice(0, 10)); setErrorMsg(""); }}
                   maxLength={10}
                 />
               </View>
@@ -186,16 +201,13 @@ export default function LoginScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(t) => { setEmail(t); setErrorMsg(""); }}
               />
             )}
 
+            {/* Send OTP button */}
             <Pressable
-              style={({ pressed }) => [
-                styles.sendBtn,
-                pressed && { opacity: 0.85 },
-                loading && { opacity: 0.7 },
-              ]}
+              style={({ pressed }) => [styles.sendBtn, (pressed || loading) && { opacity: 0.8 }]}
               onPress={handleSendOTP}
               disabled={loading}
             >
@@ -206,44 +218,43 @@ export default function LoginScreen() {
                 style={styles.sendBtnGradient}
               >
                 {loading ? (
-                  <Text style={styles.sendBtnText}>Sending...</Text>
+                  <ActivityIndicator size="small" color={Colors.white} />
                 ) : (
                   <Text style={styles.sendBtnText}>Send OTP</Text>
                 )}
               </LinearGradient>
             </Pressable>
 
+            {/* Divider */}
             <View style={styles.orRow}>
               <View style={styles.orLine} />
               <Text style={styles.orText}>or</Text>
               <View style={styles.orLine} />
             </View>
 
+            {/* Google button */}
             <Pressable
-              style={({ pressed }) => [
-                styles.googleBtn,
-                pressed && { opacity: 0.85 },
-              ]}
+              style={({ pressed }) => [styles.googleBtn, (pressed || googleLoading) && { opacity: 0.8 }]}
               onPress={handleGoogle}
+              disabled={googleLoading}
             >
-              <FontAwesome name="google" size={18} color="#EA4335" />
+              {googleLoading ? (
+                <ActivityIndicator size="small" color={Colors.gray700} />
+              ) : (
+                <FontAwesome name="google" size={18} color="#EA4335" />
+              )}
               <Text style={styles.googleBtnText}>Continue with Google</Text>
             </Pressable>
 
+            {/* Trust line */}
             <View style={styles.trustRow}>
-              <Feather
-                name="shield"
-                size={14}
-                color={Colors.success}
-              />
+              <Feather name="shield" size={14} color={Colors.success} />
               <Text style={styles.trustText}>Trusted by 10,000+ students</Text>
             </View>
           </View>
 
           <MadeInIndia />
-
           <FeatureCards />
-
           <HomeFooter parentPadding={24} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -252,247 +263,85 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: Colors.backgroundGradientStart,
-  },
+  root: { flex: 1, backgroundColor: Colors.backgroundGradientStart },
   orb1: {
-    position: "absolute",
-    left: -60,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: Colors.primary,
-    opacity: 0.12,
+    position: "absolute", left: -60, width: 200, height: 200,
+    borderRadius: 100, backgroundColor: Colors.primary, opacity: 0.12,
   },
   orb2: {
-    position: "absolute",
-    right: -80,
-    bottom: 120,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: Colors.secondary,
-    opacity: 0.1,
+    position: "absolute", right: -80, bottom: 120, width: 280, height: 280,
+    borderRadius: 140, backgroundColor: Colors.secondary, opacity: 0.1,
   },
-  scrollContent: {
-    paddingHorizontal: 24,
-  },
-  header: {
-    marginBottom: 28,
-  },
+  scrollContent: { paddingHorizontal: 24 },
+  header: { marginBottom: 28 },
   badge: {
-    alignSelf: "flex-start",
-    backgroundColor: Colors.indigoBg,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.indigoBorder,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    marginBottom: 16,
+    alignSelf: "flex-start", backgroundColor: Colors.indigoBg, borderRadius: 20,
+    borderWidth: 1, borderColor: Colors.indigoBorder, paddingHorizontal: 12,
+    paddingVertical: 5, marginBottom: 16,
   },
-  badgeText: {
-    color: Colors.primary,
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  heroRow: {
-    marginBottom: 10,
-  },
-  heroLine1: {
-    fontSize: 30,
-    fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
-    lineHeight: 38,
-  },
-  heroLine2: {
-    fontSize: 30,
-    fontFamily: "Inter_700Bold",
-    color: Colors.primary,
-    lineHeight: 38,
-  },
-  heroSub: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray600,
-    lineHeight: 22,
-  },
+  badgeText: { color: Colors.primary, fontSize: 12, fontFamily: "Inter_500Medium" },
+  heroRow: { marginBottom: 10 },
+  heroLine1: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.gray900, lineHeight: 38 },
+  heroLine2: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.primary, lineHeight: 38 },
+  heroSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.gray600, lineHeight: 22 },
   card: {
-    backgroundColor: Colors.white,
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: Colors.navy,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
+    backgroundColor: Colors.white, borderRadius: 24, padding: 24,
+    shadowColor: Colors.navy, shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12, shadowRadius: 24, elevation: 8,
+    borderWidth: 1, borderColor: Colors.gray200,
   },
-  logoRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  logoEdw: {
-    fontSize: 26,
-    fontFamily: "Inter_700Bold",
-    color: Colors.primary,
-  },
-  logoAI: {
-    fontSize: 26,
-    fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
-  },
-  cardSub: {
-    textAlign: "center",
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray500,
-    marginBottom: 20,
-  },
+  logoRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "center", marginBottom: 4 },
+  cardSub: { textAlign: "center", fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.gray500, marginBottom: 20 },
   tabRow: {
-    flexDirection: "row",
-    backgroundColor: Colors.gray100,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 20,
+    flexDirection: "row", backgroundColor: Colors.gray100, borderRadius: 12,
+    padding: 4, marginBottom: 16,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 9,
-    alignItems: "center",
-  },
+  tab: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: "center" },
   tabActive: {
-    backgroundColor: Colors.primary,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
+    backgroundColor: Colors.primary, shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 3,
   },
-  tabText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: Colors.gray600,
+  tabText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.gray600 },
+  tabTextActive: { color: Colors.white },
+  errorBanner: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12,
   },
-  tabTextActive: {
-    color: Colors.white,
+  errorText: {
+    flex: 1, fontSize: 13, fontFamily: "Inter_400Regular",
+    color: "#B91C1C", lineHeight: 18,
   },
   phoneRow: {
-    flexDirection: "row",
-    borderWidth: 1,
-    borderColor: Colors.inputBorder,
-    borderRadius: 12,
-    backgroundColor: Colors.inputBg,
-    marginBottom: 16,
-    overflow: "hidden",
+    flexDirection: "row", borderWidth: 1, borderColor: Colors.inputBorder,
+    borderRadius: 12, backgroundColor: Colors.inputBg, marginBottom: 16, overflow: "hidden",
   },
   phonePrefix: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRightWidth: 1,
-    borderRightColor: Colors.inputBorder,
-    justifyContent: "center",
+    paddingHorizontal: 14, paddingVertical: 14, borderRightWidth: 1,
+    borderRightColor: Colors.inputBorder, justifyContent: "center",
   },
-  phonePrefixText: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-    color: Colors.gray700,
-  },
+  phonePrefixText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.gray700 },
   phoneInput: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray900,
+    flex: 1, paddingHorizontal: 14, paddingVertical: 14,
+    fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.gray900,
   },
   emailInput: {
-    borderWidth: 1,
-    borderColor: Colors.inputBorder,
-    borderRadius: 12,
-    backgroundColor: Colors.inputBg,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray900,
-    marginBottom: 16,
+    borderWidth: 1, borderColor: Colors.inputBorder, borderRadius: 12,
+    backgroundColor: Colors.inputBg, paddingHorizontal: 14, paddingVertical: 14,
+    fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.gray900, marginBottom: 16,
   },
-  sendBtn: {
-    borderRadius: 12,
-    overflow: "hidden",
-    marginBottom: 16,
-  },
-  sendBtnGradient: {
-    paddingVertical: 15,
-    alignItems: "center",
-  },
-  sendBtnText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-  },
-  orRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  orLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.gray200,
-  },
-  orText: {
-    marginHorizontal: 12,
-    fontSize: 13,
-    color: Colors.gray400,
-    fontFamily: "Inter_400Regular",
-  },
+  sendBtn: { borderRadius: 12, overflow: "hidden", marginBottom: 16 },
+  sendBtnGradient: { paddingVertical: 15, alignItems: "center", justifyContent: "center", flexDirection: "row" },
+  sendBtnText: { color: Colors.white, fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  orRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
+  orLine: { flex: 1, height: 1, backgroundColor: Colors.gray200 },
+  orText: { marginHorizontal: 12, fontSize: 13, color: Colors.gray400, fontFamily: "Inter_400Regular" },
   googleBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Colors.gray300,
-    borderRadius: 12,
-    paddingVertical: 14,
-    backgroundColor: Colors.white,
-    marginBottom: 20,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    borderWidth: 1, borderColor: Colors.gray300, borderRadius: 12, paddingVertical: 14,
+    backgroundColor: Colors.white, marginBottom: 20,
   },
-  googleBtnText: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-    color: Colors.gray700,
-  },
-  trustRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  trustText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray500,
-  },
-  madeInIndia: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 24,
-    gap: 4,
-  },
-  madeInIndiaText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: Colors.gray500,
-  },
-  indiaFlag: {
-    fontSize: 16,
-  },
+  googleBtnText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.gray700 },
+  trustRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  trustText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.gray500 },
 });

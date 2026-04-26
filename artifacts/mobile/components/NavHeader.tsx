@@ -99,18 +99,18 @@ export function NavHeader() {
         </View>
       </View>
 
-      {(user?.stateName || user?.boardName || user?.className) && (
+      {(user?.state || user?.board || user?.className) && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.chips}
           contentContainerStyle={styles.chipsContent}
         >
-          {user?.stateName && (
-            <Chip icon="map-pin" label="State" value={user.stateName} />
+          {user?.state && (
+            <Chip icon="map-pin" label="State" value={user.state} />
           )}
-          {user?.boardName && (
-            <Chip icon="award" label="Board" value={user.boardName} />
+          {user?.board && (
+            <Chip icon="award" label="Board" value={user.board} />
           )}
           {user?.className && (
             <Chip icon="book-open" label="Class" value={user.className} />

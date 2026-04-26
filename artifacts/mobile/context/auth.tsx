@@ -7,100 +7,239 @@ import React, {
   useState,
 } from "react";
 
+import api, { ApiUser } from "@/services/api";
+
 export type UserProfile = {
+  id?: number;
   name: string;
   phone?: string;
   email?: string;
   state?: string;
+  stateId?: number;
   board?: string;
+  boardId?: number;
   className?: string;
+  classId?: number;
   medium?: string;
   plan?: string;
   questionsUsed?: number;
   questionsLimit?: number;
+  profilePhotoUrl?: string;
+  role?: string;
+  authProvider?: string;
+  phoneVerified?: boolean;
+  emailVerified?: boolean;
+  profileComplete?: boolean;
 };
+
+function apiUserToProfile(u: ApiUser): UserProfile {
+  return {
+    id: u.id,
+    name: u.full_name ?? "",
+    phone: u.phone,
+    email: u.email,
+    state: u.state,
+    stateId: u.state_id,
+    board: u.board,
+    boardId: u.board_id,
+    className: u.class_name,
+    classId: u.class_id,
+    medium: u.medium_name,
+    plan: "Reader Model",
+    questionsUsed: 5,
+    questionsLimit: 1500,
+    profilePhotoUrl: u.profile_photo_url,
+    role: u.role,
+    authProvider: u.auth_provider,
+    phoneVerified: u.phone_verified,
+    emailVerified: u.email_verified,
+    profileComplete: u.profile_complete,
+  };
+}
 
 type AuthState = {
   isLoggedIn: boolean;
   isProfileComplete: boolean;
   user: UserProfile | null;
-  login: (user: UserProfile) => Promise<void>;
+  accessToken: string | null;
+
+  sendPhoneOtp: (phone: string) => Promise<void>;
+  sendEmailOtp: (email: string) => Promise<void>;
+  verifyPhoneOtp: (phone: string, otp: string) => Promise<{ profileComplete: boolean }>;
+  verifyEmailOtp: (email: string, otp: string) => Promise<{ profileComplete: boolean }>;
+  loginWithGoogleToken: (accessToken: string, path: string) => Promise<{ profileComplete: boolean }>;
+  completeProfile: (data: {
+    name: string;
+    stateId?: number;
+    boardId: number;
+    classId?: number;
+    phone?: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
-  completeProfile: (profile: Partial<UserProfile>) => Promise<void>;
   updateUser: (updates: Partial<UserProfile>) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
 
-const AUTH_KEY = "edwai_auth";
-const PROFILE_KEY = "edwai_profile";
+const STORAGE_KEYS = {
+  user: "edwai_user_v2",
+  accessToken: "edwai_access_token",
+  refreshToken: "edwai_refresh_token",
+  profileComplete: "edwai_profile_complete",
+};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isProfileComplete, setIsProfileComplete] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const authData = await AsyncStorage.getItem(AUTH_KEY);
-        const profileData = await AsyncStorage.getItem(PROFILE_KEY);
-        if (authData) {
-          const parsed = JSON.parse(authData) as UserProfile;
-          setUser(parsed);
+        const [userData, tokenData, profileData] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEYS.user),
+          AsyncStorage.getItem(STORAGE_KEYS.accessToken),
+          AsyncStorage.getItem(STORAGE_KEYS.profileComplete),
+        ]);
+
+        if (userData && tokenData) {
+          const parsedUser = JSON.parse(userData) as UserProfile;
+          const isComplete = profileData === "true" || parsedUser.profileComplete === true;
+          setUser(parsedUser);
+          setAccessToken(tokenData);
           setIsLoggedIn(true);
-        }
-        if (profileData) {
-          const parsed = JSON.parse(profileData) as { complete: boolean };
-          setIsProfileComplete(parsed.complete);
+          setIsProfileComplete(isComplete);
         }
       } catch {
+        // ignore storage errors
       }
     })();
   }, []);
 
-  const login = useCallback(async (userData: UserProfile) => {
-    const full: UserProfile = {
-      plan: "Reader Model",
-      questionsUsed: 5,
-      questionsLimit: 1500,
-      ...userData,
-    };
-    await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(full));
-    setUser(full);
-    setIsLoggedIn(true);
+  const storeSession = useCallback(
+    async (
+      userProfile: UserProfile,
+      aToken: string,
+      rToken: string,
+      profileComplete: boolean
+    ) => {
+      await Promise.all([
+        AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(userProfile)),
+        AsyncStorage.setItem(STORAGE_KEYS.accessToken, aToken),
+        AsyncStorage.setItem(STORAGE_KEYS.refreshToken, rToken),
+        AsyncStorage.setItem(
+          STORAGE_KEYS.profileComplete,
+          profileComplete ? "true" : "false"
+        ),
+      ]);
+      setUser(userProfile);
+      setAccessToken(aToken);
+      setIsLoggedIn(true);
+      setIsProfileComplete(profileComplete);
+    },
+    []
+  );
+
+  const sendPhoneOtp = useCallback(async (phone: string) => {
+    await api.auth.sendPhoneOtp(phone);
   }, []);
 
+  const sendEmailOtp = useCallback(async (email: string) => {
+    await api.auth.sendEmailOtp(email);
+  }, []);
+
+  const verifyPhoneOtp = useCallback(
+    async (phone: string, otp: string) => {
+      const res = await api.auth.verifyPhoneOtp(phone, otp);
+      const profile = apiUserToProfile(res.user);
+      await storeSession(profile, res.access_token, res.refresh_token, res.profile_complete);
+      return { profileComplete: res.profile_complete };
+    },
+    [storeSession]
+  );
+
+  const verifyEmailOtp = useCallback(
+    async (email: string, otp: string) => {
+      const res = await api.auth.verifyEmailOtp(email, otp);
+      const profile = apiUserToProfile(res.user);
+      await storeSession(profile, res.access_token, res.refresh_token, res.profile_complete);
+      return { profileComplete: res.profile_complete };
+    },
+    [storeSession]
+  );
+
+  const loginWithGoogleToken = useCallback(
+    async (token: string, path: string) => {
+      const apiUser = await api.auth.getMe(token);
+      const profile = apiUserToProfile(apiUser);
+      const profileComplete = apiUser.profile_complete;
+      await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(profile));
+      await AsyncStorage.setItem(STORAGE_KEYS.accessToken, token);
+      await AsyncStorage.setItem(STORAGE_KEYS.refreshToken, "");
+      await AsyncStorage.setItem(STORAGE_KEYS.profileComplete, profileComplete ? "true" : "false");
+      setUser(profile);
+      setAccessToken(token);
+      setIsLoggedIn(true);
+      setIsProfileComplete(profileComplete);
+      return { profileComplete };
+    },
+    []
+  );
+
   const completeProfile = useCallback(
-    async (profile: Partial<UserProfile>) => {
-      const updated = { ...user, ...profile } as UserProfile;
-      await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(updated));
-      await AsyncStorage.setItem(
-        PROFILE_KEY,
-        JSON.stringify({ complete: true })
-      );
+    async (data: {
+      name: string;
+      stateId?: number;
+      boardId: number;
+      classId?: number;
+      phone?: string;
+    }) => {
+      const token = accessToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.accessToken));
+      if (!token) throw new Error("Not authenticated");
+
+      const res = await api.auth.saveProfile(token, {
+        full_name: data.name,
+        state_id: data.stateId ?? null,
+        board_id: data.boardId,
+        class_id: data.classId ?? null,
+        phone: data.phone,
+      });
+
+      const updated = apiUserToProfile(res.user);
+      await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updated));
+      await AsyncStorage.setItem(STORAGE_KEYS.profileComplete, "true");
       setUser(updated);
       setIsProfileComplete(true);
     },
-    [user]
+    [accessToken]
   );
 
   const updateUser = useCallback(
     async (updates: Partial<UserProfile>) => {
       const updated = { ...user, ...updates } as UserProfile;
-      await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(updated));
+      await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updated));
       setUser(updated);
     },
     [user]
   );
 
   const logout = useCallback(async () => {
-    await AsyncStorage.removeItem(AUTH_KEY);
-    await AsyncStorage.removeItem(PROFILE_KEY);
+    try {
+      const token = accessToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.accessToken));
+      const rToken = await AsyncStorage.getItem(STORAGE_KEYS.refreshToken);
+      if (token && rToken) {
+        await api.auth.logout(token, rToken);
+      }
+    } catch {
+      // ignore errors during logout API call
+    }
+    await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
     setUser(null);
+    setAccessToken(null);
     setIsLoggedIn(false);
     setIsProfileComplete(false);
-  }, []);
+  }, [accessToken]);
 
   return (
     <AuthContext.Provider
@@ -108,9 +247,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoggedIn,
         isProfileComplete,
         user,
-        login,
-        logout,
+        accessToken,
+        sendPhoneOtp,
+        sendEmailOtp,
+        verifyPhoneOtp,
+        verifyEmailOtp,
+        loginWithGoogleToken,
         completeProfile,
+        logout,
         updateUser,
       }}
     >

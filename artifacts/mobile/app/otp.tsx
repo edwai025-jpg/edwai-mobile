@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,30 +17,26 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EdwAILogo } from "@/components/EdwAILogo";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
+import api, { ApiError } from "@/services/api";
+
+const OTP_TIMER = 60;
 
 export default function OTPScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
-  const { type, value } = useLocalSearchParams<{
-    type: string;
-    value: string;
-  }>();
+  const { verifyPhoneOtp, verifyEmailOtp } = useAuth();
+  const { type, value } = useLocalSearchParams<{ type: string; value: string }>();
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
-  const [resendTimer, setResendTimer] = useState(30);
+  const [resending, setResending] = useState(false);
+  const [timer, setTimer] = useState(OTP_TIMER);
+  const [errorMsg, setErrorMsg] = useState("");
   const refs = useRef<(TextInput | null)[]>([]);
 
   useEffect(() => {
-    if (type === "google") {
-      handleVerify();
-    }
-  }, []);
-
-  useEffect(() => {
     const t = setInterval(() => {
-      setResendTimer((prev) => (prev > 0 ? prev - 1 : 0));
+      setTimer((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(t);
   }, []);
@@ -70,30 +66,55 @@ export default function OTPScreen() {
   };
 
   const handleVerify = async () => {
-    if (type !== "google") {
-      const otpCode = otp.join("");
-      if (otpCode.length !== 6) {
-        Alert.alert("Invalid OTP", "Please enter the 6-digit OTP");
-        return;
-      }
+    const otpCode = otp.join("");
+    if (otpCode.length !== 6) {
+      setErrorMsg("Please enter the complete 6-digit OTP");
+      return;
     }
-
+    setErrorMsg("");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      let result: { profileComplete: boolean };
+      if (type === "phone") {
+        result = await verifyPhoneOtp(value ?? "", otpCode);
+      } else {
+        result = await verifyEmailOtp(value ?? "", otpCode);
+      }
+      if (!result.profileComplete) {
+        router.replace("/complete-profile");
+      }
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Invalid or expired OTP. Please try again.";
+      setErrorMsg(msg);
+      setOtp(["", "", "", "", "", ""]);
+      refs.current[0]?.focus();
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const displayValue = value ?? "user";
-    const isPhone = type === "phone";
-    await login({
-      name: "",
-      phone: isPhone ? displayValue : undefined,
-      email: !isPhone && type !== "google" ? displayValue : undefined,
-    });
-
-    setLoading(false);
+  const handleResend = async () => {
+    if (timer > 0) return;
+    setResending(true);
+    setErrorMsg("");
+    try {
+      if (type === "phone") {
+        await api.auth.sendPhoneOtp(value ?? "");
+      } else {
+        await api.auth.sendEmailOtp(value ?? "");
+      }
+      setTimer(OTP_TIMER);
+      setOtp(["", "", "", "", "", ""]);
+      refs.current[0]?.focus();
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Failed to resend OTP. Try again.";
+      setErrorMsg(msg);
+    } finally {
+      setResending(false);
+    }
   };
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
-  const isGoogle = type === "google";
 
   return (
     <View style={styles.root}>
@@ -105,16 +126,8 @@ export default function OTPScreen() {
       />
       <View style={[styles.orb1, { top: topInset }]} />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <View
-          style={[
-            styles.container,
-            { paddingTop: topInset + 20, paddingBottom: insets.bottom + 20 },
-          ]}
-        >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <View style={[styles.container, { paddingTop: topInset + 20, paddingBottom: insets.bottom + 20 }]}>
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
             <Feather name="arrow-left" size={20} color={Colors.gray700} />
           </Pressable>
@@ -124,72 +137,65 @@ export default function OTPScreen() {
               <EdwAILogo size="md" />
             </View>
 
-            {isGoogle ? (
-              <>
-                <Text style={styles.title}>Connecting with Google...</Text>
-                <Text style={styles.subtitle}>Please wait a moment</Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.title}>Enter Verification Code</Text>
-                <Text style={styles.subtitle}>
-                  We sent a 6-digit code to{" "}
-                  <Text style={styles.valueText}>{value}</Text>
+            <Text style={styles.title}>Enter Verification Code</Text>
+            <Text style={styles.subtitle}>
+              OTP sent to{" "}
+              <Text style={styles.valueText}>{value}</Text>
+              {"\n"}
+              <Pressable onPress={() => router.back()}>
+                <Text style={styles.changeLink}>
+                  {type === "phone" ? "Change number" : "Change email"}
                 </Text>
-              </>
+              </Pressable>
+            </Text>
+
+            {/* Error banner */}
+            {!!errorMsg && (
+              <View style={styles.errorBanner}>
+                <Feather name="alert-circle" size={14} color="#B91C1C" />
+                <Text style={styles.errorText}>{errorMsg}</Text>
+              </View>
             )}
 
-            {!isGoogle && (
-              <>
-                <View style={styles.otpRow}>
-                  {otp.map((digit, i) => (
-                    <TextInput
-                      key={i}
-                      ref={(el) => {
-                        refs.current[i] = el;
-                      }}
-                      style={[
-                        styles.otpBox,
-                        digit ? styles.otpBoxFilled : {},
-                      ]}
-                      value={digit}
-                      onChangeText={(v) => handleOtpChange(i, v)}
-                      onKeyPress={({ nativeEvent }) =>
-                        handleKeyPress(i, nativeEvent.key)
-                      }
-                      keyboardType="number-pad"
-                      maxLength={1}
-                      textAlign="center"
-                      selectTextOnFocus
-                    />
-                  ))}
-                </View>
+            {/* OTP boxes */}
+            <View style={styles.otpRow}>
+              {otp.map((digit, i) => (
+                <TextInput
+                  key={i}
+                  ref={(el) => { refs.current[i] = el; }}
+                  style={[styles.otpBox, digit ? styles.otpBoxFilled : {}]}
+                  value={digit}
+                  onChangeText={(v) => handleOtpChange(i, v)}
+                  onKeyPress={({ nativeEvent }) => handleKeyPress(i, nativeEvent.key)}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  textAlign="center"
+                  selectTextOnFocus
+                />
+              ))}
+            </View>
 
-                <View style={styles.resendRow}>
-                  {resendTimer > 0 ? (
-                    <Text style={styles.resendTimer}>
-                      Resend OTP in{" "}
-                      <Text style={{ color: Colors.primary }}>
-                        {resendTimer}s
-                      </Text>
-                    </Text>
+            {/* Resend */}
+            <View style={styles.resendRow}>
+              {timer > 0 ? (
+                <Text style={styles.resendTimer}>
+                  Resend OTP in{" "}
+                  <Text style={{ color: Colors.primary, fontFamily: "Inter_600SemiBold" }}>{timer}s</Text>
+                </Text>
+              ) : (
+                <Pressable onPress={handleResend} disabled={resending}>
+                  {resending ? (
+                    <ActivityIndicator size="small" color={Colors.primary} />
                   ) : (
-                    <Pressable
-                      onPress={() => setResendTimer(30)}
-                    >
-                      <Text style={styles.resendLink}>Resend OTP</Text>
-                    </Pressable>
+                    <Text style={styles.resendLink}>Resend OTP</Text>
                   )}
-                </View>
-              </>
-            )}
+                </Pressable>
+              )}
+            </View>
 
+            {/* Verify button */}
             <Pressable
-              style={({ pressed }) => [
-                styles.verifyBtn,
-                pressed && { opacity: 0.85 },
-                loading && { opacity: 0.7 },
-              ]}
+              style={({ pressed }) => [styles.verifyBtn, (pressed || loading) && { opacity: 0.8 }]}
               onPress={handleVerify}
               disabled={loading}
             >
@@ -199,13 +205,11 @@ export default function OTPScreen() {
                 end={{ x: 1, y: 0 }}
                 style={styles.verifyBtnGradient}
               >
-                <Text style={styles.verifyBtnText}>
-                  {loading
-                    ? "Verifying..."
-                    : isGoogle
-                    ? "Continue"
-                    : "Verify & Continue"}
-                </Text>
+                {loading ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <Text style={styles.verifyBtnText}>Verify & Continue</Text>
+                )}
               </LinearGradient>
             </Pressable>
           </View>
@@ -216,130 +220,59 @@ export default function OTPScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: Colors.backgroundGradientStart,
-  },
+  root: { flex: 1, backgroundColor: Colors.backgroundGradientStart },
   orb1: {
-    position: "absolute",
-    right: -60,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: Colors.primary,
-    opacity: 0.1,
+    position: "absolute", right: -60, width: 200, height: 200,
+    borderRadius: 100, backgroundColor: Colors.primary, opacity: 0.1,
   },
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
+  container: { flex: 1, paddingHorizontal: 24 },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-    marginBottom: 24,
+    width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.white,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 4, elevation: 2, marginBottom: 24,
   },
   card: {
-    backgroundColor: Colors.white,
-    borderRadius: 24,
-    padding: 28,
-    shadowColor: Colors.navy,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
+    backgroundColor: Colors.white, borderRadius: 24, padding: 28,
+    shadowColor: Colors.navy, shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12, shadowRadius: 24, elevation: 8,
+    borderWidth: 1, borderColor: Colors.gray200,
   },
   logoRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  logoEdw: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-    color: Colors.primary,
-  },
-  logoAI: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
+    flexDirection: "row", alignItems: "baseline", justifyContent: "center", marginBottom: 20,
   },
   title: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
-    textAlign: "center",
-    marginBottom: 8,
+    fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.gray900,
+    textAlign: "center", marginBottom: 8,
   },
   subtitle: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray600,
-    textAlign: "center",
-    marginBottom: 28,
-    lineHeight: 20,
+    fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.gray600,
+    textAlign: "center", marginBottom: 8, lineHeight: 22,
   },
-  valueText: {
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.primary,
+  valueText: { fontFamily: "Inter_600SemiBold", color: Colors.primary },
+  changeLink: {
+    fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.primary,
+    textDecorationLine: "underline",
   },
+  errorBanner: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16,
+  },
+  errorText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#B91C1C", lineHeight: 18 },
   otpRow: {
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "center",
-    marginBottom: 20,
+    flexDirection: "row", gap: 8, justifyContent: "center", marginBottom: 20,
   },
   otpBox: {
-    width: 46,
-    height: 54,
-    borderWidth: 2,
-    borderColor: Colors.inputBorder,
-    borderRadius: 12,
-    backgroundColor: Colors.inputBg,
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
+    width: 46, height: 54, borderWidth: 2, borderColor: Colors.inputBorder,
+    borderRadius: 12, backgroundColor: Colors.inputBg,
+    fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.gray900,
   },
-  otpBoxFilled: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.indigoBg,
-  },
-  resendRow: {
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  resendTimer: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: Colors.gray500,
-  },
-  resendLink: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.primary,
-  },
-  verifyBtn: {
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  verifyBtnGradient: {
-    paddingVertical: 15,
-    alignItems: "center",
-  },
-  verifyBtnText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-  },
+  otpBoxFilled: { borderColor: Colors.primary, backgroundColor: Colors.indigoBg },
+  resendRow: { alignItems: "center", marginBottom: 24, height: 24, justifyContent: "center" },
+  resendTimer: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.gray500 },
+  resendLink: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.primary },
+  verifyBtn: { borderRadius: 12, overflow: "hidden" },
+  verifyBtnGradient: { paddingVertical: 15, alignItems: "center", justifyContent: "center", flexDirection: "row" },
+  verifyBtnText: { color: Colors.white, fontSize: 16, fontFamily: "Inter_600SemiBold" },
 });
