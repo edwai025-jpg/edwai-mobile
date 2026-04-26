@@ -13,11 +13,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { EdwAILogo } from "@/components/EdwAILogo";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 
 type MaterialIconName = React.ComponentProps<typeof MaterialIcons>["name"];
+type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
 function Avatar({ name }: { name: string }) {
   const initials = name
@@ -28,7 +28,7 @@ function Avatar({ name }: { name: string }) {
     .join("");
   return (
     <LinearGradient
-      colors={[Colors.primary, Colors.secondary]}
+      colors={["#7c3aed", "#4f46e5"]}
       style={avatarStyles.wrap}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
@@ -45,11 +45,11 @@ const avatarStyles = StyleSheet.create({
     borderRadius: 36,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: Colors.primary,
+    shadowColor: "#7c3aed",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.45,
     shadowRadius: 12,
-    elevation: 4,
+    elevation: 6,
   },
   text: {
     fontSize: 26,
@@ -72,7 +72,7 @@ function MenuItem({ icon, title, subtitle, onPress, danger, rightContent }: Menu
     <Pressable
       style={({ pressed }) => [
         styles.menuItem,
-        pressed && { backgroundColor: Colors.gray50 },
+        pressed && { backgroundColor: Colors.darkSurface },
       ]}
       onPress={onPress}
     >
@@ -83,15 +83,13 @@ function MenuItem({ icon, title, subtitle, onPress, danger, rightContent }: Menu
         <Text style={[styles.menuTitle, danger && styles.menuTitleDanger]}>
           {title}
         </Text>
-        {subtitle ? (
-          <Text style={styles.menuSubtitle}>{subtitle}</Text>
-        ) : null}
+        {subtitle ? <Text style={styles.menuSubtitle}>{subtitle}</Text> : null}
       </View>
       {rightContent ?? (
         <Feather
           name="chevron-right"
           size={16}
-          color={danger ? Colors.danger : Colors.gray400}
+          color={danger ? Colors.danger : Colors.darkTextMuted}
         />
       )}
     </Pressable>
@@ -102,7 +100,6 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
-
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
@@ -111,6 +108,7 @@ export default function ProfileScreen() {
   const used = user?.questionsUsed ?? 5;
   const limit = user?.questionsLimit ?? 1500;
   const usagePct = Math.min((used / limit) * 100, 100);
+  const barColor = usagePct >= 90 ? Colors.danger : usagePct >= 70 ? Colors.warning : Colors.primary;
 
   const handleLogout = () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -133,13 +131,7 @@ export default function ProfileScreen() {
       "This will permanently delete your account and all data. This cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            await logout();
-          },
-        },
+        { text: "Delete", style: "destructive", onPress: async () => { await logout(); } },
       ]
     );
   };
@@ -147,66 +139,54 @@ export default function ProfileScreen() {
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={[Colors.backgroundGradientStart, Colors.backgroundGradientMid]}
-        style={StyleSheet.absoluteFill}
+        colors={[Colors.navHeader1, Colors.navHeader2, Colors.navHeader3]}
+        style={[styles.profileHeader, { paddingTop: topInset + 16 }]}
         start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 0.4 }}
-      />
-
-      <View style={[styles.header, { paddingTop: topInset + 12 }]}>
-        <EdwAILogo size="sm" />
-        <Text style={styles.screenTitle}>Profile</Text>
-      </View>
+        end={{ x: 1, y: 1 }}
+      >
+        <View style={styles.avatarRow}>
+          <Avatar name={displayName} />
+          <View style={styles.userInfo}>
+            <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
+            {identifier ? (
+              <Text style={styles.userIdentifier} numberOfLines={1}>{identifier}</Text>
+            ) : null}
+            {user?.state && user?.board && (
+              <View style={styles.educationRow}>
+                <MaterialIcons name="school" size={12} color={Colors.navLogoEdw} />
+                <Text style={styles.educationText} numberOfLines={1}>
+                  {user.board}{user.className ? ` · ${user.className}` : ""}
+                </Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.planBadgeSmall}>
+            <Text style={styles.planBadgeSmallText}>{user?.plan ?? "Reader"}</Text>
+          </View>
+        </View>
+      </LinearGradient>
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: bottomInset + 100 },
-        ]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomInset + 100 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.profileCard}>
-          <View style={styles.avatarRow}>
-            <Avatar name={displayName} />
-            <View style={styles.userInfo}>
-              <Text style={styles.userName} numberOfLines={1}>
-                {displayName}
-              </Text>
-              {identifier ? (
-                <Text style={styles.userIdentifier} numberOfLines={1}>
-                  {identifier}
-                </Text>
-              ) : null}
-              {user?.state && user?.board && (
-                <View style={styles.educationRow}>
-                  <MaterialIcons name="school" size={12} color={Colors.primary} />
-                  <Text style={styles.educationText} numberOfLines={1}>
-                    {user.board}
-                    {user.className ? ` · ${user.className}` : ""}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-
         <View style={styles.planCard}>
           <View style={styles.planHeader}>
-            <View style={styles.planIconWrap}>
-              <LinearGradient
-                colors={[Colors.primary, Colors.secondary]}
-                style={styles.planIcon}
-              >
-                <Ionicons name="flash" size={16} color={Colors.white} />
-              </LinearGradient>
-            </View>
+            <LinearGradient
+              colors={[Colors.primary, Colors.secondary]}
+              style={styles.planIcon}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Ionicons name={"flash" as IoniconsName} size={16} color={Colors.white} />
+            </LinearGradient>
             <View style={{ flex: 1 }}>
               <Text style={styles.planLabel}>Current Plan</Text>
               <Text style={styles.planName}>{user?.plan ?? "Reader Model"}</Text>
             </View>
-            <View style={styles.planBadge}>
-              <Text style={styles.planBadgeText}>Active</Text>
+            <View style={styles.activeBadge}>
+              <Text style={styles.activeBadgeText}>Active</Text>
             </View>
           </View>
 
@@ -214,12 +194,17 @@ export default function ProfileScreen() {
             <View style={styles.usageTopRow}>
               <Text style={styles.usageLabel}>Questions Used</Text>
               <Text style={styles.usageCount}>
-                {used}{" "}
-                <Text style={styles.usageLimit}>/ {limit}</Text>
+                {used}
+                <Text style={styles.usageLimit}> / {limit}</Text>
               </Text>
             </View>
             <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${usagePct}%` as DimensionValue }]} />
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${usagePct}%` as DimensionValue, backgroundColor: barColor },
+                ]}
+              />
             </View>
             <Text style={styles.usageRemaining}>
               {limit - used} questions remaining this month
@@ -227,7 +212,7 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.planNotice}>
-            <Ionicons name="globe-outline" size={14} color={Colors.gray500} />
+            <Ionicons name={"globe-outline" as IoniconsName} size={14} color={Colors.darkTextMuted} />
             <Text style={styles.planNoticeText}>
               To manage your plan, visit edwai.com
             </Text>
@@ -249,9 +234,7 @@ export default function ProfileScreen() {
                 <View key={i} style={styles.detailRow}>
                   <MaterialIcons name={d.icon} size={15} color={Colors.primary} />
                   <Text style={styles.detailLabel}>{d.label}</Text>
-                  <Text style={styles.detailValue} numberOfLines={1}>
-                    {d.value}
-                  </Text>
+                  <Text style={styles.detailValue} numberOfLines={1}>{d.value}</Text>
                 </View>
               ))}
           </View>
@@ -267,7 +250,7 @@ export default function ProfileScreen() {
           />
           <View style={styles.menuDivider} />
           <MenuItem
-            icon={<Ionicons name="notifications-outline" size={17} color={Colors.primary} />}
+            icon={<Ionicons name={"notifications-outline" as IoniconsName} size={17} color={Colors.primary} />}
             title="Notifications"
             subtitle="Manage your notification preferences"
             onPress={() => Alert.alert("Coming Soon", "Notification settings will be available soon")}
@@ -306,7 +289,7 @@ export default function ProfileScreen() {
 
         <View style={styles.footer}>
           <View style={styles.madeInIndia}>
-            <Text style={styles.madeInIndiaText}>Made in India</Text>
+            <Text style={styles.madeInIndiaText}>Made in India 🇮🇳</Text>
           </View>
           <Text style={styles.version}>EdwAI v1.0.0</Text>
         </View>
@@ -316,30 +299,10 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  header: {
+  root: { flex: 1, backgroundColor: Colors.darkBg1 },
+  profileHeader: {
     paddingHorizontal: 20,
-    paddingBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  logoRow: { flexDirection: "row", alignItems: "baseline" },
-  logoEdw: { fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.primary },
-  logoAI: { fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.gray900 },
-  screenTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
-  },
-  scroll: { flex: 1 },
-  content: { paddingHorizontal: 16, gap: 12 },
-  profileCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
+    paddingBottom: 20,
   },
   avatarRow: {
     flexDirection: "row",
@@ -350,14 +313,14 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 20,
     fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
+    color: Colors.white,
     marginBottom: 2,
   },
   userIdentifier: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: Colors.gray500,
-    marginBottom: 6,
+    color: "rgba(255,255,255,0.55)",
+    marginBottom: 5,
   },
   educationRow: {
     flexDirection: "row",
@@ -367,23 +330,33 @@ const styles = StyleSheet.create({
   educationText: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
-    color: Colors.primary,
+    color: Colors.navLogoEdw,
     flex: 1,
   },
+  planBadgeSmall: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  planBadgeSmallText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.white,
+  },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 16, paddingTop: 14, gap: 12 },
   planCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.darkCard,
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
+    borderColor: Colors.darkCardBorder,
     gap: 16,
   },
-  planHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  planIconWrap: {},
+  planHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   planIcon: {
     width: 40,
     height: 40,
@@ -394,23 +367,25 @@ const styles = StyleSheet.create({
   planLabel: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    color: Colors.gray500,
+    color: Colors.darkTextMuted,
   },
   planName: {
     fontSize: 17,
     fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
+    color: Colors.darkText,
   },
-  planBadge: {
-    backgroundColor: Colors.successLight,
+  activeBadge: {
+    backgroundColor: "rgba(22,163,74,0.2)",
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "rgba(22,163,74,0.3)",
   },
-  planBadgeText: {
+  activeBadgeText: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.success,
+    color: "#22c55e",
   },
   usageSection: { gap: 8 },
   usageTopRow: {
@@ -421,63 +396,64 @@ const styles = StyleSheet.create({
   usageLabel: {
     fontSize: 13,
     fontFamily: "Inter_500Medium",
-    color: Colors.gray600,
+    color: Colors.darkTextSub,
   },
   usageCount: {
     fontSize: 14,
     fontFamily: "Inter_700Bold",
-    color: Colors.gray900,
+    color: Colors.darkText,
   },
   usageLimit: {
-    fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: Colors.gray400,
+    color: Colors.darkTextMuted,
+    fontSize: 13,
   },
   progressBg: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.gray100,
+    backgroundColor: Colors.darkSurface,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
     borderRadius: 4,
-    backgroundColor: Colors.primary,
   },
   usageRemaining: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    color: Colors.gray500,
+    color: Colors.darkTextMuted,
   },
   planNotice: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: Colors.gray50,
+    backgroundColor: Colors.darkSurface,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: Colors.darkDivider,
   },
   planNoticeText: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: Colors.gray600,
+    color: Colors.darkTextSub,
     flex: 1,
   },
   detailsCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.darkCard,
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
+    borderColor: Colors.darkCardBorder,
     gap: 12,
   },
   detailsTitle: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.gray700,
+    color: Colors.darkTextSub,
     marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
   detailRow: {
     flexDirection: "row",
@@ -487,26 +463,26 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: Colors.gray500,
-    width: 50,
+    color: Colors.darkTextMuted,
+    width: 52,
   },
   detailValue: {
     fontSize: 13,
     fontFamily: "Inter_500Medium",
-    color: Colors.gray800,
+    color: Colors.darkText,
     flex: 1,
   },
   menuCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.darkCard,
     borderRadius: 20,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
+    borderColor: Colors.darkCardBorder,
   },
   menuSectionLabel: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.gray500,
+    color: Colors.darkTextMuted,
     textTransform: "uppercase",
     letterSpacing: 0.8,
     paddingHorizontal: 16,
@@ -524,32 +500,32 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.indigoBg,
+    backgroundColor: "rgba(102,126,234,0.15)",
     alignItems: "center",
     justifyContent: "center",
   },
-  menuIconDanger: { backgroundColor: Colors.dangerLight },
+  menuIconDanger: { backgroundColor: "rgba(220,38,38,0.15)" },
   menuText: { flex: 1 },
   menuTitle: {
     fontSize: 15,
     fontFamily: "Inter_500Medium",
-    color: Colors.gray900,
+    color: Colors.darkText,
   },
   menuTitleDanger: { color: Colors.danger },
   menuSubtitle: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    color: Colors.gray500,
+    color: Colors.darkTextMuted,
     marginTop: 1,
   },
   menuDivider: {
     height: 1,
-    backgroundColor: Colors.gray100,
+    backgroundColor: Colors.darkDivider,
     marginLeft: 64,
   },
   footer: { alignItems: "center", gap: 6, paddingTop: 8 },
   madeInIndia: {
-    backgroundColor: Colors.navy,
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 5,
@@ -557,12 +533,12 @@ const styles = StyleSheet.create({
   madeInIndiaText: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.white,
+    color: Colors.darkTextSub,
     letterSpacing: 0.5,
   },
   version: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
-    color: Colors.gray400,
+    color: Colors.darkTextMuted,
   },
 });

@@ -59,6 +59,34 @@ export const Colors = {
   muted: "#6b7280",
   body: "#4b5563",
   heading: "#111827",
+
+  darkBg1: "#1a1a2e",
+  darkBg2: "#16213e",
+  darkCard: "#1e1e2e",
+  darkCardBorder: "rgba(102,126,234,0.3)",
+  darkCardBg: "rgba(30,30,46,0.92)",
+
+  darkText: "#ffffff",
+  darkTextSub: "rgba(255,255,255,0.70)",
+  darkTextMuted: "rgba(255,255,255,0.45)",
+  darkTextDim: "rgba(255,255,255,0.28)",
+
+  darkInputBg: "#2a2a3e",
+  darkInputBorder: "rgba(102,126,234,0.35)",
+
+  darkDivider: "rgba(255,255,255,0.08)",
+  darkSurface: "rgba(255,255,255,0.06)",
+
+  navHeader1: "#1a1040",
+  navHeader2: "#251662",
+  navHeader3: "#2e1875",
+  navHeader4: "#1d0e5c",
+  navLogoEdw: "#a78bfa",
+  navChipBg: "rgba(255,255,255,0.12)",
+  navChipBorder: "rgba(255,255,255,0.18)",
+
+  answerBg: "rgba(102,126,234,0.18)",
+  answerBorder: "rgba(102,126,234,0.35)",
 };
 
 export default Colors;

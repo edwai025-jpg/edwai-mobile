@@ -1,0 +1,593 @@
+EdwAI — Complete UI/UX Reference for Mobile App
+1. Design System — Colors, Typography & Themes
+Primary Color
+Token	Hex	Usage
+primary	#667eea	Buttons, active states, focus rings, tabs
+primary-dark	#5568d3	Button hover state
+secondary	#faf8f3	Cream-white light mode bg
+secondary-dark	#e8e5df	Light mode card bg
+
+    The app also uses the richer purple #5B4FCF / #6366F1 as the Razorpay theme color.
+
+Two Visual Themes (user-switchable)
+Token	Dark/Primary Mode	Light/Secondary Mode
+bg	linear-gradient(br, #1a1a2e → #16213e)	linear-gradient(br, blue-50 → white → purple-50)
+cardBg	#1e1e2e at 90% opacity	white
+textClass	text-white	text-gray-900
+borderClass	border-primary/30	border-gray-200
+Nav header	linear-gradient(135deg, #1a1040 → #251662 → #2e1875 → #1d0e5c)	linear-gradient(135deg, #3730a3 → #4f46e5 → #6d28d9 → #4338ca)
+Nav box shadow	rgba(99,71,234,0.35)	same
+
+Theme is persisted to local storage under key theme-storage. Default = primary (dark).
+Typography
+
+    Font family: System stack — -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica Neue, sans-serif
+    Code blocks: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace
+    User-configurable font size (default 16px), line height (default 1.7), and font family (system / serif / sans)
+
+Button Styles Reference
+Type	Style
+Primary action	bg-primary text-white rounded-lg font-semibold shadow-md hover:bg-primary-dark
+Inactive tab	Dark: bg-gray-700 text-gray-300 hover:bg-gray-600 / Light: bg-gray-200 text-gray-700 hover:bg-gray-300
+Active tab	bg-primary text-white
+Danger	bg-red-500 hover:bg-red-600 text-white rounded-lg
+Profile button	bg-purple-500/75 text-white border border-purple-400/50 rounded-lg
+Logout button	bg-red-500/70 text-white border border-red-300/40 rounded-lg
+Light/Dark toggle	Icon-only, bg-white/10 border border-white/15 rounded-lg w-8 h-8
+YouTube submit	bg-green-500 hover:bg-green-600 text-white
+Upgrade CTA	Pill widget with dark overlay, progress bar inside, rounded-xl
+2. App Routes & Navigation Flow
+
+/login                  → Authentication screen
+/complete-profile       → First-time profile setup (only once after auth)
+/student                → Main student portal (all features)
+/pricing                → Pricing/subscription page
+/payment/success        → Razorpay payment callback
+/payment/failed         → Razorpay payment failure
+/vaigyaan               → Project Vaigyaan promo page
+/privacy-policy
+/terms-of-service
+
+On the mobile app: Replicate these as screens. After login the app checks user.profile_complete; if false → show CompleteProfile screen, if true → go directly to Home (StudentPortal).
+3. Login / Authentication Screen
+Layout (web: two-column; mobile: single column)
+
+    Left panel (desktop only): Marketing copy, feature highlight cards, stock photo
+    Right panel / mobile full-screen: Auth card
+
+Auth Card
+
+    White card, rounded-2xl shadow-2xl border border-gray-200 bg-white/95
+    Header: Logo Edw (primary color) + AI (black), subtitle "AI Assistant for Exam Preparation"
+    Tab switcher: Login with Phone / Login with Email — pill shape, bg-gray-100 rounded-lg p-1; active tab = bg-primary text-white
+
+Login Method 1 — Phone OTP
+
+    +91 prefix box (gray, non-editable) + input field for 10-digit number
+    "Send OTP" button — full width, bg-primary text-white py-3 rounded-lg font-semibold disabled:opacity-50
+    After send: 6-box OTP input (each box w-10 h-12 text-center font-bold rounded-lg border border-gray-300 bg-gray-50 focus:border-primary focus:ring-2)
+    "Verify OTP" button (same style as Send OTP)
+    "Change number" link (left) + "Resend in Xs" / "Resend OTP" (right)
+    60-second countdown before Resend is active
+
+Login Method 2 — Email OTP
+
+    Single email input field with inline validation (real-time on blur)
+    Same OTP step as phone
+
+Google OAuth
+
+    Divider "or" text
+    White bordered button with Google SVG multicolor icon + "Continue with Google"
+    Triggers backend OAuth redirect: GET /api/auth/google
+
+Background decoration
+
+    Gradient: from-blue-50 via-white to-purple-50
+    Floating book SVG icons (animated float up/down, 6s period, 3s delay for second one)
+    Large blurred purple circle (bg-gradient-to-br from-primary/10 to-purple-500/10 rounded-full blur-3xl)
+    Bottom circular "AI" watermark at top-left (opacity 10%)
+
+Footer (below the card section)
+
+    Dark footer #272b3f with wave SVG transition
+    4-column grid: About EdwAI, Quick Links, Contact, Language/Social
+    EdwAI badge: Indigo text for "Edw", white for "AI"
+    "10,000+ Students Trusted" green pulse badge
+
+4. Complete Profile Screen
+
+Background: Same gradient as Login (from-blue-50 via-white to-purple-50), same floating book decorations.
+
+Card: bg-white rounded-2xl shadow-2xl p-8 border border-gray-200
+
+Header badge: bg-primary/10 border border-primary/20 rounded-full with pulsing dot + "SETUP YOUR PROFILE" uppercase small text
+
+Section numbering pattern: Filled purple circle with number + horizontal line extending to right
+Section 1 — Your Name
+
+    Required text input, full width
+    bg-gray-50 border border-gray-300 rounded-lg px-4 py-3
+    Focus: border-primary ring-2 ring-primary/20
+
+Mobile Number (Optional)
+
+    +91 prefix + 10-digit input
+    If 10 digits entered: shows "Verify phone number" link
+    On tap: sends OTP → inline OTP entry (text input + Confirm button)
+    On success: green "Phone verified!" message
+    "Skip for now" text link bottom-right
+
+Section 2 — Find Your Board (Required)
+
+    State dropdown (loads from GET /api/states)
+    Board/University dropdown (loads from GET /api/boards/{state_id} after state selection)
+    Cascading: board resets when state changes, class resets when board changes
+    Info box bg-blue-50 border-blue-200 rounded-lg showing availability message
+
+Section 3 — Class (Optional, shows only if classes exist for board)
+
+    Class dropdown (from GET /api/classes/{board_id})
+    If no classes: show "No classes yet" info box
+    "Can't find my class?" link → expands text input to type class name → submitted as a class request
+
+Section 4 — Use Own Resources
+
+    Always visible if board is selected
+    "Use My Own Books / Resources (Phase 2)" button → saves profile and goes to app in own-book mode
+
+Submit Buttons
+
+    "Start Learning" — saves full profile including class → navigates to /student
+    Terms of Service checkbox required before any submit (red error if missing)
+
+Right side panel (desktop) / Below card (mobile)
+
+    Tabs: "What's New" / "How It Works"
+    "What's New" tab: list of recent updates from GET /api/whats-new
+    "How It Works" tab: 4-step numbered guide
+    Social/Community cards: YouTube, Telegram, Instagram, Study Resources, Help cards with gradient icons
+
+5. Main Student Portal (Home / Dashboard)
+Top Navigation Bar (sticky, full width)
+
+Background: Purple gradient strip — linear-gradient(135deg, #1a1040, #251662, #2e1875, #1d0e5c)
+Box shadow: 0 4px 32px rgba(99,71,234,0.35)
+Decorative layer: White dot-grid (28px spacing, 7% opacity) + two glow orbs, large semi-transparent book SVG top-right, graduation cap bottom-left, 5 small star SVGs scattered.
+
+Row layout (single compact row, flex, gap-3, px-4 py-2.5):
+
+    Logo — EdwAI with "Edw" in #a78bfa (light purple), "AI" in white. text-lg font-black
+    Vertical divider h-6 w-px bg-white/20
+    Avatar + Name block:
+        Avatar: 32×32px circle with linear-gradient(135deg, #7c3aed, #4f46e5) background, white initial letter — OR actual photo. Has glowing purple ring behind it (linear-gradient(135deg, #a78bfa, #818cf8) blur(1px))
+        Name: text-xs font-bold text-white truncate max-w-[100px], native tooltip (title attr) shows full name
+        Email/phone: text-[10px] text-white/45 hidden sm:block
+    Flex spacer (pushes chips to center)
+    Info chips (visible md+ only): State, Board, Class, Medium — each a pill bg-white/12 border-white/18 rounded-full px-3 py-1.5 text-xs font-semibold. Label in text-white/50, value in text-white font-bold
+    Flex spacer
+    Subscription usage widget (md+ only): Dark pill bg-black/55 border-white/22 rounded-xl px-3 py-1.5 containing plan emoji + name + questions used/limit + usage progress bar. Bar colors: green-purple gradient (normal), amber (70%+), red (90%+). Clickable → opens upgrade modal
+    Vertical divider
+    Action buttons: Theme toggle (☀️/🌙, 32×32px rounded), Profile button (purple), Logout button (red)
+
+Mobile sub-row (below main row, md:hidden): Board chip + Class chip + flex spacer + Usage mini-bar + "Upgrade" button.
+Phone Nudge Banner (conditional)
+
+Full-width banner at top:
+bg-amber-500/10 border-amber-500/30 text-amber-400 with "Add your mobile number..." message + "Add Number" link + dismiss X.
+Content Area
+
+p-6 max-w-5xl mx-auto centered layout.
+6. Source Switcher (Mode Toggle)
+
+First card in content area:
+${cardBg} rounded-xl shadow-sm border ${borderClass} p-4 mb-6
+
+Label: "Choose your source:"
+Two buttons side by side:
+
+    📚 Use Textbooks (active: bg-primary text-white)
+    📖 Use Own Book (active: bg-primary text-white)
+
+These act as the two main tabs of the app — equivalent to Tab 1 and Tab 2 in the mobile app.
+7. TAB 1 — Use Textbooks (Phase 1)
+7a. Book Selection Card
+
+${cardBg} rounded-xl shadow-sm border ${borderClass} p-6 mb-6
+
+Header: 48×48px bg-primary/10 rounded-xl icon block with 📖 emoji + "Select Your Textbook" title
+
+Three cascading dropdowns in a responsive grid (1-col mobile, 3-col desktop):
+
+    Class — GET /api/student/classes
+    Subject — loads after class selected
+    Textbook — loads after subject selected
+
+All dropdowns:
+
+    Dark mode: bg-[#2a2a3e] border-primary/30 text-white
+    Light mode: bg-gray-50 border-gray-200 text-gray-900
+    rounded-lg px-4 py-3 focus:border-primary focus:ring-2 focus:ring-primary/20
+
+Status hints (info boxes bg-blue-50 border-blue-100 rounded-lg):
+
+    "Select a class to see subjects" (if class not chosen)
+    "Select a subject to see textbooks"
+    "No textbooks available for this combination yet" (yellow warning)
+
+7b. Question Interface Card
+
+Appears after textbook is selected.
+${cardBg} rounded-xl shadow-sm border ${borderClass} p-6
+
+Header: 48×48px green icon bg-green-50 rounded-xl with 💬 + "Ask Your Question" title + subtitle showing selected book name in primary color.
+
+Input mode toggle pills (flex-wrap):
+
+    ✍️ Normal — direct typing
+    🔤 Transliterate — type phonetically, converts to Indian script on Space
+    ⌨️ Keyboard — virtual Indian language keyboard overlay
+
+When Transliterate is active: language picker dropdown appears showing 10 Indian languages (Hindi, Telugu, Tamil, Kannada, Malayalam, Marathi, Bengali, Gujarati, Punjabi, Odia).
+
+Recent Questions panel (collapsible, shown if query history exists):
+
+    Rounded card border-2 border-indigo-200 bg-indigo-50 (light) / border-indigo-500/40 bg-indigo-950/50 (dark)
+    Header: "🕐 Recent Questions (N)" with chevron
+    Expanded: scrollable list of past questions (max-h-48), each clickable to repopulate the textarea
+    Search input appears if more than 5 questions
+
+Textarea:
+
+    w-full px-4 py-3 pb-12 rows-4 rounded-lg resize-none
+    Dark: bg-[#2a2a3e] border-primary/30 text-white placeholder-gray-500
+    Light: bg-gray-50 border-gray-200 text-gray-900
+    Bottom-right icons inside textarea (absolute positioned): 📷 (camera capture) + 🖼️ (gallery picker) — both 32×32px rounded icon buttons
+
+Image question preview: if image attached, shows 128×128px thumbnail + "Extracting question from image..." spinner / "✓ Image question extracted" green status.
+
+Query action buttons (below textarea, flex-wrap):
+Button	Style	API call
+📖 Answer from Book	bg-primary text-white px-6 py-3 rounded-lg font-semibold shadow-lg	mode=retrieve
+💡 Learn Concept	bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold shadow-lg	mode=explain
+🔍 Extract Text	bg-gray-600 text-white px-4 py-3 rounded-lg font-semibold (smaller)	mode=extract
+
+While loading:
+
+    Loading spinner + "Searching your textbook..." / "Generating explanation..."
+    If streaming: text appears progressively in the answer card
+
+8. Answer Display (Phase 1 & Phase 2 shared)
+
+Answer results appear below the question card in a vertical stack of cards.
+8a. Answer Text Card
+
+bg-primary/20 border-primary/30 rounded-lg border p-6 (dark)
+bg-gradient-to-br from-blue-50 to-purple-50 border-blue-100 rounded-lg border p-6 (light)
+
+    Header row: ✨ emoji icon in a 40×40px box + "Answer" title text-lg font-bold
+    Body: Markdown-rendered text with full support for:
+        Paragraphs, bold, italic, lists (bullet + numbered)
+        Tables (with gray borders, header bg-gray-100)
+        Code blocks (gray bg, monospace)
+        Block quotes (left blue border border-l-4 border-blue-400)
+        Math (LaTeX via KaTeX — inline $...$ and block $$...$$)
+        Page citations auto-bolded: [Page N] → **[Page N]**
+
+Streaming: During streaming, text appears incrementally in same style.
+
+Validation banner (Explain mode only): Shows at bottom of answer card —
+Green ✅ (reliable) / Yellow ⚠️ (partial) / Red ❌ (unverified) box with:
+
+    "Answer Validation: XX% Verified"
+    List of verified / partial / unverified facts count
+
+8b. Sources Card
+
+${cardBg} rounded-xl border ${borderClass} p-4
+
+    Header: 📄 icon + "Sources" title
+    Chip list (flex-wrap): Each page = pill px-3 py-1 rounded-full text-sm font-medium border
+    Dark: bg-primary/30 text-gray-300 border-primary/40 / Light: bg-white text-gray-700 border-gray-200
+    Text: "Page N"
+
+8c. Page Citation Images
+
+bg-white border-gray-200 rounded-lg p-6
+
+Header: 📖 + "Page Citations" text-lg font-bold text-gray-900
+
+Three display modes (configured per board):
+
+    Original / EdwAI Generated (default): Per-page image cards stacked vertically:
+        Each card: border border-gray-200 rounded-lg overflow-hidden bg-white group
+        Image fills full card width, object-fit: contain
+        Hover: zoom animation scale-105 + circular zoom icon overlay (white circle, magnifying glass SVG)
+        Footer strip: px-3 py-2 text-sm text-gray-600 border-t showing "Page N"
+        Tap/click → opens zoom modal (full-screen overlay)
+
+    NCERT Embedded Mode: Instead of images, shows a green card:
+        border-2 border-emerald-400 rounded-xl bg-emerald-50 p-4
+        Clickable page links: px-3 py-1.5 bg-white border-2 border-emerald-400 text-emerald-800 rounded-lg text-sm font-semibold
+        Each opens NCERT website URL in new tab
+
+Image Zoom Modal (full-screen):
+
+    fixed inset-0 bg-black/75 z-50 flex items-center justify-center
+    White rounded card with full-size image + caption bar at bottom: bg-gray-50 border-t showing "📖 Page Citation - Page N"
+    Tap backdrop or X button to close
+
+8d. Diagrams Card
+
+${cardBg} border ${borderClass} rounded-lg p-6
+
+    Header: 🖼️ + "Diagrams from Textbook"
+    Grid: 1-col mobile, 2-col desktop
+    Each diagram: same hover-zoom + click-to-zoom pattern as citation images
+
+8e. Loading states
+
+    Image loading: spinner row "Loading source images..."
+    Query loading: spinner inline in button text
+    Streaming: incremental text render
+
+9. Flashcard Section (Below Answer)
+
+Rendered after every answer for both Phase 1 and Phase 2.
+
+Container: rounded-2xl border overflow-hidden
+Dark: border-white/10 bg-white/5 / Light: border-gray-200 bg-gradient-to-br from-slate-50 to-white
+Header row
+
+    Left: 36×36px icon bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl with 🃏 + "Flashcard Practice" bold title + "[N] cards · [M] mastered" subtitle
+    Right: "✨ Generate Flashcards" button (only before generation) = bg-gradient-to-r from-violet-500 to-indigo-600 rounded-xl text-white font-semibold shadow-lg shadow-indigo-500/30
+    After generation: small "Regenerate" button + collapse chevron
+
+Loading skeleton
+
+Animated pulse card with linear-gradient(135deg, #e0e7ff, #c7d2fe), "Creating your study cards..." below
+Card deck (after generation)
+
+Progress bar: h-1.5 rounded-full with linear-gradient(90deg, #10b981, #3b82f6) fill based on mastered %
+
+Flip card (3D flip animation, perspective: 1200px):
+
+    minHeight: 220px card with transformStyle: preserve-3d
+    Front face: gradient background by card type + card type badge (white/20 bg) + card number chip + question text text-white text-xl font-bold + "Tap to reveal answer" hint
+    Back face: reversed gradient + "✓ Answer" badge + answer text text-white text-lg font-semibold + "Tap to flip back" hint
+    Flip on tap/click; also keyboard: ← / → navigate, Space/Enter flips
+
+Card type gradients:
+Type	Front	Back
+Definition 📖	#667eea → #764ba2	reversed
+Concept 💡	#0ea5e9 → #2563eb	reversed
+Process ⚙️	#10b981 → #0d9488	reversed
+Fact ⚡	#f59e0b → #ef4444	reversed
+Diagram 🖼️	#ec4899 → #8b5cf6	reversed
+
+Navigation controls:
+
+    ← Prev and Next → buttons: px-4 py-2 rounded-xl text-sm font-medium
+        Dark: bg-white/10 text-white hover:bg-white/20
+        Light: bg-gray-100 text-gray-700 hover:bg-gray-200
+        Disabled: opacity-30 cursor-not-allowed
+    Dot indicators: pill shape for current card (wider, type-colored gradient), green dot for mastered cards, gray dot for others
+
+Mark Mastered button (bottom right):
+text-xs px-3 py-1.5 rounded-lg font-medium
+
+    Unmastered: gray bg
+    Mastered: bg-emerald-100 text-emerald-700
+
+All mastered banner: linear-gradient(135deg, #10b981, #3b82f6) card with "🎉 You've mastered all N cards!"
+10. TAB 2 — Use Own Book (Phase 2)
+Section header card
+
+${cardBg} rounded-xl shadow-sm border ${borderClass} p-6 mb-6
+
+    48×48px bg-purple-500/20 rounded-xl icon with 📖 + "Your Personal Books" title + subtitle
+
+Source type switcher (PDF vs YouTube)
+
+Pill switcher inside a bg-gray-800 (dark) / bg-gray-100 (light) container:
+
+    📄 PDF Book (active = bg-primary text-white)
+    ▶️ YouTube Video (active = bg-green-500 text-white)
+
+PDF Upload Form
+
+Upload button (collapsed by default):
+p-4 border-2 border-dashed rounded-lg with "📄 Upload a New PDF Book" text and chevron
+
+Expanded form (shows below): card with bg-primary/10 border-primary/30 (dark) / bg-blue-50 border-blue-100 (light):
+
+    "Book / Document Name" text input
+    "Type" select: Textbook, Notes, Guide, Question Paper
+    File drag-zone: border-2 border-dashed rounded-lg p-6 text-center cursor-pointer — dashed border changes to border-primary on hover/file-ready
+    Two action buttons: "Upload PDF" (primary) + "Cancel" (gray)
+
+Upload progress: animated bar h-2 bg-primary rounded-full with percentage
+
+Document list (after upload):
+
+    Each card: ${cardBg} rounded-xl border ${borderClass} p-4 cursor-pointer flex items-start gap-3
+    Left icon: 📄 (PDF) or 🎬 (YouTube)
+    Title, book type badge
+    Status badge: Processing = yellow/pulsing animate-pulse, Ready = green
+    Delete button (trash icon, red)
+    Selected doc: border changes to border-primary-500 with highlighted ring
+
+YouTube Form
+
+bg-green-500/5 border-green-500/20 rounded-lg p-5 (dark) / bg-green-50 border-green-100 (light)
+
+    "▶️ Add YouTube Video" header
+    Description text: supports English, Hindi, Telugu, more
+    URL text input: focus:ring-green-400 focus:border-green-400
+    "▶️ Add Video" button = bg-green-500 hover:bg-green-600 text-white
+    Loading state: spinner + "Extracting transcript..."
+
+YouTube Interaction Mode Chooser
+
+Shown when a YouTube doc is selected and no mode yet chosen:
+
+2-column grid of large tap targets:
+
+    📝 Generate Notes — border-2 border-purple-500/30 bg-purple-500/10 rounded-lg p-4 with title + description
+    ❓ Ask Questions — border-2 border-blue-500/30 bg-blue-500/10 rounded-lg p-4
+
+Phase 2 Q&A Interface
+
+Identical to Phase 1 question card EXCEPT:
+
+    No mode buttons (no Extract/Retrieve/Explain) — single "Ask" action
+    YouTube docs show Notes / Ask Questions toggle at top
+    Recent questions panel uses 🎬 icon for YouTube, 📄 for PDFs
+    Answer display: same AnswerRenderer + citation images (Phase 2 format uses data:image/jpeg;base64,... from citation_images array) + Flashcards
+
+11. Profile Modal
+
+Overlay: fixed inset-0 z-50 bg-black/50 backdrop-blur-sm
+Card: ${cardBg} rounded-xl shadow-2xl border ${borderClass} max-w-2xl mx-4 max-h-[90vh] overflow-y-auto
+Modal Header
+
+    64×64px avatar circle with ring-2 ring-purple-500/30:
+        Photo (if uploaded) or initial-letter with purple gradient
+        Hover overlay: bg-black/50 rounded-full + camera icon → opens crop/upload flow
+    "Change Photo" text button below avatar
+    User name text-xl font-bold + email/phone text-sm text-gray-500
+
+Profile Tabs (horizontal pills)
+
+Education | Account | Payment | Settings | Security
+Active: border-b-2 border-primary text-primary
+Education Tab
+
+    State / Board / Class / Medium read-only display (or dropdowns to change)
+    "Save" primary button
+
+Account Tab
+
+    Full name input
+    Email (read-only if set)
+    Phone with OTP verification
+
+Payment Tab
+
+    Current plan display
+    "Upgrade Plan" button → opens Upgrade modal
+
+Settings Tab
+
+    Typography settings: font size slider, line height slider, font family picker
+    Theme toggle (Dark / Light)
+
+Security Tab
+
+    "Delete Account" danger button (red, confirms with checkbox)
+
+12. Upgrade / Billing Modal
+
+Overlay + card: Same pattern as Profile modal but max-w-3xl
+
+Header: "🚀 Upgrade Your Plan" + current plan display
+
+Billing period toggle: Monthly / Yearly pills (yearly shows discount badge)
+
+Tier cards (horizontal scroll or grid on mobile):
+Tier	Icon	Slug
+Free	🆓	free
+Starter	🥉	tier1
+Scholar	🥈	tier2
+Pro	🥇	tier3
+Power	💎	tier4
+
+Each card:
+
+    Border border-2: primary for current tier, gray otherwise
+    Price in INR, question limit, features list
+    "Subscribe" button: bg-primary text-white / "Current Plan" (disabled)
+    Payment via Razorpay SDK (checkout.js): color #6366F1
+    After payment → /payment/success?razorpay_payment_id=...&razorpay_signature=...
+
+13. Photo Crop Modal (PhotoCropModal.jsx)
+
+    z-index 60 (above profile modal at z-50)
+    react-easy-crop library circular crop overlay
+    Zoom slider: range 1×–3×, also supports pinch/scroll
+    "Confirm" button → exports JPEG blob (quality 0.92) → uploads to POST /api/student/profile/photo
+    Stays open with loading spinner on upload; only closes on success
+    On failure: modal stays open for retry, error shown as toast
+
+14. Indian Language Keyboard (IndianLanguageKeyboard.jsx)
+
+    Bottom-sheet-style overlay
+    Renders native-script key grid for selected language
+    onInput handler appends characters to the question textarea
+    Close button top-right
+
+15. Usage Meter & Payhall Banner
+
+Usage meter (nav bar widget, md+):
+
+    Plan emoji, tier name, "N/M Q" used/limit, progress bar
+    Colors: 0–69%: linear-gradient(90deg, #818cf8, #a78bfa) (blue-purple), 70–89%: amber, 90%+: red
+
+Payhall banner (full-width, below nav, shown when limit hit):
+
+    bg-amber-500/10 border-amber-500/30 rounded-xl with "🎯 You've used your last free question" + "Upgrade Now" primary button + dismiss X
+
+16. API Endpoints Used by the Student UI
+Screen	Method	Endpoint
+Auth — send phone OTP	POST	/api/auth/phone/send-otp
+Auth — verify phone OTP	POST	/api/auth/phone/verify-otp
+Auth — send email OTP	POST	/api/auth/email/send-otp
+Auth — verify email OTP	POST	/api/auth/email/verify-otp
+Auth — Google OAuth	GET	/api/auth/google
+Profile — update	PATCH	/api/auth/me/profile
+Profile — verify phone in profile	POST	/api/auth/phone/verify-for-profile
+States list	GET	/api/states
+Boards for state	GET	/api/boards/{state_id}
+Classes for board	GET	/api/classes/{board_id}
+App config	GET	/api/app-config
+What's new	GET	/api/whats-new
+Class request	POST	/api/class-requests
+Classes available for student	GET	/api/student/classes
+Subjects for class	GET	/api/student/subjects/{class_id}
+Textbooks for subject	GET	/api/student/documents/{class_id}/{subject}
+Phase 1 query	POST	/api/query (body: {document_id, question, mode, image?})
+Phase 1 query history	GET	/api/query-history?document_id=N
+Usage / billing	GET	/api/billing/usage
+Subscription tiers	GET	/api/billing/tiers
+Subscribe	POST	/api/billing/subscribe
+Profile photo upload	POST	/api/student/profile/photo (multipart)
+Profile photo fetch	GET	/api/student/profile/photo (returns JPEG bytes, auth required)
+Profile photo delete	DELETE	/api/student/profile/photo
+Phase 2 — list docs	GET	/api/phase2/documents
+Phase 2 — upload PDF	POST	/api/phase2/documents (multipart)
+Phase 2 — add YouTube	POST	/api/phase2/youtube
+Phase 2 — query	POST	/api/phase2/query
+Phase 2 — query history	GET	/api/phase2/query-history?document_id=N
+Phase 2 — delete doc	DELETE	/api/phase2/documents/{id}
+Generate flashcards	POST	/api/flashcards (body: {question, answer})
+Transliteration	POST	/api/transliterate
+Disclaimers	GET	/api/disclaimer-messages
+17. Authentication & State
+
+    JWT stored in memory + authStore (Zustand with persist middleware)
+    All API calls via axios with Authorization: Bearer {token} header
+    Profile photo fetched as authenticated blob URL (not passed in URL param)
+    user object fields: full_name, email, phone, state, board, class_name, medium_name, role (student/teacher/admin), profile_complete, class_id
+
+18. Key UX Patterns for Mobile Replication
+
+    Skeleton/pulse loading — use on all async data loads before content appears
+    Toast notifications — green success / red error pop from top or bottom, auto-dismiss ~3s
+    Streaming responses — text chunks arrive via SSE; render progressively in the answer card
+    Optimistic UI — answer card appears immediately with spinner, then fills
+    Zoom modal — any citation/diagram image tappable → full-screen viewer
+    3D card flip — flashcards use rotateY(180deg) transform with perspective: 1200px; on mobile replicate with equivalent animation
+    Collapsible panels — Recent Questions, What's New, Flashcard section all use expand/collapse chevron pattern
+    Cascading dropdowns — State → Board → Class must be strictly sequential; reset child on parent change
+    Inline OTP verification — OTP entry appears inline below input (not a new screen)
+    Mode persistence — Dark/light theme and active tab persisted to local storage

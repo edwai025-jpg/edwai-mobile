@@ -3,26 +3,27 @@ import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
-import { Feather, MaterialIcons, Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
 import { Colors } from "@/constants/colors";
 
+const DARK_TAB_BG = "#16213e";
+const DARK_ACTIVE = "#a78bfa";
+const DARK_INACTIVE = "rgba(255,255,255,0.38)";
+const DARK_BORDER = "rgba(102,126,234,0.22)";
+
 function NativeTabLayout() {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>Home</Label>
+        <Icon sf={{ default: "books.vertical", selected: "books.vertical.fill" }} />
+        <Label>Textbooks</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="my-docs">
         <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
-        <Label>My Docs</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="history">
-        <Icon sf={{ default: "clock", selected: "clock.fill" }} />
-        <Label>History</Label>
+        <Label>Own Books</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <Icon sf={{ default: "person", selected: "person.fill" }} />
@@ -39,27 +40,27 @@ function ClassicTabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors.tabActive,
-        tabBarInactiveTintColor: Colors.tabInactive,
+        tabBarActiveTintColor: DARK_ACTIVE,
+        tabBarInactiveTintColor: DARK_INACTIVE,
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : Colors.white,
+          backgroundColor: isIOS ? "transparent" : DARK_TAB_BG,
           borderTopWidth: 1,
-          borderTopColor: Colors.tabBarBorder,
+          borderTopColor: DARK_BORDER,
           elevation: 0,
           ...(isWeb ? { height: 84 } : {}),
         },
         tabBarBackground: () =>
           isIOS ? (
             <BlurView
-              intensity={100}
-              tint="light"
+              intensity={80}
+              tint="dark"
               style={StyleSheet.absoluteFill}
             />
           ) : isWeb ? (
             <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: Colors.white }]}
+              style={[StyleSheet.absoluteFill, { backgroundColor: DARK_TAB_BG }]}
             />
           ) : null,
       }}
@@ -67,37 +68,31 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: "Textbooks",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="house" tintColor={color} size={24} />
+              <SymbolView name="books.vertical" tintColor={color} size={22} />
             ) : (
-              <Feather name="home" size={22} color={color} />
+              <Ionicons name="book-outline" size={22} color={color} />
             ),
         }}
       />
       <Tabs.Screen
         name="my-docs"
         options={{
-          title: "My Docs",
+          title: "Own Books",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="doc.text" tintColor={color} size={24} />
+              <SymbolView name="doc.text" tintColor={color} size={22} />
             ) : (
-              <Ionicons name="document-text-outline" size={22} color={color} />
+              <Feather name="upload-cloud" size={22} color={color} />
             ),
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
-          title: "History",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="clock" tintColor={color} size={24} />
-            ) : (
-              <MaterialIcons name="history" size={24} color={color} />
-            ),
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -106,7 +101,7 @@ function ClassicTabLayout() {
           title: "Profile",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="person" tintColor={color} size={24} />
+              <SymbolView name="person" tintColor={color} size={22} />
             ) : (
               <Feather name="user" size={22} color={color} />
             ),
