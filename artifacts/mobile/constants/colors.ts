@@ -87,6 +87,17 @@ export const Colors = {
 
   answerBg: "rgba(102,126,234,0.18)",
   answerBorder: "rgba(102,126,234,0.35)",
+
+  indigo: "#4F46E5",
+  indigoDot: "#4F46E5",
+
+  greenSuccess: "#10B981",
+  greenSuccessLight: "#F0FDF4",
+  greenSuccessBorder: "#BBF7D0",
+  greenSuccessDisabled: "#A7F3D0",
+
+  blueTint: "#EFF6FF",
+  blueTintBorder: "#BFDBFE",
 };
 
 export default Colors;
