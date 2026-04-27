@@ -26,6 +26,8 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import api, { ApiError } from "@/services/api";
 
+WebBrowser.maybeCompleteAuthSession();
+
 type LoginTab = "phone" | "email";
 
 export default function LoginScreen() {
@@ -94,21 +96,26 @@ export default function LoginScreen() {
       return;
     }
     setGoogleLoading(true);
+    setErrorMsg("");
     try {
-      const result = await WebBrowser.openAuthSessionAsync(
-        api.googleAuthUrl,
-        api.googleRedirectBase
-      );
+      const redirectUrl = Linking.createURL("auth/google/callback");
+      const authUrl = `${api.googleAuthUrl}?mobile_redirect=${encodeURIComponent(redirectUrl)}`;
+
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+
       if (result.type === "success") {
         const url = result.url;
-        const tokenMatch = url.match(/[?&]token=([^&]+)/);
-        if (!tokenMatch?.[1]) throw new Error("No token received from Google");
-        const token = tokenMatch[1];
-        const path = url.includes("/complete-profile") ? "complete-profile" : "student";
-        const { profileComplete } = await loginWithGoogleToken(token, path);
+        const tokenMatch = url.match(/[?&#]token=([^&#]+)/);
+        if (!tokenMatch?.[1]) throw new Error("No token received from Google sign-in");
+        const token = decodeURIComponent(tokenMatch[1]);
+        const { profileComplete } = await loginWithGoogleToken(token);
         if (!profileComplete) {
           router.replace("/complete-profile");
+        } else {
+          router.replace("/(tabs)");
         }
+      } else if (result.type === "dismiss") {
+        setErrorMsg("Google sign-in was cancelled.");
       }
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Google sign-in failed. Please try again.";

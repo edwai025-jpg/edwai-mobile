@@ -67,7 +67,7 @@ type AuthState = {
   sendEmailOtp: (email: string) => Promise<void>;
   verifyPhoneOtp: (phone: string, otp: string) => Promise<{ profileComplete: boolean }>;
   verifyEmailOtp: (email: string, otp: string) => Promise<{ profileComplete: boolean }>;
-  loginWithGoogleToken: (accessToken: string, path: string) => Promise<{ profileComplete: boolean }>;
+  loginWithGoogleToken: (accessToken: string) => Promise<{ profileComplete: boolean }>;
   completeProfile: (data: {
     name: string;
     stateId?: number;
@@ -170,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const loginWithGoogleToken = useCallback(
-    async (token: string, path: string) => {
+    async (token: string) => {
       const apiUser = await api.auth.getMe(token);
       const profile = apiUserToProfile(apiUser);
       const profileComplete = apiUser.profile_complete;
