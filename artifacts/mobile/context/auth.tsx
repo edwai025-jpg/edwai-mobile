@@ -67,7 +67,7 @@ type AuthState = {
   sendEmailOtp: (email: string) => Promise<void>;
   verifyPhoneOtp: (phone: string, otp: string) => Promise<{ profileComplete: boolean }>;
   verifyEmailOtp: (email: string, otp: string) => Promise<{ profileComplete: boolean }>;
-  loginWithGoogleToken: (accessToken: string) => Promise<{ profileComplete: boolean }>;
+  loginWithGoogleToken: (accessToken: string, refreshToken: string, profileComplete: boolean) => Promise<void>;
   completeProfile: (data: {
     name: string;
     stateId?: number;
@@ -170,21 +170,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const loginWithGoogleToken = useCallback(
-    async (token: string) => {
+    async (token: string, refreshToken: string, profileComplete: boolean) => {
       const apiUser = await api.auth.getMe(token);
       const profile = apiUserToProfile(apiUser);
-      const profileComplete = apiUser.profile_complete;
-      await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(profile));
-      await AsyncStorage.setItem(STORAGE_KEYS.accessToken, token);
-      await AsyncStorage.setItem(STORAGE_KEYS.refreshToken, "");
-      await AsyncStorage.setItem(STORAGE_KEYS.profileComplete, profileComplete ? "true" : "false");
-      setUser(profile);
-      setAccessToken(token);
-      setIsLoggedIn(true);
-      setIsProfileComplete(profileComplete);
-      return { profileComplete };
+      await storeSession(profile, token, refreshToken, profileComplete);
     },
-    []
+    [storeSession]
   );
 
   const completeProfile = useCallback(

@@ -105,10 +105,15 @@ export default function LoginScreen() {
 
       if (result.type === "success") {
         const url = result.url;
-        const tokenMatch = url.match(/[?&#]token=([^&#]+)/);
-        if (!tokenMatch?.[1]) throw new Error("No token received from Google sign-in");
-        const token = decodeURIComponent(tokenMatch[1]);
-        const { profileComplete } = await loginWithGoogleToken(token);
+        const get = (key: string) => {
+          const m = url.match(new RegExp(`[?&#]${key}=([^&#]+)`));
+          return m ? decodeURIComponent(m[1]) : null;
+        };
+        const token = get("token");
+        const refreshToken = get("refresh_token") ?? "";
+        const profileComplete = get("profile_complete") === "true";
+        if (!token) throw new Error("No token received from Google sign-in");
+        await loginWithGoogleToken(token, refreshToken, profileComplete);
         if (!profileComplete) {
           router.replace("/complete-profile");
         } else {
