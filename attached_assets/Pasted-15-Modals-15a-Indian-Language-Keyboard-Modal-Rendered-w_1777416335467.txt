@@ -1,0 +1,141 @@
+15. Modals
+15a. Indian Language Keyboard Modal
+Rendered when showKeyboard === true. Uses simple-keyboard library.
+Component: <IndianLanguageKeyboard onInput={handleKeyboardInput} onClose={() => setShowKeyboard(false)} isDarkMode={isPrimary} />
+
+10 layouts: Hindi, Telugu, Tamil, Kannada, Malayalam, Bengali, Gujarati, Punjabi, Odia, Marathi.
+Each has QWERTY layout overlaid with Indic characters on same key positions, plus shift layer.
+
+15b. Delete Document Confirmation Modal
+fixed inset-0 z-50 bg-black/50 backdrop-blur-sm. Card max-w-md rounded-xl p-6:
+
+Warning icon (red circle, 48px)
+Title: "Delete Video" or "Delete Book" + doc title
+Red info box listing what will be deleted:
+The uploaded book file / extracted transcript
+All AI processing and indexing
+Cached data and query history
+"This cannot be undone."
+Cancel (gray) + Delete Permanently (red) buttons
+API: DELETE /api/phase2/documents/{id}
+
+15c. Profile Modal
+fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto py-8. Card max-w-2xl rounded-xl max-h-[90vh] overflow-y-auto.
+
+Header:
+
+64×64 avatar circle (photo or initial, ring-2 ring-purple-500/30)
+Hover overlay: camera icon (or spinner when uploading) — tap to open photo picker
+"My Profile" title + subtitle
+"Change Photo" purple link + "Remove" red link (if photo exists)
+✕ close button (bg-red-50 text-red-500 rounded-full)
+Tab Bar (5 tabs):
+
+Tab	Icon	Label
+education	🎓	Education
+account	👤	Account
+payment	💳	Payment
+settings	⚙️	Settings
+security	🔒	Security
+Active tab: border-b-2 border-purple-500 text-purple-500. Inactive: border-transparent text-gray-400.
+
+Education Tab:
+
+Cascading dropdowns: State → Board → Class → Medium
+Each: w-full px-4 py-2.5 rounded-lg border
+Board disabled until state chosen; class disabled until board; medium disabled until class
+"Save Education Details" purple button
+API: PUT /api/student/profile { state_id, board_id, class_id, medium_id }
+
+Account Tab:
+
+Full Name input
+Email input (with validation)
+Phone: +91 prefix + 10-digit input + Verified/Not-verified badge
+If phone is 10 digits and not yet verified → "Verify phone number" link
+Tap → OTP sent → 6-digit OTP field + "Confirm" button + "Resend OTP"
+Info notice: "Password login is disabled — account uses OTP-based login"
+"Save Account Details" purple button
+Danger Zone: "Delete my account permanently" → reveals DELETE confirmation flow (type "DELETE" to confirm)
+Payment Tab:
+
+My Subscription card: Current Plan, Status badge, Questions Used / Limit, Reset Date, <UsageMeter> component, "Upgrade to Premium →" / "Change Plan →" button
+Auto-Renew card: toggle switch (green when on). Disabled on free plan.
+Settings Tab: Placeholder — "Additional settings will be available soon."
+
+Security Tab: <SessionList> component — lists active login sessions.
+
+Profile Toast Notification:
+
+Centered modal overlay z-[9999]
+Success: white card, green border, ✓ icon, "Update Successful" + message + auto-dismiss progress bar
+Error: white card, red border, ✕ icon, "Update Failed" + message + hint
+16. Key API Endpoints (Study Screen)
+Action	Method	Endpoint
+Get classes for board	GET	/api/classes?board_id={id}
+Get documents	GET	/api/documents?board_id={id}&class_id={id}&subject={s}
+Phase 1 query (streaming)	POST	/api/query
+Phase 2 query (streaming)	POST	/api/phase2/query
+Phase 1 history	GET	/api/query-history?document_id={id}
+Phase 2 history	GET	/api/phase2/query-history?document_id={id}
+Phase 2 docs list	GET	/api/phase2/documents
+Phase 2 upload PDF	POST	/api/phase2/documents/upload
+Phase 2 add YouTube	POST	/api/phase2/documents/youtube
+Phase 2 delete doc	DELETE	/api/phase2/documents/{id}
+Transliterate	GET	/api/transliterate/{lang}/{word}
+OCR from image	POST	/api/extract-question-from-image
+Generate flashcards	POST	/api/generate-flashcards
+Board status	GET	/api/student/board/status
+Start board processing	POST	/api/student/board/process
+Usage / subscription	GET	/api/usage
+Profile update	PUT	/api/student/profile
+Profile photo upload	POST	/api/student/profile/photo
+Profile photo delete	DELETE	/api/student/profile/photo
+Sessions list	GET	/api/auth/sessions
+Delete account	DELETE	/api/student/account
+Toggle autopay	POST	/api/billing/autopay/toggle
+All requests include Authorization: Bearer {jwt} header.
+
+17. Query Response Shapes
+Phase 1 — POST /api/query
+{
+  "answer": "string (markdown)",
+  "sources": [
+    {
+      "page": 42,
+      "base64_images": [
+        {
+          "page": 42,
+          "data": "data:image/jpeg;base64,...",
+          "ncert_url": "https://ncert.nic.in/..." // only in embedded mode
+        }
+      ]
+    }
+  ],
+  "diagram_images": [
+    { "page": 12, "data": "data:image/jpeg;base64,..." }
+  ],
+  "validation": {
+    "is_reliable": true,
+    "confidence": 0.93,
+    "validated_facts": 5,
+    "partial_facts": 0,
+    "unverified_facts": 1,
+    "warnings": ["..."]
+  },
+  "cached": false
+}
+
+Phase 2 — POST /api/phase2/query
+{
+  "answer": "string (markdown)",
+  "citation_images": [
+    {
+      "page_number": 7,
+      "base64_image": "..."  // raw base64, no prefix
+    }
+  ]
+}
+
+Streaming format: SSE events, each data: {"chunk": "..."}. Final event: data: [DONE].
+

@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import ProfileModal from "@/components/ProfileModal";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 
@@ -100,6 +101,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
@@ -245,8 +247,8 @@ export default function ProfileScreen() {
           <MenuItem
             icon={<Feather name="user" size={17} color={Colors.primary} />}
             title="Edit Profile"
-            subtitle="Update your name and details"
-            onPress={() => Alert.alert("Coming Soon", "Profile editing will be available soon")}
+            subtitle="Update your name, education and details"
+            onPress={() => setShowProfileModal(true)}
           />
           <View style={styles.menuDivider} />
           <MenuItem
@@ -294,6 +296,11 @@ export default function ProfileScreen() {
           <Text style={styles.version}>EdwAI v1.0.0</Text>
         </View>
       </ScrollView>
+
+      <ProfileModal
+        visible={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
     </View>
   );
 }

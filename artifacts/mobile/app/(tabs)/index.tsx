@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnswerCard from "@/components/study/AnswerCard";
 import FlashcardsSection from "@/components/study/FlashcardsSection";
+import IndianLanguageKeyboard from "@/components/study/IndianLanguageKeyboard";
 import { useAuth } from "@/context/auth";
 import api, {
   ApiError,
@@ -266,10 +267,22 @@ export default function TextbooksScreen() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [transWord, setTransWord] = useState("");
   const [showLangPicker, setShowLangPicker] = useState(false);
+  const [showKeyboard, setShowKeyboard] = useState(false);
 
   const abortCtrl = useRef<AbortController | null>(null);
   const prevQuestion = useRef("");
   const boardId = user?.boardId;
+
+  const handleKeyboardInput = useCallback((char: string) => {
+    setQuestion((q) => q + char);
+  }, []);
+
+  const handleKeyboardBackspace = useCallback(() => {
+    setQuestion((q) => {
+      if (!q) return q;
+      return [...q].slice(0, -1).join("");
+    });
+  }, []);
 
   /* ── board status ── */
   useEffect(() => {
@@ -510,9 +523,11 @@ export default function TextbooksScreen() {
             )}
 
             {inputMode === "keyboard" && (
-              <View style={im.keyboardNote}>
-                <Text style={im.keyboardNoteText}>⌨️ Indic keyboard coming soon. Use Transliterate mode to type in regional languages.</Text>
-              </View>
+              <Pressable style={im.keyboardTrigger} onPress={() => setShowKeyboard(true)}>
+                <Text style={im.keyboardTriggerIcon}>⌨️</Text>
+                <Text style={im.keyboardTriggerText}>Tap to open Indian Language Keyboard</Text>
+                <Feather name="chevron-right" size={14} color={PRIMARY} />
+              </Pressable>
             )}
 
             {/* Mode tabs */}
@@ -601,6 +616,15 @@ export default function TextbooksScreen() {
           <Text style={sc.footerText}>AI responses should be verified with citations.</Text>
         </View>
       </ScrollView>
+
+      {showKeyboard && (
+        <IndianLanguageKeyboard
+          onInput={handleKeyboardInput}
+          onBackspace={handleKeyboardBackspace}
+          onClose={() => setShowKeyboard(false)}
+          isDarkMode
+        />
+      )}
     </View>
   );
 }
@@ -618,8 +642,9 @@ const im = StyleSheet.create({
   langChipText: { fontSize: 12, color: MUTED },
   langChipTextActive: { color: "#a78bfa", fontFamily: "Inter_600SemiBold" },
   transHint: { fontSize: 11, color: MUTED, marginTop: 6, fontStyle: "italic" },
-  keyboardNote: { backgroundColor: "rgba(245,158,11,0.08)", borderRadius: 8, borderWidth: 1, borderColor: "rgba(245,158,11,0.2)", padding: 10, marginBottom: 10 },
-  keyboardNoteText: { fontSize: 12, color: "#fcd34d" },
+  keyboardTrigger: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(102,126,234,0.1)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(102,126,234,0.3)", paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10 },
+  keyboardTriggerIcon: { fontSize: 18 },
+  keyboardTriggerText: { flex: 1, fontSize: 13, color: "#a5b4fc", fontFamily: "Inter_500Medium" },
   suggestionsWrap: { backgroundColor: "rgba(102,126,234,0.08)", borderRadius: 8, borderWidth: 1, borderColor: "rgba(102,126,234,0.25)", padding: 10, marginBottom: 8 },
   suggestionsLabel: { fontSize: 11, color: MUTED, marginBottom: 4 },
   suggestionChip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(102,126,234,0.25)", borderRadius: 20, borderWidth: 1, borderColor: PRIMARY, paddingHorizontal: 12, paddingVertical: 6 },

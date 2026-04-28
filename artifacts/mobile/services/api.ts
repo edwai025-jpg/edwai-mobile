@@ -75,6 +75,17 @@ export type BoardItem = {
   page_display_mode: string;
 };
 export type ClassItem = { id: number; name: string };
+export type MediumItem = { id: number; name: string };
+
+export type SessionInfo = {
+  id: string;
+  device_info?: string;
+  ip_address?: string;
+  user_agent?: string;
+  created_at: string;
+  last_used_at?: string;
+  is_current?: boolean;
+};
 
 export type UsageInfo = {
   status: "active" | "grace_period" | "past_due" | "free" | "cancelled";
@@ -378,8 +389,88 @@ const api = {
     getClasses: (boardId: number) => request<ClassItem[]>(`/api/classes/${boardId}`),
     getClassesForBoard: (boardId: number) =>
       request<ClassItem[]>(`/api/classes?board_id=${boardId}`),
+    getMediums: (boardId: number, classId: number) =>
+      request<MediumItem[]>(`/api/medium?board_id=${boardId}&class_id=${classId}`),
     getWhatsNew: () => request<WhatsNewResponse>("/api/whats-new"),
     getAppConfig: () => request<AppConfig>("/api/app-config"),
+  },
+
+  profile: {
+    updateStudentProfile: (
+      token: string,
+      data: {
+        state_id?: number;
+        board_id?: number;
+        class_id?: number;
+        medium_id?: number;
+        full_name?: string;
+        email?: string;
+      }
+    ) =>
+      request<{ message: string; user: ApiUser }>(
+        "/api/student/profile",
+        { method: "PUT", body: JSON.stringify(data) },
+        token
+      ),
+
+    uploadPhoto: (token: string, imageUri: string) => {
+      const formData = new FormData();
+      formData.append("photo", {
+        uri: imageUri,
+        type: "image/jpeg",
+        name: "photo.jpg",
+      } as unknown as Blob);
+      return request<{ profile_photo_url: string }>(
+        "/api/student/profile/photo",
+        { method: "POST", body: formData, headers: {} },
+        token
+      );
+    },
+
+    deletePhoto: (token: string) =>
+      request<{ message: string }>(
+        "/api/student/profile/photo",
+        { method: "DELETE" },
+        token
+      ),
+
+    getSessions: (token: string) =>
+      request<SessionInfo[]>("/api/auth/sessions", {}, token),
+
+    deleteSession: (token: string, sessionId: string) =>
+      request<{ message: string }>(
+        `/api/auth/sessions/${sessionId}`,
+        { method: "DELETE" },
+        token
+      ),
+
+    deleteAccount: (token: string) =>
+      request<{ message: string }>(
+        "/api/student/account",
+        { method: "DELETE" },
+        token
+      ),
+
+    toggleAutopay: (token: string, enabled: boolean) =>
+      request<{ message: string; autopay_enabled: boolean }>(
+        "/api/billing/autopay/toggle",
+        { method: "POST", body: JSON.stringify({ enabled }) },
+        token
+      ),
+
+    sendPhoneOtp: (token: string, phone: string) =>
+      request<{ message: string }>(
+        "/api/auth/phone/send-otp-profile",
+        { method: "POST", body: JSON.stringify({ phone }) },
+        token
+      ),
+
+    verifyPhoneOtp: (token: string, phone: string, otp: string) =>
+      request<{ message: string }>(
+        "/api/auth/phone/verify-for-profile",
+        { method: "POST", body: JSON.stringify({ phone, otp }) },
+        token
+      ),
   },
 
   study: {
