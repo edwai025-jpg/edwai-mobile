@@ -35,7 +35,7 @@ function RootLayoutNav() {
       router.replace("/");
     } else if (isLoggedIn && !isProfileComplete && !inProfile) {
       router.replace("/complete-profile");
-    } else if (isLoggedIn && isProfileComplete && (inLogin || inOtp || inProfile)) {
+    } else if (isLoggedIn && isProfileComplete && (inLogin || inOtp)) {
       router.replace("/(tabs)");
     }
   }, [isLoggedIn, isProfileComplete, segments]);

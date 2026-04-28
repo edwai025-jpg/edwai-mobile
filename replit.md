@@ -97,22 +97,30 @@ Utility scripts package. Each script is a `.ts` file in `src/` with a correspond
 
 ### `artifacts/mobile` (`@workspace/mobile`)
 
-EdwAI mobile app built with Expo React Native (expo-router). Frontend-only phase — all API calls are stubbed. Play Store/App Store compliant (no payment buttons, plan management is plain text only).
+EdwAI mobile app built with Expo React Native (expo-router). Full Study Screen implemented with real API calls, SSE streaming, markdown, and flashcards. Play Store/App Store compliant (no payment buttons).
 
-**Auth flow:** Login → OTP verification → Complete Profile → Bottom tabs
-**Auth state:** AsyncStorage keys `edwai_auth` and `edwai_profile` via `context/auth.tsx`
+**Auth flow:** Login → OTP → Complete Profile → Textbooks tab (or Own Books tab if "Use Own Books" path taken)
+**Auth state:** AsyncStorage via `context/auth.tsx` (keys: `edwai_access_token`, `edwai_refresh_token`, `edwai_user_v2`, `edwai_profile_complete`)
+**Production API:** `https://edwai-api-953672603784.asia-south1.run.app` (proxied via api-server on web)
 
 **Screens:**
-- `app/index.tsx` — Login screen: Phone OTP / Email OTP tabs, +91 prefix input, Google Sign-in, trust badge
-- `app/otp.tsx` — OTP verification: 6-digit input boxes with auto-advance, resend timer
-- `app/complete-profile.tsx` — 2-step profile setup: Step 1 (name), Step 2 (State → Board → Class cascading pickers, privacy checkbox)
-- `app/(tabs)/index.tsx` — Home: textbook picker (Class/Subject/Textbook), Q&A with streaming animation, Answer from Book / Learn Concept modes
-- `app/(tabs)/my-docs.tsx` — Phase 2 placeholder: PDF upload, YouTube video analysis coming soon
-- `app/(tabs)/history.tsx` — Question history: empty state + sample data preview
-- `app/(tabs)/profile.tsx` — Avatar, plan badge, usage progress bar, plain-text plan notice, settings menu, logout/delete
+- `app/index.tsx` — Login: Phone OTP / Email OTP / Google OAuth (edwai:// deep link)
+- `app/otp.tsx` — OTP verification: 6-digit boxes, auto-advance, resend timer
+- `app/complete-profile.tsx` — Profile: name, State→Board→Class cascading pickers. "Get Started" → textbooks tab; "Use Own Books" → own books tab
+- `app/(tabs)/index.tsx` — **Phase 1 Textbooks**: board status check, restricted processing UI, Class→Subject→Textbook pickers (real API), SSE streaming Q&A, Answer from Book / Learn Concept modes, recent questions, image OCR upload, answer markdown display with sources/citation images/diagrams, image zoom modal, 3D-flip flashcards
+- `app/(tabs)/my-docs.tsx` — **Phase 2 Own Books**: PDF upload (expo-document-picker), YouTube URL add, document list with 3-second polling for processing status, delete confirmation modal, full Q&A interface with SSE streaming, citation images, 3D-flip flashcards
+- `app/(tabs)/history.tsx` — hidden tab (href: null)
+- `app/(tabs)/profile.tsx` — Avatar, plan/usage display, settings, logout
 
-**Design system:** `constants/colors.ts` — EdwAI indigo/purple palette, primary #667eea, secondary #764ba2
-**Tab bar:** NativeTabs with Liquid Glass on iOS 26+, expo-blur BlurView fallback on older iOS, plain white on Android
-**Backend:** Not yet connected. Future: https://edwai-api-953672603784.asia-south1.run.app
+**Shared study components** (`components/study/`):
+- `AnswerCard.tsx` — streaming + final answer with markdown, sources pills, citation images, diagram grid, image zoom modal, validation badge
+- `FlashcardsSection.tsx` — 3D-flip cards (react-native-reanimated Animated), type-colored gradients, prev/next/dots navigation
 
+**API service** (`services/api.ts`):
+- All endpoints typed: auth, data, study (board status/processing, classes, documents, SSE query, OCR, flashcards), phase2 (list/upload/youtube/delete, SSE query)
+- `streamQuery()` — fetch + ReadableStream SSE parser; format: `data: {"chunk":"..."}` → `data: [DONE]`
+
+**Key packages:** `react-native-markdown-display`, `expo-document-picker@~14.0.8`, `expo-image-picker`, `expo-linear-gradient`, `react-native-reanimated`
+**Design system:** dark `#1a1a2e → #16213e` bg, primary `#667eea`, accent `#a78bfa`
+**Tab bar:** NativeTabs (Liquid Glass iOS 26+), expo-blur BlurView fallback, plain dark on Android
 Bundle ID: `com.edwai.app` | Scheme: `edwai`

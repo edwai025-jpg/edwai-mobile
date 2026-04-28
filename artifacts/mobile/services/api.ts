@@ -76,6 +76,97 @@ export type BoardItem = {
 };
 export type ClassItem = { id: number; name: string };
 
+export type UsageInfo = {
+  status: "active" | "grace_period" | "past_due" | "free" | "cancelled";
+  plan_name: string;
+  questions_used: number;
+  questions_limit: number;
+  renewal_date?: string;
+  payment_method_update_url?: string;
+  days_remaining?: number;
+};
+
+export type BoardStatus = {
+  is_restricted: boolean;
+  processing_status: "not_started" | "in_progress" | "completed" | "failed";
+  processing_delay_minutes: number;
+  progress_percent?: number;
+  started_at?: string;
+};
+
+export type DocumentItem = {
+  id: number;
+  title: string;
+  subject?: string;
+  document_type?: string;
+  source_type: "pdf" | "youtube";
+  processing_status: "pending" | "processing" | "completed" | "failed";
+  progress_percent?: number;
+  page_count?: number;
+  chunk_count?: number;
+  created_at: string;
+  is_ready: boolean;
+};
+
+export type Phase1Document = {
+  id: number;
+  title: string;
+  subject: string;
+  class_id: number;
+  board_id: number;
+  page_display_mode?: string;
+};
+
+export type PageCitation = {
+  page: number;
+  base64_images?: {
+    page: number;
+    data: string;
+    ncert_url?: string;
+  }[];
+};
+
+export type DiagramImage = {
+  page: number;
+  data: string;
+};
+
+export type CitationImage = {
+  page_number: number;
+  base64_image: string;
+};
+
+export type ValidationResult = {
+  is_reliable: boolean;
+  confidence: number;
+  validated_facts: number;
+  partial_facts: number;
+  unverified_facts: number;
+  warnings: string[];
+};
+
+export type QueryResponse = {
+  answer: string;
+  sources?: PageCitation[];
+  diagram_images?: DiagramImage[];
+  citation_images?: CitationImage[];
+  validation?: ValidationResult;
+  cached?: boolean;
+};
+
+export type Flashcard = {
+  type: "definition" | "concept" | "process" | "fact" | "diagram";
+  front: string;
+  back: string;
+};
+
+export type QueryHistoryItem = {
+  id: number;
+  question: string;
+  mode: "retrieve" | "explain";
+  created_at: string;
+};
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -119,6 +210,84 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+export async function streamQuery(
+  path: string,
+  body: Record<string, unknown>,
+  accessToken: string,
+  onChunk: (chunk: string) => void,
+  signal?: AbortSignal
+): Promise<QueryResponse> {
+  const url = resolveUrl(path);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    let detail = `HTTP ${res.status}`;
+    try {
+      detail = (JSON.parse(text) as { detail?: string }).detail ?? detail;
+    } catch {}
+    throw new ApiError(detail, res.status, null);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("No response stream");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullAnswer = "";
+  let responseData: Partial<QueryResponse> = {};
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const payload = line.slice(6).trim();
+      if (payload === "[DONE]") break;
+      try {
+        const parsed = JSON.parse(payload) as {
+          chunk?: string;
+          answer?: string;
+          sources?: PageCitation[];
+          diagram_images?: DiagramImage[];
+          citation_images?: CitationImage[];
+          validation?: ValidationResult;
+          cached?: boolean;
+        };
+        if (parsed.chunk) {
+          fullAnswer += parsed.chunk;
+          onChunk(parsed.chunk);
+        } else {
+          responseData = { ...responseData, ...parsed };
+        }
+      } catch {}
+    }
+  }
+
+  return {
+    answer: responseData.answer ?? fullAnswer,
+    sources: responseData.sources,
+    diagram_images: responseData.diagram_images,
+    citation_images: responseData.citation_images,
+    validation: responseData.validation,
+    cached: responseData.cached,
+  };
 }
 
 const api = {
@@ -205,16 +374,121 @@ const api = {
 
   data: {
     getStates: () => request<StateItem[]>("/api/states"),
-
-    getBoards: (stateId: number) =>
-      request<BoardItem[]>(`/api/boards/${stateId}`),
-
-    getClasses: (boardId: number) =>
-      request<ClassItem[]>(`/api/classes/${boardId}`),
-
+    getBoards: (stateId: number) => request<BoardItem[]>(`/api/boards/${stateId}`),
+    getClasses: (boardId: number) => request<ClassItem[]>(`/api/classes/${boardId}`),
+    getClassesForBoard: (boardId: number) =>
+      request<ClassItem[]>(`/api/classes?board_id=${boardId}`),
     getWhatsNew: () => request<WhatsNewResponse>("/api/whats-new"),
-
     getAppConfig: () => request<AppConfig>("/api/app-config"),
+  },
+
+  study: {
+    getUsage: (token: string) =>
+      request<UsageInfo>("/api/usage", {}, token),
+
+    getBoardStatus: (token: string) =>
+      request<BoardStatus>("/api/student/board/status", {}, token),
+
+    startBoardProcessing: (token: string) =>
+      request<{ message: string; estimated_minutes: number }>(
+        "/api/student/board/process",
+        { method: "POST" },
+        token
+      ),
+
+    getDocuments: (token: string, boardId: number, classId: number, subject?: string) => {
+      const qs = subject
+        ? `board_id=${boardId}&class_id=${classId}&subject=${encodeURIComponent(subject)}`
+        : `board_id=${boardId}&class_id=${classId}`;
+      return request<Phase1Document[]>(`/api/documents?${qs}`, {}, token);
+    },
+
+    getQueryHistory: (token: string, documentId: number) =>
+      request<QueryHistoryItem[]>(
+        `/api/query-history?document_id=${documentId}`,
+        {},
+        token
+      ),
+
+    streamQuery: (
+      token: string,
+      body: { document_id: number; question: string; mode: "retrieve" | "explain" },
+      onChunk: (chunk: string) => void,
+      signal?: AbortSignal
+    ) => streamQuery("/api/query", body, token, onChunk, signal),
+
+    extractQuestionFromImage: (token: string, imageUri: string) => {
+      const formData = new FormData();
+      formData.append("image", {
+        uri: imageUri,
+        type: "image/jpeg",
+        name: "question.jpg",
+      } as unknown as Blob);
+      return request<{ text: string }>(
+        "/api/extract-question-from-image",
+        { method: "POST", body: formData, headers: {} },
+        token
+      );
+    },
+
+    generateFlashcards: (token: string, question: string, answer: string) =>
+      request<{ flashcards: Flashcard[] }>(
+        "/api/generate-flashcards",
+        { method: "POST", body: JSON.stringify({ question, answer }) },
+        token
+      ),
+
+    transliterate: (token: string, lang: string, word: string) =>
+      request<string[]>(`/api/transliterate/${lang}/${encodeURIComponent(word)}`, {}, token),
+  },
+
+  phase2: {
+    listDocuments: (token: string) =>
+      request<DocumentItem[]>("/api/phase2/documents", {}, token),
+
+    addYoutube: (token: string, url: string, title?: string) =>
+      request<DocumentItem>(
+        "/api/phase2/documents/youtube",
+        { method: "POST", body: JSON.stringify({ url, title }) },
+        token
+      ),
+
+    uploadPdf: (token: string, fileUri: string, fileName: string, title: string, documentType: string) => {
+      const formData = new FormData();
+      formData.append("file", {
+        uri: fileUri,
+        type: "application/pdf",
+        name: fileName,
+      } as unknown as Blob);
+      formData.append("title", title);
+      formData.append("document_type", documentType);
+      return request<DocumentItem>(
+        "/api/phase2/documents/upload",
+        { method: "POST", body: formData, headers: {} },
+        token
+      );
+    },
+
+    deleteDocument: (token: string, id: number) =>
+      request<{ message: string }>(
+        `/api/phase2/documents/${id}`,
+        { method: "DELETE" },
+        token
+      ),
+
+    getQueryHistory: (token: string, documentId: number) =>
+      request<QueryHistoryItem[]>(
+        `/api/phase2/query-history?document_id=${documentId}`,
+        {},
+        token
+      ),
+
+    streamQuery: (
+      token: string,
+      body: { document_id: number; question: string; mode: "retrieve" | "explain" },
+      onChunk: (chunk: string) => void,
+      signal?: AbortSignal
+    ) => streamQuery("/api/phase2/query", body, token, onChunk, signal),
   },
 
   googleAuthUrl: `${PROD_URL}/api/auth/google`,

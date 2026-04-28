@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -96,6 +97,7 @@ function PickerField({
 
 export default function CompleteProfileScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { completeProfile, user } = useAuth();
 
   const [name, setName] = useState(user?.name ?? "");
@@ -161,7 +163,7 @@ export default function CompleteProfileScreen() {
   const canProceedOwnBooks = name.trim().length > 0 && privacyAccepted;
   const canGetStarted = name.trim().length > 0 && !!selectedBoard && privacyAccepted;
 
-  const doSubmit = async (boardId: number, classId?: number) => {
+  const doSubmit = async (boardId: number, classId?: number): Promise<boolean> => {
     setErrorMsg("");
     setLoading(true);
     try {
@@ -178,9 +180,11 @@ export default function CompleteProfileScreen() {
         classId,
         phone: phonePayload,
       });
+      return true;
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Failed to save profile. Please try again.";
       setErrorMsg(msg);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -190,13 +194,15 @@ export default function CompleteProfileScreen() {
     if (!name.trim()) { setErrorMsg("Please enter your full name"); return; }
     if (!selectedBoard) { setErrorMsg("Please select your board"); return; }
     if (!privacyAccepted) { setErrorMsg("Please accept the Terms of Service and Privacy Policy"); return; }
-    await doSubmit(selectedBoard.id, selectedClass?.id);
+    const ok = await doSubmit(selectedBoard.id, selectedClass?.id);
+    if (ok) router.replace("/(tabs)");
   };
 
   const handleProceedOwnBooks = async () => {
     if (!canProceedOwnBooks) return;
     const boardId = selectedBoard?.id ?? 5;
-    await doSubmit(boardId, selectedClass?.id);
+    const ok = await doSubmit(boardId, selectedClass?.id);
+    if (ok) router.replace("/(tabs)/my-docs");
   };
 
   return (

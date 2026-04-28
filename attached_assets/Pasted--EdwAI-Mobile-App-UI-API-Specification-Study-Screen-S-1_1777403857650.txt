@@ -1,0 +1,433 @@
+________________________________________
+EdwAI Mobile App — UI & API Specification
+Study Screen (StudentPortal) — Complete Spec
+________________________________________
+1. Design System
+Color Tokens
+Token	Dark Mode (primary)	Light Mode (secondary)
+Background	#1a1a2e → #16213e gradient	blue-50 via-white to-purple-50
+Card bg	rgba(255,255,255,0.05) / bg-[#1e1e3a]	white
+Border	rgba(255,255,255,0.1)	gray-200
+Primary accent	#667eea (bg-primary)	same
+Primary dark	#5568d3 (bg-primary-dark)	same
+Text primary	white	gray-900
+Text secondary	gray-400	gray-500
+Nav gradient	135deg, #1a1040 → #251662 → #2e1875 → #1d0e5c	135deg, #3730a3 → #4f46e5 → #6d28d9 → #4338ca
+Nav shadow	0 4px 32px rgba(99,71,234,0.35)	same
+Toggle: persisted in localStorage key edwai_mode. primary = dark, secondary = light. Default = primary.
+________________________________________
+2. Global Banners (appear above the nav)
+Shown in order at the very top of the screen, before the nav:
+2a. Grace Period Banner
+•	Condition: usage.status === 'grace_period'
+•	Background: bg-amber-500, text text-amber-950
+•	"⚠️ Your last payment failed. Update your payment method…" + days remaining count
+•	CTA: "Update Card →" (link to usage.payment_method_update_url) or "Resolve Now →" button (opens Upgrade modal with grace context)
+2b. Past Due Banner
+•	Condition: usage.status === 'past_due'
+•	Background: bg-red-600 text-white
+•	"⛔ Your account has been downgraded…"
+•	CTA: "Restore Access →" → opens Upgrade modal (past_due context)
+2c. Phone Nudge Banner
+•	Condition: user.phone is missing AND localStorage.phoneNudgeDismissed !== '1'
+•	Background: bg-blue-50 border-b border-blue-200 text-blue-900
+•	"📱 Add your mobile number…" with link to Profile > Account tab
+•	Dismiss button × — sets localStorage.phoneNudgeDismissed = '1'
+________________________________________
+3. Hero Nav Bar (sticky top, z-index: 10)
+A single rich banner strip — always visible. Contains decorative background layer (dot-grid, glow orbs, faint book/graduation-cap/star SVGs, all pointer-events: none).
+Desktop Row (one compact row, px-4 py-2.5 flex items-center gap-3):
+Element	Detail
+Logo	text-lg font-black. "Edw" in #a78bfa, "AI" in white
+Divider	h-6 w-px bg-white/20
+Avatar + Name	32×32 circular avatar — photo if available, else first-letter initial (#7c3aed → #4f46e5 gradient). Ring: linear-gradient(135deg,#a78bfa,#818cf8) glow. Name in text-xs font-bold text-white, email/phone below in text-[10px] text-white/45 (hidden on mobile)
+Spacer	flex-1
+Info chips (md+ only)	State / Board / Class / Medium — each a pill: rgba(255,255,255,0.12) bg, 1px solid rgba(255,255,255,0.18) border, text-xs font-semibold. Icon in text-white/55, label in text-white/50, value in text-white font-bold
+Spacer	flex-1
+Subscription widget (md+)	Dark glass card: rgba(10,6,40,0.55) + 1px solid rgba(255,255,255,0.22). Plan emoji + name + used/limit Q label + progress bar (color: indigo if <70%, amber if <90%, red if ≥90%) + renewal date. Tappable → opens Upgrade modal
+Divider	h-5 w-px bg-white/15
+Theme toggle	32×32 rgba(255,255,255,0.1) rounded button — ☀️ (switch to light) or 🌙 (switch to dark)
+Profile button	rgba(139,92,246,0.75) purple button — person icon + "Profile" text (hidden on mobile) → opens Profile modal
+Logout button	rgba(239,68,68,0.7) red button — "Logout" text (hidden on mobile), door-arrow icon on mobile
+Mobile Sub-Row (md hidden, px-3 pt-2 pb-2.5 flex items-center gap-2, border-top rgba(255,255,255,0.08)):
+•	Board chip + Class chip (same pill style as desktop)
+•	Spacer
+•	Mini subscription widget (dark glass) + "Upgrade" button
+________________________________________
+4. Payhall Banner (below nav)
+•	Condition: payhallBanner === true (set when user hits their last free question)
+•	Layout: mx-6 mt-4 max-w-5xl rounded-xl flex items-between
+•	Dark: bg-amber-500/10 border-amber-500/30 text-amber-400
+•	Light: bg-amber-50 border-amber-300 text-amber-800
+•	"🎯 You've used your last free question. Upgrade to keep learning!"
+•	"Upgrade Now" button (primary) + × dismiss
+________________________________________
+5. Main Content Area (p-6 max-w-5xl mx-auto)
+5a. Source Toggle Card
+Always shown. Card: rounded-xl shadow-sm border p-4 mb-6.
+Two buttons in a row:
+•	"📚 Use Textbooks" — active = bg-primary text-white; inactive = gray
+•	"📖 Use Own Book" — active = bg-primary text-white; inactive = gray
+________________________________________
+6. "Use Own Book" Section (Phase 2)
+Shown only when useOwnBook === true. Card: rounded-xl shadow-sm border p-6 mb-6.
+Header: 📖 icon in bg-purple-500/20 w-12 h-12 rounded-xl + "Your Personal Books" title + subtitle.
+6a. Source Type Tab Switcher
+Two tabs: "📄 PDF Book" and "▶️ YouTube Video"
+•	Active PDF: bg-primary text-white
+•	Active YouTube: bg-green-500 text-white
+•	Background: bg-gray-800 (dark) / bg-gray-100 (light)
+6b. YouTube URL Form (uploadMode === 'youtube')
+Card: rounded-lg border p-5. Dark: bg-green-500/5 border-green-500/20. Light: bg-green-50 border-green-100.
+•	"▶️ Add YouTube Video" heading
+•	Subtitle: "Paste any YouTube link. We'll extract the transcript automatically — works for English, Hindi, Telugu, and more."
+•	URL text input (full width): placeholder https://www.youtube.com/watch?v=...
+•	Enter → submit. "▶️ Add Video" button (green-500 when filled, gray when empty)
+•	Loading state: spinner + "Extracting transcript..."
+API: POST /api/phase2/documents/youtube
+Body:
+{ "url": "https://...", "title": "optional" }
+Response: { document_id, title, processing_status, ... }. Poll until is_ready.
+6c. PDF Upload (uploadMode === 'pdf')
+Collapsed state: dashed border button, "📤 Click to upload a new book" + "PDF files up to 50MB"
+Expanded Upload Form (showUploadForm = true):
+•	Close ×
+•	"Select PDF File *" — hidden <input type=file accept=".pdf"> with styled label
+•	"Book Name" text input
+•	"Book Type" select: textbook, notes, reference, other
+•	Upload button: "📤 Upload Book" — primary color
+API: POST /api/phase2/documents/upload (multipart: file, title, document_type)
+6d. Upload Progress Bar
+Shown while uploadingFile === true:
+[progress bar] N% "Uploading..."
+Animated stripe pattern.
+6e. Documents List
+Per document card: rounded-xl border p-3 flex items-center:
+•	Active: bg-primary/20 border-primary
+•	Inactive completed: bg-[#2a2a3e] border-primary/30
+•	Disabled (processing): opacity-50 cursor-not-allowed
+Left side: 📄 or ▶️ icon + title + subtitle (pages/chunks or "Processing... N%"). Right: delete trash icon (red on hover).
+API: GET /api/phase2/documents → array of documents (poll every 3s for processing_status !== 'completed' items).
+Delete: DELETE /api/phase2/documents/{id}
+6f. YouTube Interaction Mode Picker
+Shown when a YouTube doc is selected and no mode chosen yet. Grid of two cards:
+Card	Color	Description
+"📝 Generate Notes"	purple-500/30 border	Auto-creates study notes; sends hardcoded notes prompt to handleQuery('retrieve')
+"❓ Ask Questions"	blue-500/30 border	Opens the Q&A text input
+Once mode is active, a small tab switcher (same style) remains above the question box.
+API for Query: POST /api/phase2/query (streaming SSE)
+{ "document_id": 42, "question": "...", "mode": "retrieve" }
+________________________________________
+7. Restricted Board Processing UI (Phase 1, boardStatus.is_restricted)
+Shown only when !useOwnBook && boardStatus.is_restricted && boardStatus.processing_status !== 'completed'.
+Card p-6 mb-6. Has 3 states:
+State 1 — Not started:
+•	Centered: 80×80 circle icon 📚 + "Ready to Access Your Textbooks" + description
+•	"📄 Process Official Documents" primary button
+•	Note: "Processing takes approximately N minutes"
+State 2 — In progress:
+•	Spinning countdown timer MM:SS inside circle with animated border
+•	Progress bar (5% to 100% over the delay duration, css transition: 1s)
+State 3 — Complete → Section disappears, normal book selection shown.
+API: POST /api/student/board/process (start) + GET /api/student/board/status (poll)
+________________________________________
+8. Book Selection (Phase 1)
+Shown when !useOwnBook && (!boardStatus.is_restricted || processing complete).
+Card p-6 mb-6. Header: 📖 + "Select Your Textbook".
+Three dropdowns in a grid grid-cols-1 md:grid-cols-3 gap-4:
+Dropdown	State	Options
+Class	always enabled	API: GET /api/classes?board_id=X
+Subject	enabled after class	Derived from filtered documents
+Textbook	enabled after subject	GET /api/documents?board_id=X&class_id=Y&subject=Z
+Styling: px-4 py-3 rounded-lg border. Dark: bg-[#2a2a3e] border-primary/30 text-white. Light: bg-gray-50 border-gray-200.
+Focus: border-primary ring-2 ring-primary/20.
+Guidance hints shown below dropdowns (blue/yellow info boxes):
+•	No books for board yet → yellow "📚 No textbooks have been uploaded…"
+•	No class selected → blue "👆 Select a class to see available subjects"
+•	Class but no subjects → yellow "📚 No subjects with textbooks…"
+•	Subject but no books → yellow "No textbooks available…"
+________________________________________
+9. Question Interface
+Shown once a document (Phase 1) or personal doc (Phase 2, with mode chosen for YouTube) is selected.
+Card p-6. Header: 💬 in bg-green-500/20 w-12 h-12 rounded-xl + "Ask Your Question" + "Get answers from: [doc title]" (doc title in text-primary).
+9a. Input Mode Bar
+Three toggle buttons in a row (flex gap-2 flex-wrap):
+Button	Label	Active color
+Normal	✍️ Normal	bg-primary text-white
+Transliterate	🔤 Transliterate	bg-primary text-white
+Keyboard	⌨️ Keyboard	bg-primary text-white
+When Transliterate is active → language select dropdown appears inline:
+Hindi / Telugu / Tamil / Kannada / Malayalam / Marathi / Bengali / Gujarati / Punjabi / Odia
+(10 languages; values: hindi, telugu, tamil, kannada, malayalam, marathi, bengali, gujarati, punjabi, odia)
+Transliterate API: GET /api/transliterate/{lang_code}/{word} → suggestions array.
+•	Triggered on spacebar press at each word boundary
+•	Suggestions shown as inline dropdown (above textarea, position: absolute, top: 70px)
+•	Navigate: ↑↓ arrows; pick: Space/Enter or keys 1–5
+9b. Recent Questions Panel
+Collapsible (▼ toggle). Shows for both Phase 1 and Phase 2.
+•	Border: border-2 border-indigo-500/40 bg-indigo-950/50 (dark) / border-indigo-200 bg-indigo-50 (light)
+•	Header: 🕐 Recent Questions (N) — click to expand
+•	Expanded: search box (when >5 items) + max-height-48 scrollable list
+•	Each row: mode icon (📖 retrieve or 💡 explain / 🎬 youtube or 📄 pdf) + truncated question text — tap to prefill textarea
+Phase 1 API: GET /api/query-history?document_id={id} → [{ id, question, mode, created_at }]
+Phase 2 API: GET /api/phase2/query-history?document_id={id} → same shape
+9c. Main Textarea
+textarea
+  rows=4
+  pb-12 (space for bottom toolbar)
+  style: unicodeBidi: plaintext
+  placeholder (Normal): "e.g., What are the main relief features of India?"
+  placeholder (Transliterate): "Type in English → Press Space to convert (e.g., 'namaste ' → 'नमस्ते ')"
+Styling: px-4 py-3 pb-12 rounded-lg border. Dark: bg-[#2a2a3e] border-primary/30 text-white placeholder-gray-500. Light: bg-gray-50 border-gray-200 text-gray-900.
+Focus: border-primary ring-2 ring-primary/20.
+Disabled when extractingQuestion === true.
+Paste handler: normalizes to NFC, inserts at cursor position.
+Bottom Toolbar (absolute, bottom-3 right-3)
+Two icon buttons:
+•	📷 Camera — <input type=file accept="image/*" capture="environment"> — takes photo, extracts question text via OCR (POST /api/extract-question-from-image)
+•	🖼️ Gallery — <input type=file accept="image/*"> — pick from library
+Both: w-8 h-8 rounded-lg. Dark: bg-primary/20 hover:bg-primary/30. Light: bg-gray-200 hover:bg-gray-300.
+Image Preview
+When image captured/selected (before OCR or after):
+•	Shows thumbnail w-32 h-32 object-cover rounded-lg border-2 border-primary
+•	Loading: spinner + "Extracting question from image..."
+•	Done: ✓ green + "Question extracted successfully" + "Clear" button
+OCR API: POST /api/extract-question-from-image (multipart: image) → { text }
+9d. Action Buttons
+grid grid-cols-2 gap-3 mb-6:
+Button 1 (varies by context):
+•	Phase 1 or Phase 2 PDF: 📖 Answer from Book — bg-primary hover:bg-primary-dark → calls handleQuery('retrieve')
+•	Phase 2 YouTube: ▶️ Generate from Video — same color → calls handleQuery('retrieve')
+Button 2:
+•	💡 Learn Concept — bg-gradient-to-r from-green-500 to-emerald-600 → calls handleQuery('explain')
+Both: py-3 px-4 rounded-lg font-semibold. Disabled when loading || !question.trim().
+________________________________________
+10. Answer Display
+10a. Loading State
+Full-width centered card py-12. Dark: bg-primary/20. Light: bg-gradient-to-br from-blue-50 to-purple-50.
+•	Spinning circle h-12 w-12 border-4 border-primary border-t-transparent
+•	"Searching through your textbook..."
+•	"This may take a few moments"
+10b. Streaming State (SSE)
+Card p-6 rounded-lg border. Same background as final answer. Shows:
+•	✨ icon in 40×40 square
+•	"Answer" heading + animate-pulse "typing..." indicator
+•	<AnswerRenderer> fed the partial streamingText
+Phase 1 SSE: POST /api/query (streaming) — Content-Type: text/event-stream
+Phase 2 SSE: POST /api/phase2/query (streaming)
+10c. Final Answer Card
+Same card style as streaming. Layout:
+•	✨ icon 40×40
+•	"Answer" text-lg font-bold
+•	<AnswerRenderer> with typography settings: 
+o	fontSize, lineHeight, fontFamily (system / serif / sans) — user preference from Settings
+AnswerRenderer component behavior:
+•	Uses ReactMarkdown + remarkGfm + remarkMath + rehypeKatex
+•	Pre-processes: \[...\] → $$...$$, \(...\) → $...$
+•	Page citations: [Page N] → **[Page N]** (bolded)
+•	Tables: overflow-x-auto, border-collapse border border-gray-300
+•	Code blocks: bg-gray-100 p-3 rounded font-mono
+•	Blockquote: border-l-4 border-blue-400 pl-3 italic
+Validation Badge (Explain mode only)
+If answer.validation present:
+Condition	Color	Icon
+is_reliable = true	green-50 / green-200	✅
+confidence >= 0.6	yellow-50 / yellow-200	⚠️
+confidence < 0.6	red-50 / red-200	❌
+Shows: "Answer Validation: N% Verified", count of verified/partial/unverified statements, any warnings.
+Teacher Save Button (teachers only, Phase 1, uncached answers)
+💾 Save This Answer → amber button. Success: ✓ Answer Saved (green). Duplicate: shows similarity %.
+API: POST /api/teacher/save-answer
+10d. Sources Card (Phase 1)
+rounded-xl border. Dark: card bg. Light: card bg.
+•	"📄 Sources" heading
+•	Optional italic disclaimer from disclaimerMessages.source_citation_text
+•	Source page pills: px-3 py-1 rounded-full text-sm. Dark: bg-primary/30 text-gray-300 border-primary/40. Light: bg-white text-gray-700 border-gray-200
+10e. Diagrams (Phase 1)
+p-6 rounded-lg border. "🖼️ Diagrams from Textbook". 2-column grid. Each card:
+•	Image: w-full h-auto, hover scale-105, hover overlay with zoom SVG
+•	Tap → opens Image Zoom Modal
+•	Footer: "Page N" in small text
+10f. Page Citations (Phase 1 — base64_images)
+White card p-6.
+Three sub-modes based on boardPageConfig.page_display_mode:
+Embedded (NCERT):
+•	Emerald card border-2 border-emerald-400 bg-emerald-50 rounded-xl p-4
+•	"NCERT Source:" heading
+•	"Please refer to all the listed pages…"
+•	Page links: white buttons border-2 border-emerald-400, with external link icon. Tap → opens NCERT URL in browser
+Original / EdwAI Generated:
+•	List of page image cards
+•	Each: border rounded-lg overflow-hidden bg-white
+•	Image: w-full h-auto with zoom-on-hover
+•	Tap → opens Image Zoom Modal
+•	Footer: "Page N"
+10g. Phase 2 Citation Images (citation_images)
+Same card style (white, p-6). Each citation:
+•	Image source: data:image/jpeg;base64,{citation.base64_image}
+•	page_number in footer
+•	Tap → Image Zoom Modal
+________________________________________
+11. Image Zoom Modal
+Full-screen overlay bg-black/75 z-50. Tap outside to close.
+•	Close × SVG button at -top-12 right-0
+•	bg-white rounded-lg overflow-auto max-h-[90vh] shadow-2xl
+•	Full-width image
+•	Footer: "🖼️ Diagram" or "📖 Page Citation — Page N" (bg-gray-50 border-t text-sm)
+________________________________________
+12. Flashcard Section
+Appears below the answer (when answer.answer exists and not streaming). Component: <FlashcardSection question={question} answer={answer.answer} isPrimary={isPrimary} />.
+Trigger API: POST /api/generate-flashcards
+{ "question": "...", "answer": "..." }
+Response: { flashcards: [{ type, front, back }] }
+Card types & colors:
+Type	Gradient (front face)
+definition	violet-600 → indigo-700
+concept	sky-500 → blue-600
+process	emerald-500 → teal-600
+fact	amber-500 → red-500
+diagram	pink-500 → purple-600
+All cards: text-white font-bold, min-height 220px.
+3D flip animation: rotateY(180deg) on tap; transform-style: preserve-3d; perspective: 1000px.
+Front face shows front + type label (e.g. "DEFINITION"). Back face shows back.
+Navigation: previous/next arrows. Pagination dots.
+________________________________________
+13. Help Section
+Shown only when no document selected (!document && !useOwnBook). White card p-6 rounded-xl border-gray-200.
+How to use EdwAI
+1. 📚 Select your class, subject, and textbook…
+2. ✍️ Type your question…
+3. 🔍 Choose Answer from Book…
+4. 💡 Choose Learn Concept…
+________________________________________
+14. Footer
+bg-white border-t border-gray-200 py-3. Centered text:
+⚠️ AI responses should be verified with citations. Always cross-check important information.
+________________________________________
+15. Modals
+15a. Indian Language Keyboard Modal
+Rendered when showKeyboard === true. Uses simple-keyboard library.
+Component: <IndianLanguageKeyboard onInput={handleKeyboardInput} onClose={() => setShowKeyboard(false)} isDarkMode={isPrimary} />
+10 layouts: Hindi, Telugu, Tamil, Kannada, Malayalam, Bengali, Gujarati, Punjabi, Odia, Marathi.
+Each has QWERTY layout overlaid with Indic characters on same key positions, plus shift layer.
+15b. Delete Document Confirmation Modal
+fixed inset-0 z-50 bg-black/50 backdrop-blur-sm. Card max-w-md rounded-xl p-6:
+•	Warning icon (red circle, 48px)
+•	Title: "Delete Video" or "Delete Book" + doc title
+•	Red info box listing what will be deleted: 
+o	The uploaded book file / extracted transcript
+o	All AI processing and indexing
+o	Cached data and query history
+•	"This cannot be undone."
+•	Cancel (gray) + Delete Permanently (red) buttons
+API: DELETE /api/phase2/documents/{id}
+15c. Profile Modal
+fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto py-8. Card max-w-2xl rounded-xl max-h-[90vh] overflow-y-auto.
+Header:
+•	64×64 avatar circle (photo or initial, ring-2 ring-purple-500/30)
+•	Hover overlay: camera icon (or spinner when uploading) — tap to open photo picker
+•	"My Profile" title + subtitle
+•	"Change Photo" purple link + "Remove" red link (if photo exists)
+•	✕ close button (bg-red-50 text-red-500 rounded-full)
+Tab Bar (5 tabs):
+Tab	Icon	Label
+education	🎓	Education
+account	👤	Account
+payment	💳	Payment
+settings	⚙️	Settings
+security	🔒	Security
+Active tab: border-b-2 border-purple-500 text-purple-500. Inactive: border-transparent text-gray-400.
+Education Tab:
+•	Cascading dropdowns: State → Board → Class → Medium
+•	Each: w-full px-4 py-2.5 rounded-lg border
+•	Board disabled until state chosen; class disabled until board; medium disabled until class
+•	"Save Education Details" purple button
+API: PUT /api/student/profile { state_id, board_id, class_id, medium_id }
+Account Tab:
+•	Full Name input
+•	Email input (with validation)
+•	Phone: +91 prefix + 10-digit input + Verified/Not-verified badge 
+o	If phone is 10 digits and not yet verified → "Verify phone number" link
+o	Tap → OTP sent → 6-digit OTP field + "Confirm" button + "Resend OTP"
+•	Info notice: "Password login is disabled — account uses OTP-based login"
+•	"Save Account Details" purple button
+•	Danger Zone: "Delete my account permanently" → reveals DELETE confirmation flow (type "DELETE" to confirm)
+Payment Tab:
+•	My Subscription card: Current Plan, Status badge, Questions Used / Limit, Reset Date, <UsageMeter> component, "Upgrade to Premium →" / "Change Plan →" button
+•	Auto-Renew card: toggle switch (green when on). Disabled on free plan.
+Settings Tab: Placeholder — "Additional settings will be available soon."
+Security Tab: <SessionList> component — lists active login sessions.
+Profile Toast Notification:
+•	Centered modal overlay z-[9999]
+•	Success: white card, green border, ✓ icon, "Update Successful" + message + auto-dismiss progress bar
+•	Error: white card, red border, ✕ icon, "Update Failed" + message + hint
+________________________________________
+16. Key API Endpoints (Study Screen)
+Action	Method	Endpoint
+Get classes for board	GET	/api/classes?board_id={id}
+Get documents	GET	/api/documents?board_id={id}&class_id={id}&subject={s}
+Phase 1 query (streaming)	POST	/api/query
+Phase 2 query (streaming)	POST	/api/phase2/query
+Phase 1 history	GET	/api/query-history?document_id={id}
+Phase 2 history	GET	/api/phase2/query-history?document_id={id}
+Phase 2 docs list	GET	/api/phase2/documents
+Phase 2 upload PDF	POST	/api/phase2/documents/upload
+Phase 2 add YouTube	POST	/api/phase2/documents/youtube
+Phase 2 delete doc	DELETE	/api/phase2/documents/{id}
+Transliterate	GET	/api/transliterate/{lang}/{word}
+OCR from image	POST	/api/extract-question-from-image
+Generate flashcards	POST	/api/generate-flashcards
+Board status	GET	/api/student/board/status
+Start board processing	POST	/api/student/board/process
+Usage / subscription	GET	/api/usage
+Profile update	PUT	/api/student/profile
+Profile photo upload	POST	/api/student/profile/photo
+Profile photo delete	DELETE	/api/student/profile/photo
+Sessions list	GET	/api/auth/sessions
+Delete account	DELETE	/api/student/account
+Toggle autopay	POST	/api/billing/autopay/toggle
+All requests include Authorization: Bearer {jwt} header.
+________________________________________
+17. Query Response Shapes
+Phase 1 — POST /api/query
+{
+  "answer": "string (markdown)",
+  "sources": [
+    {
+      "page": 42,
+      "base64_images": [
+        {
+          "page": 42,
+          "data": "data:image/jpeg;base64,...",
+          "ncert_url": "https://ncert.nic.in/..." // only in embedded mode
+        }
+      ]
+    }
+  ],
+  "diagram_images": [
+    { "page": 12, "data": "data:image/jpeg;base64,..." }
+  ],
+  "validation": {
+    "is_reliable": true,
+    "confidence": 0.93,
+    "validated_facts": 5,
+    "partial_facts": 0,
+    "unverified_facts": 1,
+    "warnings": ["..."]
+  },
+  "cached": false
+}
+Phase 2 — POST /api/phase2/query
+{
+  "answer": "string (markdown)",
+  "citation_images": [
+    {
+      "page_number": 7,
+      "base64_image": "..."  // raw base64, no prefix
+    }
+  ]
+}
+Streaming format: SSE events, each data: {"chunk": "..."}. Final event: data: [DONE].
+________________________________________
+This completes the full Study Screen specification. The spec covers every visible element, all interactive states, color values, API contracts, and data shapes needed to implement a pixel-faithful mobile equivalent using Expo/React Native.
+
