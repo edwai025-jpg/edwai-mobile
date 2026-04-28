@@ -158,7 +158,7 @@ export default function CompleteProfileScreen() {
     }
   };
 
-  const canProceedOwnBooks = name.trim().length > 0 && !!selectedState && privacyAccepted;
+  const canProceedOwnBooks = name.trim().length > 0 && privacyAccepted;
   const canGetStarted = name.trim().length > 0 && !!selectedBoard && privacyAccepted;
 
   const doSubmit = async (boardId: number, classId?: number) => {
@@ -355,8 +355,8 @@ export default function CompleteProfileScreen() {
                 </Text>
                 {!canProceedOwnBooks && (
                   <Text style={s.ownCardHint}>
-                    {!name.trim() || !selectedState
-                      ? "Fill in your name and select a state above first."
+                    {!name.trim()
+                      ? "Enter your name above to continue."
                       : "Accept the terms below to continue."}
                   </Text>
                 )}
