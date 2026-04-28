@@ -32,7 +32,7 @@ export type UserProfile = {
   profileComplete?: boolean;
 };
 
-function apiUserToProfile(u: ApiUser): UserProfile {
+export function apiUserToProfile(u: ApiUser): UserProfile {
   return {
     id: u.id,
     name: u.full_name ?? "",
@@ -45,9 +45,6 @@ function apiUserToProfile(u: ApiUser): UserProfile {
     className: u.class_name,
     classId: u.class_id,
     medium: u.medium_name,
-    plan: "Reader Model",
-    questionsUsed: 5,
-    questionsLimit: 1500,
     profilePhotoUrl: u.profile_photo_url,
     role: u.role,
     authProvider: u.auth_provider,
@@ -77,6 +74,7 @@ type AuthState = {
   }) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<UserProfile>) => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -215,6 +213,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user]
   );
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const token = accessToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.accessToken));
+      if (!token) return;
+      const apiUser = await api.auth.getMe(token);
+      const fresh = apiUserToProfile(apiUser);
+      /* Merge fresh server data on top of current state (preserves locally-cached
+         fields like plan/questionsUsed that getMe does not return) */
+      setUser((prev) => {
+        const merged = { ...prev, ...fresh } as UserProfile;
+        AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(merged)).catch(() => {});
+        return merged;
+      });
+    } catch {
+      /* silently ignore — stale data stays */
+    }
+  }, [accessToken]);
+
   const logout = useCallback(async () => {
     try {
       const token = accessToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.accessToken));
@@ -247,6 +263,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         completeProfile,
         logout,
         updateUser,
+        refreshUser,
       }}
     >
       {children}

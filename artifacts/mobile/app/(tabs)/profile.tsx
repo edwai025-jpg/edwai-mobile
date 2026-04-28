@@ -1,6 +1,7 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   Alert,
   DimensionValue,
@@ -16,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ProfileModal from "@/components/ProfileModal";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
+import api, { UsageInfo } from "@/services/api";
 
 type MaterialIconName = React.ComponentProps<typeof MaterialIcons>["name"];
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
@@ -99,17 +101,29 @@ function MenuItem({ icon, title, subtitle, onPress, danger, rightContent }: Menu
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser, accessToken } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
+  /* Refresh user profile + usage every time this tab is focused */
+  useFocusEffect(
+    useCallback(() => {
+      refreshUser();
+      if (accessToken) {
+        api.study.getUsage(accessToken).then(setUsage).catch(() => {});
+      }
+    }, [refreshUser, accessToken])
+  );
+
   const displayName = user?.name || "Student";
   const identifier = user?.email || user?.phone || "";
-  const used = user?.questionsUsed ?? 5;
-  const limit = user?.questionsLimit ?? 1500;
-  const usagePct = Math.min((used / limit) * 100, 100);
+  const used = usage?.questions_used ?? user?.questionsUsed ?? 0;
+  const limit = usage?.questions_limit ?? user?.questionsLimit ?? 1500;
+  const planName = usage?.plan_name ?? user?.plan ?? "Reader";
+  const usagePct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
   const barColor = usagePct >= 90 ? Colors.danger : usagePct >= 70 ? Colors.warning : Colors.primary;
 
   const handleLogout = () => {
@@ -163,7 +177,7 @@ export default function ProfileScreen() {
             )}
           </View>
           <View style={styles.planBadgeSmall}>
-            <Text style={styles.planBadgeSmallText}>{user?.plan ?? "Reader"}</Text>
+            <Text style={styles.planBadgeSmallText}>{planName}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -185,7 +199,7 @@ export default function ProfileScreen() {
             </LinearGradient>
             <View style={{ flex: 1 }}>
               <Text style={styles.planLabel}>Current Plan</Text>
-              <Text style={styles.planName}>{user?.plan ?? "Reader Model"}</Text>
+              <Text style={styles.planName}>{planName}</Text>
             </View>
             <View style={styles.activeBadge}>
               <Text style={styles.activeBadgeText}>Active</Text>
