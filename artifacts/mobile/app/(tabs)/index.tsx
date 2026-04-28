@@ -34,15 +34,24 @@ const BORDER = "rgba(255,255,255,0.10)";
 const TEXT_COLOR = "#f9fafb";
 const MUTED = "#9ca3af";
 
+const TRANS_LANGS = [
+  { code: "hindi", label: "Hindi", native: "हि" },
+  { code: "telugu", label: "Telugu", native: "తె" },
+  { code: "tamil", label: "Tamil", native: "த" },
+  { code: "kannada", label: "Kannada", native: "ಕ" },
+  { code: "malayalam", label: "Malayalam", native: "മ" },
+  { code: "marathi", label: "Marathi", native: "म" },
+  { code: "bengali", label: "Bengali", native: "ব" },
+  { code: "gujarati", label: "Gujarati", native: "ગ" },
+  { code: "punjabi", label: "Punjabi", native: "ਪ" },
+  { code: "odia", label: "Odia", native: "ଓ" },
+];
+
+type InputMode = "normal" | "transliterate" | "keyboard";
+
 /* ─── Picker ─────────────────────────────────────────────────────────────── */
 function DarkPicker({
-  label,
-  options,
-  selected,
-  onSelect,
-  disabled,
-  placeholder,
-  loading,
+  label, options, selected, onSelect, disabled, placeholder, loading,
 }: {
   label: string;
   options: { id: string | number; name: string }[];
@@ -54,35 +63,22 @@ function DarkPicker({
 }) {
   const [open, setOpen] = useState(false);
   const selectedName = options.find((o) => String(o.id) === String(selected))?.name ?? "";
-
   return (
     <View style={dp.wrap}>
       <Text style={dp.label}>{label}</Text>
-      <Pressable
-        style={[dp.sel, disabled && dp.disabled]}
-        onPress={() => !disabled && !loading && setOpen((v) => !v)}
-      >
-        {loading ? (
-          <ActivityIndicator size="small" color={PRIMARY} style={{ marginRight: 8 }} />
-        ) : (
-          <Text style={[dp.selText, !selectedName && dp.placeholder]} numberOfLines={1}>
-            {selectedName || placeholder}
-          </Text>
-        )}
+      <Pressable style={[dp.sel, disabled && dp.disabled]} onPress={() => !disabled && !loading && setOpen((v) => !v)}>
+        {loading
+          ? <ActivityIndicator size="small" color={PRIMARY} style={{ marginRight: 8 }} />
+          : <Text style={[dp.selText, !selectedName && dp.placeholder]} numberOfLines={1}>{selectedName || placeholder}</Text>
+        }
         <Feather name={open ? "chevron-up" : "chevron-down"} size={14} color={MUTED} />
       </Pressable>
       {open && (
         <View style={dp.dropdown}>
           <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: 164 }}>
             {options.map((opt) => (
-              <Pressable
-                key={String(opt.id)}
-                style={[dp.option, String(opt.id) === String(selected) && dp.optSel]}
-                onPress={() => { onSelect(opt); setOpen(false); }}
-              >
-                <Text style={[dp.optText, String(opt.id) === String(selected) && dp.optTextSel]}>
-                  {opt.name}
-                </Text>
+              <Pressable key={String(opt.id)} style={[dp.option, String(opt.id) === String(selected) && dp.optSel]} onPress={() => { onSelect(opt); setOpen(false); }}>
+                <Text style={[dp.optText, String(opt.id) === String(selected) && dp.optTextSel]}>{opt.name}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -91,7 +87,6 @@ function DarkPicker({
     </View>
   );
 }
-
 const dp = StyleSheet.create({
   wrap: { marginBottom: 10 },
   label: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: MUTED, marginBottom: 5, textTransform: "uppercase", letterSpacing: 0.8 },
@@ -107,47 +102,55 @@ const dp = StyleSheet.create({
 });
 
 /* ─── Board Processing Card ──────────────────────────────────────────────── */
-function BoardProcessingCard({
-  status,
-  delayMinutes,
-  onStart,
-  starting,
-}: {
+function BoardProcessingCard({ status, delayMinutes, onStart, starting }: {
   status: BoardStatus["processing_status"];
   delayMinutes: number;
   onStart: () => void;
   starting: boolean;
 }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (status !== "in_progress") return;
+    const t = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(t);
+  }, [status]);
+
+  const total = delayMinutes * 60;
+  const pct = Math.max(5, Math.min(95, Math.round((elapsed / Math.max(total, 1)) * 100)));
+  const remaining = Math.max(0, total - elapsed);
+  const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
+  const ss = String(remaining % 60).padStart(2, "0");
+
   if (status === "in_progress") {
     return (
       <View style={bp.card}>
-        <ActivityIndicator size="large" color={PRIMARY} style={{ marginBottom: 12 }} />
-        <Text style={bp.title}>Processing Your Board's Textbooks</Text>
-        <Text style={bp.desc}>
-          We're indexing your textbooks. This may take up to {delayMinutes} minutes.{"\n"}
-          You'll be able to ask questions once processing completes.
-        </Text>
-        <View style={bp.progressBg}>
-          <View style={[bp.progressFill, { width: "60%" }]} />
+        <View style={bp.timerRing}>
+          <View style={bp.timerInner}>
+            <Text style={bp.timerText}>{mm}:{ss}</Text>
+            <Text style={bp.timerLabel}>remaining</Text>
+          </View>
         </View>
-        <Text style={bp.note}>Processing in progress — check back soon</Text>
+        <Text style={bp.title}>Processing Your Board's Textbooks</Text>
+        <Text style={bp.desc}>Indexing your textbooks. This may take up to {delayMinutes} minutes.</Text>
+        <View style={bp.progressBg}>
+          <View style={[bp.progressFill, { width: `${pct}%` as `${number}%` }]} />
+        </View>
+        <Text style={bp.note}>{pct}% complete — check back soon</Text>
       </View>
     );
   }
-
   if (status === "failed") {
     return (
       <View style={bp.card}>
         <Text style={{ fontSize: 36, marginBottom: 12 }}>⚠️</Text>
         <Text style={bp.title}>Processing Failed</Text>
-        <Text style={bp.desc}>There was an issue processing your board's textbooks. Please try again.</Text>
+        <Text style={bp.desc}>There was an issue. Please try again.</Text>
         <Pressable style={bp.btn} onPress={onStart} disabled={starting}>
           {starting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={bp.btnText}>🔄 Retry Processing</Text>}
         </Pressable>
       </View>
     );
   }
-
   return (
     <View style={bp.card}>
       <View style={bp.iconCircle}><Text style={{ fontSize: 40 }}>📚</Text></View>
@@ -156,24 +159,25 @@ function BoardProcessingCard({
         Your board's textbooks need to be indexed before you can search them. This takes around {delayMinutes} minute{delayMinutes !== 1 ? "s" : ""}.
       </Text>
       <Pressable style={[bp.btn, starting && { opacity: 0.6 }]} onPress={onStart} disabled={starting}>
-        {starting
-          ? <ActivityIndicator size="small" color="#fff" />
-          : <Text style={bp.btnText}>📄 Process Official Documents</Text>}
+        {starting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={bp.btnText}>📄 Process Official Documents</Text>}
       </Pressable>
       <Text style={bp.note}>One-time setup · Takes ~{delayMinutes} min</Text>
     </View>
   );
 }
-
 const bp = StyleSheet.create({
   card: { backgroundColor: CARD_BG, borderRadius: 12, borderWidth: 1, borderColor: BORDER, padding: 24, marginBottom: 12, alignItems: "center" },
   iconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: "rgba(102,126,234,0.12)", alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  timerRing: { width: 90, height: 90, borderRadius: 45, borderWidth: 3, borderColor: PRIMARY, alignItems: "center", justifyContent: "center", marginBottom: 16, backgroundColor: "rgba(102,126,234,0.08)" },
+  timerInner: { alignItems: "center" },
+  timerText: { fontSize: 20, fontFamily: "Inter_700Bold", color: "#a78bfa" },
+  timerLabel: { fontSize: 9, color: MUTED, marginTop: 1 },
   title: { fontSize: 16, fontFamily: "Inter_700Bold", color: TEXT_COLOR, textAlign: "center", marginBottom: 8 },
-  desc: { fontSize: 13, color: MUTED, textAlign: "center", lineHeight: 20, marginBottom: 18 },
+  desc: { fontSize: 13, color: MUTED, textAlign: "center", lineHeight: 20, marginBottom: 16 },
   btn: { backgroundColor: PRIMARY, borderRadius: 10, paddingHorizontal: 24, paddingVertical: 13, marginBottom: 10 },
   btnText: { color: "#fff", fontSize: 14, fontFamily: "Inter_600SemiBold" },
   note: { fontSize: 11, color: MUTED },
-  progressBg: { height: 6, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 3, width: "100%", marginBottom: 10 },
+  progressBg: { height: 6, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 3, width: "100%", marginBottom: 8 },
   progressFill: { height: 6, backgroundColor: PRIMARY, borderRadius: 3 },
 });
 
@@ -183,7 +187,6 @@ function RecentQuestionsPanel({ history, onSelect }: { history: QueryHistoryItem
   const [search, setSearch] = useState("");
   if (history.length === 0) return null;
   const filtered = search ? history.filter((h) => h.question.toLowerCase().includes(search.toLowerCase())) : history;
-
   return (
     <View style={rq.card}>
       <Pressable style={rq.header} onPress={() => setOpen((v) => !v)}>
@@ -208,9 +211,8 @@ function RecentQuestionsPanel({ history, onSelect }: { history: QueryHistoryItem
     </View>
   );
 }
-
 const rq = StyleSheet.create({
-  card: { backgroundColor: "rgba(99,71,234,0.08)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(99,102,241,0.25)", marginBottom: 10 },
+  card: { backgroundColor: "rgba(99,71,234,0.08)", borderRadius: 10, borderWidth: 2, borderColor: "rgba(99,102,241,0.3)", marginBottom: 10 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 11 },
   headerText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#a5b4fc" },
   search: { marginHorizontal: 12, marginBottom: 6, backgroundColor: "#2a2a3e", borderRadius: 8, borderWidth: 1, borderColor: BORDER, paddingHorizontal: 12, paddingVertical: 8, color: TEXT_COLOR, fontSize: 13 },
@@ -237,7 +239,6 @@ export default function TextbooksScreen() {
   const [subjects, setSubjects] = useState<string[]>([]);
   const [documents, setDocuments] = useState<Phase1Document[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
-
   const [selectedClass, setSelectedClass] = useState<{ id: number; name: string } | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Phase1Document | null>(null);
@@ -259,20 +260,26 @@ export default function TextbooksScreen() {
   const [captureUri, setCaptureUri] = useState<string | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
 
+  /* input mode (9a) */
+  const [inputMode, setInputMode] = useState<InputMode>("normal");
+  const [transLang, setTransLang] = useState("hindi");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [transWord, setTransWord] = useState("");
+  const [showLangPicker, setShowLangPicker] = useState(false);
+
   const abortCtrl = useRef<AbortController | null>(null);
+  const prevQuestion = useRef("");
   const boardId = user?.boardId;
 
-  /* ── load board status ── */
+  /* ── board status ── */
   useEffect(() => {
     if (!accessToken) return;
     setBoardStatusLoading(true);
     api.study.getBoardStatus(accessToken)
-      .then(setBoardStatus)
-      .catch(() => setBoardStatus(null))
+      .then(setBoardStatus).catch(() => setBoardStatus(null))
       .finally(() => setBoardStatusLoading(false));
   }, [accessToken]);
 
-  /* ── poll while processing ── */
   useEffect(() => {
     if (boardStatus?.processing_status !== "in_progress") return;
     const t = setInterval(async () => {
@@ -286,60 +293,64 @@ export default function TextbooksScreen() {
     return () => clearInterval(t);
   }, [boardStatus?.processing_status, accessToken]);
 
-  /* ── load classes when board ready ── */
   useEffect(() => {
     if (!accessToken || !boardId || boardStatus?.processing_status !== "completed") return;
     setClassesLoading(true);
-    api.data.getClassesForBoard(boardId)
-      .then(setClasses)
-      .catch(() => {})
-      .finally(() => setClassesLoading(false));
+    api.data.getClassesForBoard(boardId).then(setClasses).catch(() => {}).finally(() => setClassesLoading(false));
   }, [accessToken, boardId, boardStatus?.processing_status]);
 
-  /* ── class selected ── */
+  /* ── class select ── */
   const onClassSelect = useCallback(async (cls: { id: number; name: string }) => {
-    setSelectedClass(cls);
-    setSelectedSubject(null);
-    setSelectedDoc(null);
-    setSubjects([]);
-    setDocuments([]);
+    setSelectedClass(cls); setSelectedSubject(null); setSelectedDoc(null); setSubjects([]); setDocuments([]);
     if (!accessToken || !boardId) return;
     setDocsLoading(true);
     try {
       const docs = await api.study.getDocuments(accessToken, boardId, cls.id);
       setDocuments(docs);
-      const unique = Array.from(new Set(docs.map((d) => d.subject).filter(Boolean))) as string[];
-      setSubjects(unique);
-    } catch {}
-    finally { setDocsLoading(false); }
+      setSubjects(Array.from(new Set(docs.map((d) => d.subject).filter(Boolean))) as string[]);
+    } catch {} finally { setDocsLoading(false); }
   }, [accessToken, boardId]);
 
-  /* ── subject selected ── */
   const onSubjectSelect = useCallback(async (subj: string) => {
-    setSelectedSubject(subj);
-    setSelectedDoc(null);
+    setSelectedSubject(subj); setSelectedDoc(null);
     if (!accessToken || !boardId || !selectedClass) return;
     setDocsLoading(true);
-    try {
-      const docs = await api.study.getDocuments(accessToken, boardId, selectedClass.id, subj);
-      setDocuments(docs);
-    } catch {}
-    finally { setDocsLoading(false); }
+    try { setDocuments(await api.study.getDocuments(accessToken, boardId, selectedClass.id, subj)); }
+    catch {} finally { setDocsLoading(false); }
   }, [accessToken, boardId, selectedClass]);
 
-  /* ── doc selected ── */
   const onDocSelect = useCallback(async (doc: Phase1Document) => {
-    setSelectedDoc(doc);
-    setQuestion("");
-    setResponse(null);
-    setStreamText("");
-    setFlashcards([]);
+    setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText(""); setFlashcards([]);
     if (!accessToken) return;
-    try {
-      const h = await api.study.getQueryHistory(accessToken, doc.id);
-      setHistory(h);
-    } catch {}
+    try { setHistory(await api.study.getQueryHistory(accessToken, doc.id)); } catch {}
   }, [accessToken]);
+
+  /* ── transliterate ── */
+  const handleQuestionChange = useCallback((text: string) => {
+    setQuestion(text);
+    if (inputMode === "transliterate" && text.endsWith(" ") && !prevQuestion.current.endsWith(" ") && accessToken) {
+      const words = text.trimEnd().split(/\s+/);
+      const lastWord = words[words.length - 1];
+      if (lastWord && lastWord.length > 0 && /^[a-zA-Z]+$/.test(lastWord)) {
+        setTransWord(lastWord);
+        api.study.transliterate(accessToken, transLang, lastWord)
+          .then(setSuggestions).catch(() => setSuggestions([]));
+      }
+    } else if (!text.endsWith(" ")) {
+      setSuggestions([]);
+    }
+    prevQuestion.current = text;
+  }, [inputMode, transLang, accessToken]);
+
+  const handlePickSuggestion = useCallback((suggestion: string) => {
+    const words = question.trimEnd().split(/\s+/);
+    words[words.length - 1] = suggestion;
+    const newQ = words.join(" ") + " ";
+    setQuestion(newQ);
+    prevQuestion.current = newQ;
+    setSuggestions([]);
+    setTransWord("");
+  }, [question]);
 
   /* ── query ── */
   const handleQuery = useCallback(async (qMode: "retrieve" | "explain") => {
@@ -347,15 +358,8 @@ export default function TextbooksScreen() {
     abortCtrl.current?.abort();
     const ctrl = new AbortController();
     abortCtrl.current = ctrl;
-
-    setMode(qMode);
-    setQueryLoading(true);
-    setStreaming(true);
-    setStreamText("");
-    setResponse(null);
-    setFlashcards([]);
-    setFlashcardsLoading(false);
-
+    setMode(qMode); setQueryLoading(true); setStreaming(true);
+    setStreamText(""); setResponse(null); setFlashcards([]); setFlashcardsLoading(false);
     let accumulated = "";
     try {
       const res = await api.study.streamQuery(
@@ -365,28 +369,16 @@ export default function TextbooksScreen() {
         ctrl.signal
       );
       const finalRes = res.answer ? res : { ...res, answer: accumulated };
-      setResponse(finalRes);
-      setStreaming(false);
-      setQueryLoading(false);
-
+      setResponse(finalRes); setStreaming(false); setQueryLoading(false);
       if (finalRes.answer) {
         setFlashcardsLoading(true);
         api.study.generateFlashcards(accessToken, question.trim(), finalRes.answer)
-          .then((r) => setFlashcards(r.flashcards ?? []))
-          .catch(() => {})
-          .finally(() => setFlashcardsLoading(false));
+          .then((r) => setFlashcards(r.flashcards ?? [])).catch(() => {}).finally(() => setFlashcardsLoading(false));
       }
-
-      setHistory((prev) => [
-        { id: Date.now(), question: question.trim(), mode: qMode, created_at: new Date().toISOString() },
-        ...prev.slice(0, 49),
-      ]);
+      setHistory((prev) => [{ id: Date.now(), question: question.trim(), mode: qMode, created_at: new Date().toISOString() }, ...prev.slice(0, 49)]);
     } catch (e) {
-      if ((e as Error)?.name !== "AbortError") {
-        Alert.alert("Error", e instanceof ApiError ? e.message : "Query failed. Please try again.");
-      }
-      setStreaming(false);
-      setQueryLoading(false);
+      if ((e as Error)?.name !== "AbortError") Alert.alert("Error", e instanceof ApiError ? e.message : "Query failed. Please try again.");
+      setStreaming(false); setQueryLoading(false);
     }
   }, [question, selectedDoc, accessToken]);
 
@@ -401,15 +393,11 @@ export default function TextbooksScreen() {
       setCaptureUri(uri);
       if (!accessToken) return;
       setOcrLoading(true);
-      try {
-        const { text } = await api.study.extractQuestionFromImage(accessToken, uri);
-        if (text) setQuestion(text);
-      } catch {}
-      finally { setOcrLoading(false); }
+      try { const { text } = await api.study.extractQuestionFromImage(accessToken, uri); if (text) setQuestion(text); }
+      catch {} finally { setOcrLoading(false); }
     } catch {}
   }, [accessToken]);
 
-  /* ── start board processing ── */
   const handleStartProcessing = useCallback(async () => {
     if (!accessToken) return;
     setStartingProcess(true);
@@ -424,23 +412,17 @@ export default function TextbooksScreen() {
   const isQuerying = queryLoading || streaming;
   const isRestricted = boardStatus?.is_restricted && boardStatus.processing_status !== "completed";
   const boardReady = !boardStatusLoading && boardStatus !== null && !isRestricted;
+  const activeLang = TRANS_LANGS.find((l) => l.code === transLang);
 
   return (
     <View style={sc.root}>
-      <ScrollView
-        contentContainerStyle={[sc.scroll, { paddingTop: topPad }]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView contentContainerStyle={[sc.scroll, { paddingTop: topPad }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
         {/* ─── SOURCE TOGGLE ─── */}
         <View style={sc.card}>
           <View style={sc.toggleRow}>
-            <View style={[sc.toggleBtn, sc.toggleActive]}>
-              <Text style={sc.toggleTextActive}>📚 Textbooks</Text>
-            </View>
-            <Pressable style={sc.toggleBtn} onPress={() => router.replace("/(tabs)/my-docs")}>
-              <Text style={sc.toggleText}>📖 Own Books</Text>
-            </Pressable>
+            <View style={[sc.toggleBtn, sc.toggleActive]}><Text style={sc.toggleTextActive}>📚 Textbooks</Text></View>
+            <Pressable style={sc.toggleBtn} onPress={() => router.replace("/(tabs)/my-docs")}><Text style={sc.toggleText}>📖 Own Books</Text></Pressable>
           </View>
         </View>
 
@@ -451,49 +433,17 @@ export default function TextbooksScreen() {
             <Text style={{ color: MUTED, marginTop: 10, fontSize: 13 }}>Checking board status…</Text>
           </View>
         )}
-
         {!boardStatusLoading && isRestricted && boardStatus && (
-          <BoardProcessingCard
-            status={boardStatus.processing_status}
-            delayMinutes={boardStatus.processing_delay_minutes}
-            onStart={handleStartProcessing}
-            starting={startingProcess}
-          />
+          <BoardProcessingCard status={boardStatus.processing_status} delayMinutes={boardStatus.processing_delay_minutes} onStart={handleStartProcessing} starting={startingProcess} />
         )}
 
         {/* ─── BOOK SELECTION ─── */}
         {boardReady && (
           <View style={sc.card}>
             <Text style={sc.cardTitle}>📖 Select Your Textbook</Text>
-
-            <DarkPicker
-              label="Class / Year"
-              options={classes}
-              selected={selectedClass?.id ?? null}
-              onSelect={(v) => onClassSelect({ id: v.id as number, name: v.name })}
-              placeholder="Select Class"
-              loading={classesLoading}
-              disabled={classes.length === 0 && !classesLoading}
-            />
-            <DarkPicker
-              label="Subject"
-              options={subjects.map((s) => ({ id: s, name: s }))}
-              selected={selectedSubject}
-              onSelect={(v) => onSubjectSelect(v.name)}
-              placeholder="Select Subject"
-              disabled={!selectedClass || subjects.length === 0}
-              loading={docsLoading && !!selectedClass && !selectedSubject}
-            />
-            <DarkPicker
-              label="Textbook"
-              options={documents.map((d) => ({ id: d.id, name: d.title }))}
-              selected={selectedDoc?.id ?? null}
-              onSelect={(v) => { const d = documents.find((x) => x.id === v.id); if (d) onDocSelect(d); }}
-              placeholder="Select Textbook"
-              disabled={!selectedSubject || documents.length === 0}
-              loading={docsLoading && !!selectedSubject && !selectedDoc}
-            />
-
+            <DarkPicker label="Class / Year" options={classes} selected={selectedClass?.id ?? null} onSelect={(v) => onClassSelect({ id: v.id as number, name: v.name })} placeholder="Select Class" loading={classesLoading} disabled={classes.length === 0 && !classesLoading} />
+            <DarkPicker label="Subject" options={subjects.map((s) => ({ id: s, name: s }))} selected={selectedSubject} onSelect={(v) => onSubjectSelect(v.name)} placeholder="Select Subject" disabled={!selectedClass || subjects.length === 0} loading={docsLoading && !!selectedClass && !selectedSubject} />
+            <DarkPicker label="Textbook" options={documents.map((d) => ({ id: d.id, name: d.title }))} selected={selectedDoc?.id ?? null} onSelect={(v) => { const d = documents.find((x) => x.id === v.id); if (d) onDocSelect(d); }} placeholder="Select Textbook" disabled={!selectedSubject || documents.length === 0} loading={docsLoading && !!selectedSubject && !selectedDoc} />
             {!selectedClass && classes.length > 0 && (
               <View style={sc.hint}><Text style={sc.hintText}>👆 Select a class to see available subjects</Text></View>
             )}
@@ -503,20 +453,12 @@ export default function TextbooksScreen() {
           </View>
         )}
 
-        {/* ─── HELP (no doc) ─── */}
+        {/* ─── HELP ─── */}
         {boardReady && !selectedDoc && (
           <View style={sc.card}>
             <Text style={sc.cardTitle}>💬 How to use EdwAI</Text>
-            {[
-              ["📚", "Select your class, subject, and textbook above"],
-              ["✍️", "Type your question in the box below"],
-              ["🔍", "Choose Answer from Book to get the exact answer"],
-              ["💡", "Choose Learn Concept for a detailed explanation"],
-            ].map(([icon, text], i) => (
-              <View key={i} style={sc.helpRow}>
-                <Text style={sc.helpIcon}>{icon}</Text>
-                <Text style={sc.helpText}>{text}</Text>
-              </View>
+            {[["📚","Select your class, subject, and textbook above"],["✍️","Type your question in the box below"],["🔍","Choose Answer from Book to get the exact answer"],["💡","Choose Learn Concept for a detailed explanation"]].map(([icon, text], i) => (
+              <View key={i} style={sc.helpRow}><Text style={sc.helpIcon}>{icon}</Text><Text style={sc.helpText}>{text}</Text></View>
             ))}
           </View>
         )}
@@ -528,13 +470,50 @@ export default function TextbooksScreen() {
               <View style={sc.qIconBox}><Text style={{ fontSize: 18 }}>💬</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={sc.cardTitle}>Ask a Question</Text>
-                <Text style={sc.qDocName} numberOfLines={1}>
-                  From: <Text style={{ color: PRIMARY }}>{selectedDoc.title}</Text>
-                </Text>
+                <Text style={sc.qDocName} numberOfLines={1}>From: <Text style={{ color: PRIMARY }}>{selectedDoc.title}</Text></Text>
               </View>
             </View>
 
             <RecentQuestionsPanel history={history} onSelect={setQuestion} />
+
+            {/* ── Input Mode Bar (9a) ── */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }} contentContainerStyle={{ gap: 6, paddingRight: 4 }}>
+              {(["normal", "transliterate", "keyboard"] as InputMode[]).map((m) => {
+                const label = m === "normal" ? "✍️ Normal" : m === "transliterate" ? "🔤 Transliterate" : "⌨️ Keyboard";
+                const active = inputMode === m;
+                return (
+                  <Pressable key={m} style={[im.btn, active && im.btnActive]} onPress={() => { setInputMode(m); setSuggestions([]); }}>
+                    <Text style={active ? im.btnTextActive : im.btnText}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* ── Language picker (transliterate) ── */}
+            {inputMode === "transliterate" && (
+              <View style={{ marginBottom: 10 }}>
+                <Pressable style={im.langBtn} onPress={() => setShowLangPicker((v) => !v)}>
+                  <Text style={im.langBtnText}>{activeLang?.native} {activeLang?.label}</Text>
+                  <Feather name={showLangPicker ? "chevron-up" : "chevron-down"} size={13} color={PRIMARY} />
+                </Pressable>
+                {showLangPicker && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={im.langList} contentContainerStyle={{ gap: 6, padding: 8 }}>
+                    {TRANS_LANGS.map((l) => (
+                      <Pressable key={l.code} style={[im.langChip, transLang === l.code && im.langChipActive]} onPress={() => { setTransLang(l.code); setShowLangPicker(false); }}>
+                        <Text style={[im.langChipText, transLang === l.code && im.langChipTextActive]}>{l.native} {l.label}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                )}
+                <Text style={im.transHint}>Type in English → Press Space to convert (e.g., "namaste " → "नमस्ते ")</Text>
+              </View>
+            )}
+
+            {inputMode === "keyboard" && (
+              <View style={im.keyboardNote}>
+                <Text style={im.keyboardNoteText}>⌨️ Indic keyboard coming soon. Use Transliterate mode to type in regional languages.</Text>
+              </View>
+            )}
 
             {/* Mode tabs */}
             <View style={sc.modeTabs}>
@@ -552,10 +531,10 @@ export default function TextbooksScreen() {
                 style={sc.textarea}
                 multiline
                 numberOfLines={4}
-                placeholder="e.g., What are the main relief features of India?"
+                placeholder={inputMode === "transliterate" ? 'Type in English, press Space to convert (e.g., "namaste ")' : "e.g., What are the main relief features of India?"}
                 placeholderTextColor={MUTED}
                 value={question}
-                onChangeText={setQuestion}
+                onChangeText={handleQuestionChange}
                 editable={!isQuerying && !ocrLoading}
                 textAlignVertical="top"
               />
@@ -569,34 +548,38 @@ export default function TextbooksScreen() {
               </View>
             </View>
 
+            {/* Transliterate suggestions */}
+            {suggestions.length > 0 && (
+              <View style={im.suggestionsWrap}>
+                <Text style={im.suggestionsLabel}>Suggestions for "{transWord}":</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 4 }}>
+                  {suggestions.slice(0, 5).map((s, i) => (
+                    <Pressable key={i} style={im.suggestionChip} onPress={() => handlePickSuggestion(s)}>
+                      <Text style={im.suggestionChipNum}>{i + 1}</Text>
+                      <Text style={im.suggestionChipText}>{s}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
             {/* OCR feedback */}
             {captureUri && (
               <View style={sc.captureRow}>
                 <Image source={{ uri: captureUri }} style={sc.captureThumb} />
                 {ocrLoading
                   ? <View style={{ flex: 1 }}><ActivityIndicator size="small" color={PRIMARY} /><Text style={sc.captureLabel}>Extracting question…</Text></View>
-                  : <View style={{ flex: 1 }}>
-                    <Text style={[sc.captureLabel, { color: "#10b981" }]}>✓ Question extracted</Text>
-                    <Pressable onPress={() => setCaptureUri(null)}><Text style={sc.clearBtn}>Clear</Text></Pressable>
-                  </View>
+                  : <View style={{ flex: 1 }}><Text style={[sc.captureLabel, { color: "#10b981" }]}>✓ Question extracted</Text><Pressable onPress={() => setCaptureUri(null)}><Text style={sc.clearBtn}>Clear</Text></Pressable></View>
                 }
               </View>
             )}
 
             {/* Action buttons */}
             <View style={sc.actionRow}>
-              <Pressable
-                style={[sc.actionBtn, { backgroundColor: PRIMARY }, (!question.trim() || isQuerying) && sc.actionBtnDim]}
-                onPress={() => handleQuery("retrieve")}
-                disabled={!question.trim() || isQuerying}
-              >
+              <Pressable style={[sc.actionBtn, { backgroundColor: PRIMARY }, (!question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("retrieve")} disabled={!question.trim() || isQuerying}>
                 {isQuerying && mode === "retrieve" ? <ActivityIndicator size="small" color="#fff" /> : <Text style={sc.actionBtnText}>📖 Answer from Book</Text>}
               </Pressable>
-              <Pressable
-                style={[sc.actionBtn, { backgroundColor: "#059669" }, (!question.trim() || isQuerying) && sc.actionBtnDim]}
-                onPress={() => handleQuery("explain")}
-                disabled={!question.trim() || isQuerying}
-              >
+              <Pressable style={[sc.actionBtn, { backgroundColor: "#059669" }, (!question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("explain")} disabled={!question.trim() || isQuerying}>
                 {isQuerying && mode === "explain" ? <ActivityIndicator size="small" color="#fff" /> : <Text style={sc.actionBtnText}>💡 Learn Concept</Text>}
               </Pressable>
             </View>
@@ -605,13 +588,7 @@ export default function TextbooksScreen() {
 
         {/* ─── ANSWER ─── */}
         {(queryLoading || streaming || response) && (
-          <AnswerCard
-            loading={queryLoading && !streaming}
-            streaming={streaming}
-            streamText={streamText}
-            response={response}
-            mode={mode}
-          />
+          <AnswerCard loading={queryLoading && !streaming} streaming={streaming} streamText={streamText} response={response} mode={mode} />
         )}
 
         {/* ─── FLASHCARDS ─── */}
@@ -619,7 +596,6 @@ export default function TextbooksScreen() {
           <FlashcardsSection loading={flashcardsLoading} cards={flashcards} />
         )}
 
-        {/* Footer */}
         <View style={sc.footer}>
           <Feather name="alert-triangle" size={11} color={MUTED} />
           <Text style={sc.footerText}>AI responses should be verified with citations.</Text>
@@ -628,6 +604,28 @@ export default function TextbooksScreen() {
     </View>
   );
 }
+
+const im = StyleSheet.create({
+  btn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: BORDER, backgroundColor: "#2a2a3e" },
+  btnActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  btnText: { fontSize: 13, color: MUTED, fontFamily: "Inter_500Medium" },
+  btnTextActive: { fontSize: 13, color: "#fff", fontFamily: "Inter_600SemiBold" },
+  langBtn: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", backgroundColor: "rgba(102,126,234,0.12)", borderRadius: 8, borderWidth: 1, borderColor: "rgba(102,126,234,0.3)", paddingHorizontal: 12, paddingVertical: 7 },
+  langBtnText: { fontSize: 13, color: PRIMARY, fontFamily: "Inter_600SemiBold" },
+  langList: { backgroundColor: "#2a2a3e", borderRadius: 10, borderWidth: 1, borderColor: BORDER, marginTop: 4, maxHeight: 56 },
+  langChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: BORDER, backgroundColor: "#1e1e3a" },
+  langChipActive: { backgroundColor: "rgba(102,126,234,0.25)", borderColor: PRIMARY },
+  langChipText: { fontSize: 12, color: MUTED },
+  langChipTextActive: { color: "#a78bfa", fontFamily: "Inter_600SemiBold" },
+  transHint: { fontSize: 11, color: MUTED, marginTop: 6, fontStyle: "italic" },
+  keyboardNote: { backgroundColor: "rgba(245,158,11,0.08)", borderRadius: 8, borderWidth: 1, borderColor: "rgba(245,158,11,0.2)", padding: 10, marginBottom: 10 },
+  keyboardNoteText: { fontSize: 12, color: "#fcd34d" },
+  suggestionsWrap: { backgroundColor: "rgba(102,126,234,0.08)", borderRadius: 8, borderWidth: 1, borderColor: "rgba(102,126,234,0.25)", padding: 10, marginBottom: 8 },
+  suggestionsLabel: { fontSize: 11, color: MUTED, marginBottom: 4 },
+  suggestionChip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(102,126,234,0.25)", borderRadius: 20, borderWidth: 1, borderColor: PRIMARY, paddingHorizontal: 12, paddingVertical: 6 },
+  suggestionChipNum: { fontSize: 10, color: "#a78bfa", fontFamily: "Inter_700Bold", backgroundColor: "rgba(102,126,234,0.4)", width: 16, height: 16, borderRadius: 8, textAlign: "center", lineHeight: 16 },
+  suggestionChipText: { fontSize: 14, color: "#fff", fontFamily: "Inter_500Medium" },
+});
 
 const sc = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#1a1a2e" },
@@ -647,7 +645,7 @@ const sc = StyleSheet.create({
   helpIcon: { fontSize: 18, width: 26 },
   helpText: { flex: 1, fontSize: 13, color: MUTED, lineHeight: 20 },
   qHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 },
-  qIconBox: { width: 42, height: 42, borderRadius: 8, backgroundColor: "rgba(16,185,129,0.15)", alignItems: "center", justifyContent: "center" },
+  qIconBox: { width: 42, height: 42, borderRadius: 10, backgroundColor: "rgba(16,185,129,0.15)", alignItems: "center", justifyContent: "center" },
   qDocName: { fontSize: 11, color: MUTED, marginTop: 2 },
   modeTabs: { flexDirection: "row", gap: 8, marginBottom: 10 },
   modeTab: { flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: BORDER, alignItems: "center", backgroundColor: "#2a2a3e" },
