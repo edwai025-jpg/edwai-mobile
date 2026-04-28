@@ -9,8 +9,11 @@ async function proxyHandler(req: any, res: any) {
 
   const forwardHeaders: Record<string, string> = {
     "content-type": "application/json",
-    accept: "application/json",
   };
+
+  if (req.headers.accept) {
+    forwardHeaders["accept"] = req.headers.accept as string;
+  }
   if (req.headers.authorization) {
     forwardHeaders["authorization"] = req.headers.authorization as string;
   }
@@ -25,10 +28,41 @@ async function proxyHandler(req: any, res: any) {
     }
 
     const upstream = await fetch(upstreamUrl, init);
-    const text = await upstream.text();
+    const contentType = upstream.headers.get("content-type") ?? "application/json";
 
     res.status(upstream.status);
-    res.set("content-type", "application/json");
+
+    if (contentType.includes("text/event-stream")) {
+      res.set({
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "x-accel-buffering": "no",
+      });
+
+      if (!upstream.body) {
+        res.end();
+        return;
+      }
+
+      const reader = (upstream.body as ReadableStream<Uint8Array>).getReader();
+
+      req.on("close", () => {
+        reader.cancel().catch(() => {});
+      });
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+        if (typeof (res as any).flush === "function") (res as any).flush();
+      }
+      res.end();
+      return;
+    }
+
+    const text = await upstream.text();
+    res.set("content-type", contentType);
     res.send(text);
   } catch {
     res.status(502).json({ detail: "Proxy error — upstream unreachable" });
