@@ -143,8 +143,8 @@ function DocCard({
         <View style={{ flex: 1 }}>
           <Text style={dc.title} numberOfLines={2}>{doc.title}</Text>
           <View style={dc.meta}>
-            {doc.page_count && <Text style={dc.metaText}>{doc.page_count} pages</Text>}
-            {doc.page_count && <Text style={dc.dot}>·</Text>}
+            {!!doc.page_count && <Text style={dc.metaText}>{doc.page_count} pages</Text>}
+            {!!doc.page_count && <Text style={dc.dot}>·</Text>}
             <View style={[dc.statusDot, { backgroundColor: statusColor }]} />
             <Text style={[dc.statusText, { color: statusColor }]}>{STATUS_LABEL[doc.processing_status]}</Text>
             {isProcessing && <ActivityIndicator size="small" color={statusColor} style={{ marginLeft: 4 }} />}
