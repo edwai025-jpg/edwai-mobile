@@ -158,7 +158,7 @@ export default function CompleteProfileScreen() {
     }
   };
 
-  const canProceedOwnBooks = name.trim().length > 0 && !!selectedState;
+  const canProceedOwnBooks = name.trim().length > 0 && !!selectedState && privacyAccepted;
   const canGetStarted = name.trim().length > 0 && !!selectedBoard && privacyAccepted;
 
   const doSubmit = async (boardId: number, classId?: number) => {
@@ -195,7 +195,6 @@ export default function CompleteProfileScreen() {
 
   const handleProceedOwnBooks = async () => {
     if (!canProceedOwnBooks) return;
-    if (!privacyAccepted) { setErrorMsg("Please accept the Terms of Service and Privacy Policy to continue"); return; }
     const boardId = selectedBoard?.id ?? 5;
     await doSubmit(boardId, selectedClass?.id);
   };
@@ -318,20 +317,6 @@ export default function CompleteProfileScreen() {
               loading={classesLoading}
             />
 
-            {/* ─ TERMS ─ */}
-            <Pressable style={s.termsBox} onPress={() => setPrivacyAccepted(!privacyAccepted)}>
-              <View style={[s.checkbox, privacyAccepted && s.checkboxChecked]}>
-                {privacyAccepted && <Feather name="check" size={11} color={Colors.white} />}
-              </View>
-              <Text style={s.termsText}>
-                I agree to EdwAI's{" "}
-                <Text style={s.termsLink}>Terms of Service</Text>
-                {" "}and{" "}
-                <Text style={s.termsLink}>Privacy Policy</Text>
-                , including the use of AI to generate answers from textbook content.
-              </Text>
-            </Pressable>
-
             {/* ─ GET STARTED ─ */}
             <Pressable
               style={[s.getStartedBtn, (!canGetStarted || loading) && s.getStartedBtnDisabled]}
@@ -369,7 +354,11 @@ export default function CompleteProfileScreen() {
                   Upload your own textbooks or YouTube videos and start studying right away.
                 </Text>
                 {!canProceedOwnBooks && (
-                  <Text style={s.ownCardHint}>Fill in your name and select a board above first.</Text>
+                  <Text style={s.ownCardHint}>
+                    {!name.trim() || !selectedState
+                      ? "Fill in your name and select a state above first."
+                      : "Accept the terms below to continue."}
+                  </Text>
                 )}
               </View>
             </View>
@@ -381,6 +370,20 @@ export default function CompleteProfileScreen() {
               <Text style={s.ownBtnText}>Proceed to Own Books</Text>
             </Pressable>
           </View>
+
+          {/* ══ TERMS ══ */}
+          <Pressable style={s.termsBox} onPress={() => { setPrivacyAccepted(!privacyAccepted); setErrorMsg(""); }}>
+            <View style={[s.checkbox, privacyAccepted && s.checkboxChecked]}>
+              {privacyAccepted && <Feather name="check" size={11} color={Colors.white} />}
+            </View>
+            <Text style={s.termsText}>
+              I agree to EdwAI's{" "}
+              <Text style={s.termsLink}>Terms of Service</Text>
+              {" "}and{" "}
+              <Text style={s.termsLink}>Privacy Policy</Text>
+              , including the use of AI to generate answers from textbook content.
+            </Text>
+          </Pressable>
 
           {/* ══ WHAT'S NEW PANEL ══ */}
           <WhatsNewPanel />
@@ -501,7 +504,7 @@ const s = StyleSheet.create({
   termsBox: {
     flexDirection: "row", alignItems: "flex-start", gap: 12,
     backgroundColor: Colors.blueTint, borderRadius: 10, borderWidth: 1, borderColor: Colors.blueTintBorder,
-    padding: 14, marginTop: 6, marginBottom: 20,
+    padding: 14, marginBottom: 16,
   },
   checkbox: {
     width: 16, height: 16, borderRadius: 3, borderWidth: 1.5, borderColor: Colors.gray300,
