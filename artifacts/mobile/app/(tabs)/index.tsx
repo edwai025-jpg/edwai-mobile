@@ -232,6 +232,7 @@ export default function TextbooksScreen() {
   /* board status */
   const [boardStatus, setBoardStatus] = useState<BoardStatus | null>(null);
   const [boardStatusLoading, setBoardStatusLoading] = useState(true);
+  const [boardStatusError, setBoardStatusError] = useState(false);
   const [startingProcess, setStartingProcess] = useState(false);
 
   /* book selection */
@@ -285,12 +286,24 @@ export default function TextbooksScreen() {
   }, []);
 
   /* ── board status ── */
-  useEffect(() => {
+  const loadBoardStatus = useCallback(async () => {
     if (!accessToken) return;
     setBoardStatusLoading(true);
-    api.study.getBoardStatus(accessToken)
-      .then(setBoardStatus).catch(() => setBoardStatus(null))
-      .finally(() => setBoardStatusLoading(false));
+    setBoardStatusError(false);
+    try {
+      const s = await api.study.getBoardStatus(accessToken);
+      setBoardStatus(s);
+    } catch {
+      setBoardStatus(null);
+      setBoardStatusError(true);
+    } finally {
+      setBoardStatusLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!accessToken) { setBoardStatusLoading(false); return; }
+    loadBoardStatus();
   }, [accessToken]);
 
   useEffect(() => {
@@ -306,8 +319,11 @@ export default function TextbooksScreen() {
     return () => clearInterval(t);
   }, [boardStatus?.processing_status, accessToken]);
 
+  /* Load classes whenever we have a boardId — don't gate on processing_status */
   useEffect(() => {
-    if (!accessToken || !boardId || boardStatus?.processing_status !== "completed") return;
+    if (!accessToken || !boardId) return;
+    /* Only skip if we know board is in_progress */
+    if (boardStatus?.processing_status === "in_progress") return;
     setClassesLoading(true);
     api.data.getClassesForBoard(boardId).then(setClasses).catch(() => {}).finally(() => setClassesLoading(false));
   }, [accessToken, boardId, boardStatus?.processing_status]);
@@ -423,8 +439,10 @@ export default function TextbooksScreen() {
   }, [accessToken]);
 
   const isQuerying = queryLoading || streaming;
-  const isRestricted = boardStatus?.is_restricted && boardStatus.processing_status !== "completed";
-  const boardReady = !boardStatusLoading && boardStatus !== null && !isRestricted;
+  const isRestricted = !!boardStatus?.is_restricted && boardStatus.processing_status !== "completed";
+  /* boardReady: show pickers whenever we're not loading AND not restricted (even if boardStatus failed) */
+  const boardReady = !boardStatusLoading && !isRestricted;
+  const hasNoBoard = !boardId;
   const activeLang = TRANS_LANGS.find((l) => l.code === transLang);
 
   return (
@@ -446,12 +464,37 @@ export default function TextbooksScreen() {
             <Text style={{ color: MUTED, marginTop: 10, fontSize: 13 }}>Checking board status…</Text>
           </View>
         )}
+
+        {/* board status error — non-blocking banner */}
+        {!boardStatusLoading && boardStatusError && (
+          <View style={sc.errorBanner}>
+            <Feather name="wifi-off" size={14} color="#fcd34d" />
+            <Text style={sc.errorBannerText}>Couldn't reach server</Text>
+            <Pressable onPress={loadBoardStatus} style={sc.retryBtn}>
+              <Text style={sc.retryBtnText}>Retry</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* board not ready — processing card */}
         {!boardStatusLoading && isRestricted && boardStatus && (
           <BoardProcessingCard status={boardStatus.processing_status} delayMinutes={boardStatus.processing_delay_minutes} onStart={handleStartProcessing} starting={startingProcess} />
         )}
 
+        {/* profile incomplete — prompt to set board */}
+        {!boardStatusLoading && !isRestricted && hasNoBoard && (
+          <View style={sc.setupCard}>
+            <Text style={{ fontSize: 36, marginBottom: 12 }}>🎓</Text>
+            <Text style={sc.setupTitle}>Complete Your Profile First</Text>
+            <Text style={sc.setupDesc}>Select your state, board, and class so EdwAI can find the right textbooks for you.</Text>
+            <Pressable style={sc.setupBtn} onPress={() => router.replace("/(tabs)/profile")}>
+              <Text style={sc.setupBtnText}>Set Up Profile →</Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* ─── BOOK SELECTION ─── */}
-        {boardReady && (
+        {boardReady && !hasNoBoard && (
           <View style={sc.card}>
             <Text style={sc.cardTitle}>📖 Select Your Textbook</Text>
             <DarkPicker label="Class / Year" options={classes} selected={selectedClass?.id ?? null} onSelect={(v) => onClassSelect({ id: v.id as number, name: v.name })} placeholder="Select Class" loading={classesLoading} disabled={classes.length === 0 && !classesLoading} />
@@ -460,6 +503,9 @@ export default function TextbooksScreen() {
             {!selectedClass && classes.length > 0 && (
               <View style={sc.hint}><Text style={sc.hintText}>👆 Select a class to see available subjects</Text></View>
             )}
+            {!selectedClass && !classesLoading && classes.length === 0 && !boardStatusError && (
+              <View style={[sc.hint, sc.hintAmber]}><Text style={sc.hintAmberText}>📚 No classes available yet for your board</Text></View>
+            )}
             {selectedClass && subjects.length === 0 && !docsLoading && (
               <View style={[sc.hint, sc.hintAmber]}><Text style={sc.hintAmberText}>📚 No subjects available for this class yet</Text></View>
             )}
@@ -467,7 +513,7 @@ export default function TextbooksScreen() {
         )}
 
         {/* ─── HELP ─── */}
-        {boardReady && !selectedDoc && (
+        {boardReady && !hasNoBoard && !selectedDoc && (
           <View style={sc.card}>
             <Text style={sc.cardTitle}>💬 How to use EdwAI</Text>
             {[["📚","Select your class, subject, and textbook above"],["✍️","Type your question in the box below"],["🔍","Choose Answer from Book to get the exact answer"],["💡","Choose Learn Concept for a detailed explanation"]].map(([icon, text], i) => (
@@ -691,4 +737,14 @@ const sc = StyleSheet.create({
   actionBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
   footer: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center", paddingTop: 8, paddingBottom: 16 },
   footerText: { fontSize: 11, color: MUTED },
+  /* error / setup states */
+  errorBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(245,158,11,0.12)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(245,158,11,0.3)", paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12 },
+  errorBannerText: { flex: 1, fontSize: 13, color: "#fcd34d", fontFamily: "Inter_500Medium" },
+  retryBtn: { backgroundColor: "rgba(245,158,11,0.25)", borderRadius: 6, paddingHorizontal: 12, paddingVertical: 5 },
+  retryBtnText: { fontSize: 12, color: "#fde68a", fontFamily: "Inter_600SemiBold" },
+  setupCard: { backgroundColor: CARD_BG, borderRadius: 12, borderWidth: 1, borderColor: BORDER, padding: 28, marginBottom: 12, alignItems: "center" },
+  setupTitle: { fontSize: 17, fontFamily: "Inter_700Bold", color: TEXT_COLOR, textAlign: "center", marginBottom: 8 },
+  setupDesc: { fontSize: 13, color: MUTED, textAlign: "center", lineHeight: 20, marginBottom: 20 },
+  setupBtn: { backgroundColor: PRIMARY, borderRadius: 10, paddingHorizontal: 24, paddingVertical: 13 },
+  setupBtnText: { color: "#fff", fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });
