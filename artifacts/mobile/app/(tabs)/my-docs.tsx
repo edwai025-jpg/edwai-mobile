@@ -366,7 +366,12 @@ export default function OwnBooksScreen() {
       }
       setHistory((prev) => [{ id: Date.now(), question: q.trim(), mode: qMode, created_at: new Date().toISOString() }, ...prev.slice(0, 49)]);
     } catch (e) {
-      if ((e as Error)?.name !== "AbortError") Alert.alert("Error", e instanceof ApiError ? e.message : "Query failed. Please try again.");
+      if ((e as Error)?.name !== "AbortError") {
+        const msg = e instanceof ApiError
+          ? e.message
+          : ((e as Error)?.message || String(e) || "Query failed. Please try again.");
+        Alert.alert("Error", msg);
+      }
       setStreaming(false); setQueryLoading(false);
     }
   }, [question, selectedDoc, accessToken]);

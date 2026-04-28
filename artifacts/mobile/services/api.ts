@@ -223,6 +223,40 @@ export class ApiError extends Error {
   }
 }
 
+/* Parse SSE lines from a text buffer, calling onChunk for each chunk event.
+   Returns accumulated QueryResponse fields. */
+function parseSseText(
+  text: string,
+  onChunk: (chunk: string) => void
+): { fullAnswer: string; responseData: Partial<QueryResponse> } {
+  let fullAnswer = "";
+  const responseData: Partial<QueryResponse> = {};
+  const lines = text.split("\n");
+  for (const line of lines) {
+    if (!line.startsWith("data: ")) continue;
+    const payload = line.slice(6).trim();
+    if (payload === "[DONE]" || payload === "") continue;
+    try {
+      const parsed = JSON.parse(payload) as {
+        chunk?: string;
+        answer?: string;
+        sources?: PageCitation[];
+        diagram_images?: DiagramImage[];
+        citation_images?: CitationImage[];
+        validation?: ValidationResult;
+        cached?: boolean;
+      };
+      if (parsed.chunk) {
+        fullAnswer += parsed.chunk;
+        onChunk(parsed.chunk);
+      } else {
+        Object.assign(responseData, parsed);
+      }
+    } catch {}
+  }
+  return { fullAnswer, responseData };
+}
+
 export async function streamQuery(
   path: string,
   body: Record<string, unknown>,
@@ -251,54 +285,80 @@ export async function streamQuery(
     throw new ApiError(detail, res.status, null);
   }
 
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("No response stream");
+  /* ── Streaming path (browser with full ReadableStream support) ── */
+  const reader = res.body?.getReader?.();
+  if (reader) {
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullAnswer = "";
+    let responseData: Partial<QueryResponse> = {};
 
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let fullAnswer = "";
-  let responseData: Partial<QueryResponse> = {};
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
 
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      const payload = line.slice(6).trim();
-      if (payload === "[DONE]") break;
-      try {
-        const parsed = JSON.parse(payload) as {
-          chunk?: string;
-          answer?: string;
-          sources?: PageCitation[];
-          diagram_images?: DiagramImage[];
-          citation_images?: CitationImage[];
-          validation?: ValidationResult;
-          cached?: boolean;
-        };
-        if (parsed.chunk) {
-          fullAnswer += parsed.chunk;
-          onChunk(parsed.chunk);
-        } else {
-          responseData = { ...responseData, ...parsed };
-        }
-      } catch {}
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const payload = line.slice(6).trim();
+        if (payload === "[DONE]" || payload === "") continue;
+        try {
+          const parsed = JSON.parse(payload) as {
+            chunk?: string;
+            answer?: string;
+            sources?: PageCitation[];
+            diagram_images?: DiagramImage[];
+            citation_images?: CitationImage[];
+            validation?: ValidationResult;
+            cached?: boolean;
+          };
+          if (parsed.chunk) {
+            fullAnswer += parsed.chunk;
+            onChunk(parsed.chunk);
+          } else {
+            Object.assign(responseData, parsed);
+          }
+        } catch {}
+      }
     }
+
+    return {
+      answer: responseData.answer ?? fullAnswer,
+      sources: responseData.sources,
+      diagram_images: responseData.diagram_images,
+      citation_images: responseData.citation_images,
+      validation: responseData.validation,
+      cached: responseData.cached,
+    };
   }
 
-  return {
-    answer: responseData.answer ?? fullAnswer,
-    sources: responseData.sources,
-    diagram_images: responseData.diagram_images,
-    citation_images: responseData.citation_images,
-    validation: responseData.validation,
-    cached: responseData.cached,
-  };
+  /* ── Fallback: React Native / buffered proxy — read full text ── */
+  const text = await res.text();
+
+  /* Try SSE format first (data: {...} lines) */
+  if (text.includes("data: ")) {
+    const { fullAnswer, responseData } = parseSseText(text, onChunk);
+    return {
+      answer: responseData.answer ?? fullAnswer,
+      sources: responseData.sources,
+      diagram_images: responseData.diagram_images,
+      citation_images: responseData.citation_images,
+      validation: responseData.validation,
+      cached: responseData.cached,
+    };
+  }
+
+  /* Try plain JSON object (API returned non-streaming response) */
+  try {
+    const parsed = JSON.parse(text) as QueryResponse;
+    if (parsed.answer) onChunk(parsed.answer);
+    return parsed;
+  } catch {}
+
+  throw new ApiError("Unexpected response from server", 200, null);
 }
 
 const api = {
