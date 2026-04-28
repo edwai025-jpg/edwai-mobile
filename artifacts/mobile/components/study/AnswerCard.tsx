@@ -1,8 +1,10 @@
 import { Feather } from "@expo/vector-icons";
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
-  ActivityIndicator,
+  Animated,
+  Easing,
   Image,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -19,63 +21,88 @@ const PRIMARY = "#667eea";
 const CARD_BG = "#1e1e3a";
 const BORDER = "rgba(255,255,255,0.10)";
 
-function ImageZoomModal({
-  visible,
-  uri,
-  label,
-  onClose,
-}: {
-  visible: boolean;
-  uri: string;
-  label: string;
-  onClose: () => void;
-}) {
+/* ─── Preprocess markdown text (10c spec) ──────────────────────────────── */
+function preprocessMarkdown(text: string): string {
+  let out = text;
+  out = out.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$${inner}$$`);
+  out = out.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`);
+  out = out.replace(/\[Page (\d+)\]/g, (_, n) => `**[Page ${n}]**`);
+  return out;
+}
+
+/* ─── Animated Spinner Ring (10a spec) ─────────────────────────────────── */
+function SpinnerRing() {
+  const spin = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(spin, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [spin]);
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Animated.View style={[sp.ring, { transform: [{ rotate }] }]} />
+  );
+}
+const sp = StyleSheet.create({
+  ring: {
+    width: 48, height: 48, borderRadius: 24,
+    borderWidth: 4,
+    borderColor: PRIMARY,
+    borderTopColor: "transparent",
+  },
+});
+
+/* ─── Image Zoom Modal (section 11) ────────────────────────────────────── */
+function ImageZoomModal({ visible, uri, label, onClose }: { visible: boolean; uri: string; label: string; onClose: () => void }) {
+  const isDiagram = label.toLowerCase().startsWith("🖼️");
+  const footerLabel = isDiagram ? "🖼️ Diagram" : label;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={zm.backdrop}>
-          <TouchableWithoutFeedback>
-            <View style={zm.sheet}>
-              <Pressable style={zm.closeBtn} onPress={onClose}>
-                <Feather name="x" size={20} color="#333" />
-              </Pressable>
-              <ScrollView
-                maximumZoomScale={4}
-                minimumZoomScale={1}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ alignItems: "center" }}
-              >
-                <Image source={{ uri }} style={zm.image} resizeMode="contain" />
-              </ScrollView>
-              <View style={zm.footer}>
-                <Text style={zm.footerText}>{label}</Text>
+          <View style={zm.container}>
+            <Pressable style={zm.closeBtn} onPress={onClose} hitSlop={12}>
+              <Feather name="x" size={20} color="#fff" />
+            </Pressable>
+            <TouchableWithoutFeedback>
+              <View style={zm.card}>
+                <ScrollView
+                  maximumZoomScale={4}
+                  minimumZoomScale={1}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ alignItems: "center" }}
+                  style={{ maxHeight: "85%" as `${number}%` }}
+                >
+                  <Image source={{ uri }} style={zm.image} resizeMode="contain" />
+                </ScrollView>
+                <View style={zm.footer}>
+                  <Text style={zm.footerText}>{footerLabel}</Text>
+                </View>
               </View>
-            </View>
-          </TouchableWithoutFeedback>
+            </TouchableWithoutFeedback>
+          </View>
         </View>
       </TouchableWithoutFeedback>
     </Modal>
   );
 }
-
 const zm = StyleSheet.create({
-  backdrop: {
-    flex: 1, backgroundColor: "rgba(0,0,0,0.8)",
-    alignItems: "center", justifyContent: "center", padding: 16,
-  },
-  sheet: {
-    backgroundColor: "#fff", borderRadius: 12,
-    width: "100%", maxHeight: "90%", overflow: "hidden",
-  },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.78)", justifyContent: "center", padding: 16 },
+  container: { position: "relative" },
   closeBtn: {
-    position: "absolute", top: 8, right: 8, zIndex: 10,
-    backgroundColor: "rgba(0,0,0,0.08)", borderRadius: 20, padding: 6,
+    position: "absolute", top: -44, right: 0, zIndex: 20,
+    backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 22, padding: 8,
   },
+  card: { backgroundColor: "#fff", borderRadius: 14, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.5, shadowRadius: 20, elevation: 20 },
   image: { width: "100%", height: 420 },
-  footer: { backgroundColor: "#f9fafb", borderTopWidth: 1, borderTopColor: "#e5e7eb", padding: 10 },
+  footer: { backgroundColor: "#f9fafb", borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingVertical: 10, paddingHorizontal: 14 },
   footerText: { fontSize: 12, color: "#6b7280", textAlign: "center" },
 });
 
+/* ─── Sources Section (10d) ─────────────────────────────────────────────── */
 function SourcesSection({ sources }: { sources: PageCitation[] }) {
   const [zoomUri, setZoomUri] = React.useState<string | null>(null);
   const [zoomLabel, setZoomLabel] = React.useState("");
@@ -88,6 +115,8 @@ function SourcesSection({ sources }: { sources: PageCitation[] }) {
     <>
       <View style={src.card}>
         <Text style={src.heading}>📄 Sources</Text>
+
+        {/* Page number pills */}
         <View style={src.pillRow}>
           {pageNumbers.map((pg) => (
             <View key={pg} style={src.pill}>
@@ -96,64 +125,70 @@ function SourcesSection({ sources }: { sources: PageCitation[] }) {
           ))}
         </View>
 
-        {isNcert ? (
-          <View style={src.ncertBox}>
+        {/* NCERT embedded mode (10f) */}
+        {isNcert && (
+          <View style={src.ncertCard}>
             <Text style={src.ncertTitle}>NCERT Source:</Text>
-            <Text style={src.ncertDesc}>Please refer to the listed pages in your NCERT textbook.</Text>
+            <Text style={src.ncertDesc}>Please refer to all the listed pages in your NCERT textbook.</Text>
+            <View style={src.ncertLinks}>
+              {allImages
+                .filter((img) => img.ncert_url)
+                .map((img, i) => (
+                  <Pressable
+                    key={i}
+                    style={src.ncertPageBtn}
+                    onPress={() => img.ncert_url && Linking.openURL(img.ncert_url)}
+                  >
+                    <Text style={src.ncertPageBtnText}>Page {img.page}</Text>
+                    <Feather name="external-link" size={11} color="#065f46" />
+                  </Pressable>
+                ))}
+            </View>
           </View>
-        ) : (
-          allImages.slice(0, 6).map((img, idx) => (
-            <Pressable
-              key={idx}
-              onPress={() => { setZoomUri(img.data); setZoomLabel(`Page Citation — Page ${img.page}`); }}
-            >
-              <View style={src.imageCard}>
-                <Image source={{ uri: img.data }} style={src.image} resizeMode="contain" />
-                <View style={src.imageFooter}>
-                  <Text style={src.imageFooterText}>Page {img.page}</Text>
-                </View>
-              </View>
-            </Pressable>
-          ))
         )}
+
+        {/* Original / EdwAI Generated page images (10f) */}
+        {!isNcert && allImages.slice(0, 8).map((img, idx) => (
+          <Pressable
+            key={idx}
+            style={src.imageCard}
+            onPress={() => { setZoomUri(img.data); setZoomLabel(`📖 Page Citation — Page ${img.page}`); }}
+          >
+            <Image source={{ uri: img.data }} style={src.image} resizeMode="contain" />
+            <View style={src.imageFooter}>
+              <Text style={src.imageFooterText}>Page {img.page}</Text>
+            </View>
+          </Pressable>
+        ))}
       </View>
-      <ImageZoomModal
-        visible={!!zoomUri}
-        uri={zoomUri ?? ""}
-        label={zoomLabel}
-        onClose={() => setZoomUri(null)}
-      />
+      <ImageZoomModal visible={!!zoomUri} uri={zoomUri ?? ""} label={zoomLabel} onClose={() => setZoomUri(null)} />
     </>
   );
 }
 
 const src = StyleSheet.create({
-  card: {
-    backgroundColor: CARD_BG, borderRadius: 12,
-    borderWidth: 1, borderColor: BORDER, padding: 16, marginTop: 12,
-  },
+  card: { backgroundColor: CARD_BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 16, marginTop: 12 },
   heading: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff", marginBottom: 10 },
-  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
-  pill: {
-    backgroundColor: "rgba(102,126,234,0.25)", borderRadius: 20,
-    borderWidth: 1, borderColor: "rgba(102,126,234,0.40)",
-    paddingHorizontal: 12, paddingVertical: 4,
-  },
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
+  pill: { backgroundColor: "rgba(102,126,234,0.25)", borderRadius: 20, borderWidth: 1, borderColor: "rgba(102,126,234,0.40)", paddingHorizontal: 12, paddingVertical: 5 },
   pillText: { fontSize: 12, color: "#d1d5db" },
-  ncertBox: {
-    backgroundColor: "rgba(16,185,129,0.1)", borderRadius: 8,
-    borderWidth: 1, borderColor: "rgba(16,185,129,0.3)", padding: 12, marginTop: 8,
-  },
-  ncertTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#10b981", marginBottom: 4 },
-  ncertDesc: { fontSize: 12, color: "#a7f3d0" },
-  imageCard: {
-    borderWidth: 1, borderColor: BORDER, borderRadius: 8, overflow: "hidden", marginTop: 8,
-  },
-  image: { width: "100%", height: 160 },
-  imageFooter: { backgroundColor: "#111827", padding: 6 },
-  imageFooterText: { fontSize: 11, color: "#9ca3af", textAlign: "center" },
+
+  /* NCERT card */
+  ncertCard: { backgroundColor: "rgba(16,185,129,0.07)", borderRadius: 10, borderWidth: 2, borderColor: "#34d399", padding: 14 },
+  ncertTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#10b981", marginBottom: 4 },
+  ncertDesc: { fontSize: 12, color: "#a7f3d0", lineHeight: 18, marginBottom: 10 },
+  ncertLinks: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  ncertPageBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#fff", borderRadius: 6, borderWidth: 2, borderColor: "#34d399", paddingHorizontal: 10, paddingVertical: 6 },
+  ncertPageBtnText: { fontSize: 12, color: "#065f46", fontFamily: "Inter_600SemiBold" },
+
+  /* Page images */
+  imageCard: { borderRadius: 10, borderWidth: 1, borderColor: BORDER, overflow: "hidden", marginTop: 10, backgroundColor: "#fff" },
+  image: { width: "100%", height: 180 },
+  imageFooter: { backgroundColor: "#f9fafb", borderTopWidth: 1, borderTopColor: "#e5e7eb", padding: 8 },
+  imageFooterText: { fontSize: 11, color: "#6b7280", textAlign: "center" },
 });
 
+/* ─── Diagrams Section (10e) ────────────────────────────────────────────── */
 function DiagramsSection({ diagrams }: { diagrams: DiagramImage[] }) {
   const [zoomUri, setZoomUri] = React.useState<string | null>(null);
   const [zoomLabel, setZoomLabel] = React.useState("");
@@ -167,36 +202,33 @@ function DiagramsSection({ diagrams }: { diagrams: DiagramImage[] }) {
             <Pressable
               key={idx}
               style={dg.item}
-              onPress={() => { setZoomUri(d.data); setZoomLabel(`Diagram — Page ${d.page}`); }}
+              onPress={() => { setZoomUri(d.data); setZoomLabel(`🖼️ Diagram — Page ${d.page}`); }}
             >
               <Image source={{ uri: d.data }} style={dg.image} resizeMode="contain" />
-              <Text style={dg.label}>Page {d.page}</Text>
+              <View style={dg.itemFooter}>
+                <Text style={dg.itemFooterText}>Page {d.page}</Text>
+                <Feather name="zoom-in" size={10} color="#9ca3af" />
+              </View>
             </Pressable>
           ))}
         </View>
       </View>
-      <ImageZoomModal
-        visible={!!zoomUri}
-        uri={zoomUri ?? ""}
-        label={zoomLabel}
-        onClose={() => setZoomUri(null)}
-      />
+      <ImageZoomModal visible={!!zoomUri} uri={zoomUri ?? ""} label={zoomLabel} onClose={() => setZoomUri(null)} />
     </>
   );
 }
 
 const dg = StyleSheet.create({
-  card: {
-    backgroundColor: CARD_BG, borderRadius: 12,
-    borderWidth: 1, borderColor: BORDER, padding: 16, marginTop: 12,
-  },
-  heading: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff", marginBottom: 10 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  item: { width: "47%", borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: BORDER },
-  image: { width: "100%", height: 100 },
-  label: { fontSize: 10, color: "#9ca3af", textAlign: "center", padding: 4, backgroundColor: "#111827" },
+  card: { backgroundColor: CARD_BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 16, marginTop: 12 },
+  heading: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff", marginBottom: 12 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  item: { width: "47%", borderRadius: 10, overflow: "hidden", borderWidth: 1, borderColor: BORDER, backgroundColor: "#fff" },
+  image: { width: "100%", height: 110 },
+  itemFooter: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: "#f9fafb", borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingVertical: 5 },
+  itemFooterText: { fontSize: 10, color: "#6b7280" },
 });
 
+/* ─── Phase-2 Citation Images Section (10g) ─────────────────────────────── */
 function CitationsSection({ citations }: { citations: CitationImage[] }) {
   const [zoomUri, setZoomUri] = React.useState<string | null>(null);
   const [zoomLabel, setZoomLabel] = React.useState("");
@@ -205,40 +237,56 @@ function CitationsSection({ citations }: { citations: CitationImage[] }) {
     <>
       <View style={src.card}>
         <Text style={src.heading}>📄 Sources</Text>
-        {citations.map((c, idx) => (
-          <Pressable
-            key={idx}
-            onPress={() => {
-              setZoomUri(`data:image/jpeg;base64,${c.base64_image}`);
-              setZoomLabel(`Page Citation — Page ${c.page_number}`);
-            }}
-          >
-            <View style={src.imageCard}>
-              <Image
-                source={{ uri: `data:image/jpeg;base64,${c.base64_image}` }}
-                style={src.image}
-                resizeMode="contain"
-              />
+        {citations.map((c, idx) => {
+          const uri = `data:image/jpeg;base64,${c.base64_image}`;
+          return (
+            <Pressable
+              key={idx}
+              style={src.imageCard}
+              onPress={() => { setZoomUri(uri); setZoomLabel(`📖 Page Citation — Page ${c.page_number}`); }}
+            >
+              <Image source={{ uri }} style={src.image} resizeMode="contain" />
               <View style={src.imageFooter}>
                 <Text style={src.imageFooterText}>Page {c.page_number}</Text>
               </View>
-            </View>
-          </Pressable>
-        ))}
+            </Pressable>
+          );
+        })}
       </View>
-      <ImageZoomModal
-        visible={!!zoomUri}
-        uri={zoomUri ?? ""}
-        label={zoomLabel}
-        onClose={() => setZoomUri(null)}
-      />
+      <ImageZoomModal visible={!!zoomUri} uri={zoomUri ?? ""} label={zoomLabel} onClose={() => setZoomUri(null)} />
     </>
   );
 }
 
+/* ─── Validation Badge (10c) ────────────────────────────────────────────── */
+function ValidationBadge({ v }: { v: NonNullable<QueryResponse["validation"]> }) {
+  const bg = v.is_reliable ? "rgba(16,185,129,0.1)" : v.confidence >= 0.6 ? "rgba(245,158,11,0.1)" : "rgba(239,68,68,0.1)";
+  const border = v.is_reliable ? "rgba(16,185,129,0.3)" : v.confidence >= 0.6 ? "rgba(245,158,11,0.3)" : "rgba(239,68,68,0.3)";
+  const color = v.is_reliable ? "#10b981" : v.confidence >= 0.6 ? "#f59e0b" : "#ef4444";
+  const icon = v.is_reliable ? "✅" : v.confidence >= 0.6 ? "⚠️" : "❌";
+  return (
+    <View style={[vb.box, { backgroundColor: bg, borderColor: border }]}>
+      <Text style={[vb.title, { color }]}>{icon} Answer Validation: {Math.round(v.confidence * 100)}% Verified</Text>
+      <Text style={[vb.sub, { color }]}>
+        {v.validated_facts} verified · {v.partial_facts} partial · {v.unverified_facts} unverified
+      </Text>
+      {!!v.warnings?.length && (
+        <Text style={[vb.warn, { color }]}>{v.warnings.join(" · ")}</Text>
+      )}
+    </View>
+  );
+}
+const vb = StyleSheet.create({
+  box: { borderRadius: 8, borderWidth: 1, padding: 10, marginTop: 12 },
+  title: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  sub: { fontSize: 11, marginTop: 3 },
+  warn: { fontSize: 11, marginTop: 2, fontStyle: "italic" },
+});
+
+/* ─── Markdown styles ───────────────────────────────────────────────────── */
 const mdStyles = {
   body: { color: "#e5e7eb", fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 22 },
-  heading1: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 18, marginTop: 8, marginBottom: 4 },
+  heading1: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 18, marginTop: 10, marginBottom: 4 },
   heading2: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 16, marginTop: 8, marginBottom: 4 },
   heading3: { color: "#c4b5fd", fontFamily: "Inter_600SemiBold", fontSize: 15, marginTop: 6, marginBottom: 2 },
   strong: { color: "#fff", fontFamily: "Inter_700Bold" },
@@ -247,24 +295,16 @@ const mdStyles = {
   ordered_list: { marginLeft: 4 },
   bullet_list_item: { color: "#e5e7eb" },
   ordered_list_item: { color: "#e5e7eb" },
-  code_inline: {
-    backgroundColor: "rgba(102,126,234,0.2)", color: "#a78bfa",
-    fontFamily: "Inter_500Medium", borderRadius: 4, paddingHorizontal: 4,
-  },
-  fence: {
-    backgroundColor: "#111827", borderRadius: 8,
-    padding: 12, marginVertical: 8,
-  },
+  code_inline: { backgroundColor: "rgba(102,126,234,0.2)", color: "#a78bfa", fontFamily: "Inter_500Medium", borderRadius: 4, paddingHorizontal: 4 },
+  fence: { backgroundColor: "#111827", borderRadius: 8, padding: 12, marginVertical: 8 },
   code_block: { color: "#a7f3d0", fontFamily: "Inter_400Regular", fontSize: 12 },
-  blockquote: {
-    borderLeftWidth: 4, borderLeftColor: "#60a5fa",
-    paddingLeft: 12, opacity: 0.9,
-  },
+  blockquote: { borderLeftWidth: 4, borderLeftColor: "#60a5fa", paddingLeft: 12, opacity: 0.9 },
   table: { borderWidth: 1, borderColor: BORDER, borderRadius: 4 },
   th: { backgroundColor: "rgba(102,126,234,0.2)", color: "#fff", fontFamily: "Inter_600SemiBold", padding: 8 },
   td: { color: "#e5e7eb", padding: 8, borderTopWidth: 1, borderTopColor: BORDER },
 };
 
+/* ─── Main AnswerCard ───────────────────────────────────────────────────── */
 type AnswerCardProps = {
   streaming: boolean;
   streamText: string;
@@ -274,24 +314,28 @@ type AnswerCardProps = {
 };
 
 export default function AnswerCard({ streaming, streamText, response, loading, mode }: AnswerCardProps) {
+  /* 10a — Loading State */
   if (loading && !streaming) {
     return (
       <View style={an.loadingCard}>
-        <ActivityIndicator size="large" color={PRIMARY} />
+        <SpinnerRing />
         <Text style={an.loadingText}>Searching through your textbook...</Text>
         <Text style={an.loadingSubtext}>This may take a few moments</Text>
       </View>
     );
   }
 
-  const displayText = streaming ? streamText : (response?.answer ?? "");
-  if (!displayText) return null;
+  const rawText = streaming ? streamText : (response?.answer ?? "");
+  if (!rawText) return null;
+
+  const displayText = preprocessMarkdown(rawText);
 
   return (
     <View style={an.card}>
+      {/* Header: ✨ icon + Answer label + typing indicator (10b/10c) */}
       <View style={an.header}>
         <View style={an.iconBox}>
-          <Text style={{ fontSize: 18 }}>✨</Text>
+          <Text style={{ fontSize: 20 }}>✨</Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={an.answerLabel}>Answer</Text>
@@ -299,20 +343,25 @@ export default function AnswerCard({ streaming, streamText, response, loading, m
         </View>
       </View>
 
+      {/* Answer text */}
       <Markdown style={mdStyles as never}>{displayText}</Markdown>
 
+      {/* Validation badge (explain mode, 10c) */}
       {!streaming && response?.validation && mode === "explain" && (
         <ValidationBadge v={response.validation} />
       )}
 
+      {/* Sources / page citations (10d, 10f) */}
       {!streaming && response?.sources && response.sources.length > 0 && (
         <SourcesSection sources={response.sources} />
       )}
 
+      {/* Diagrams (10e) */}
       {!streaming && response?.diagram_images && response.diagram_images.length > 0 && (
         <DiagramsSection diagrams={response.diagram_images} />
       )}
 
+      {/* Phase-2 citation images (10g) */}
       {!streaming && response?.citation_images && response.citation_images.length > 0 && (
         <CitationsSection citations={response.citation_images} />
       )}
@@ -320,50 +369,18 @@ export default function AnswerCard({ streaming, streamText, response, loading, m
   );
 }
 
-function ValidationBadge({ v }: { v: NonNullable<QueryResponse["validation"]> }) {
-  const bg = v.is_reliable
-    ? "rgba(16,185,129,0.1)"
-    : v.confidence >= 0.6
-    ? "rgba(245,158,11,0.1)"
-    : "rgba(239,68,68,0.1)";
-  const color = v.is_reliable ? "#10b981" : v.confidence >= 0.6 ? "#f59e0b" : "#ef4444";
-  const icon = v.is_reliable ? "✅" : v.confidence >= 0.6 ? "⚠️" : "❌";
-
-  return (
-    <View style={[an.validationBox, { backgroundColor: bg, borderColor: color + "40" }]}>
-      <Text style={[an.validationText, { color }]}>
-        {icon} Answer Validation: {Math.round(v.confidence * 100)}% Verified
-      </Text>
-      <Text style={[an.validationSub, { color }]}>
-        {v.validated_facts} verified · {v.partial_facts} partial · {v.unverified_facts} unverified
-      </Text>
-    </View>
-  );
-}
-
 const an = StyleSheet.create({
   loadingCard: {
-    backgroundColor: "rgba(102,126,234,0.1)", borderRadius: 12,
+    backgroundColor: "rgba(102,126,234,0.15)", borderRadius: 14,
     borderWidth: 1, borderColor: BORDER,
-    padding: 40, alignItems: "center", marginTop: 12,
+    paddingVertical: 48, paddingHorizontal: 20,
+    alignItems: "center", marginTop: 12,
   },
-  loadingText: { fontSize: 15, color: "#e5e7eb", fontFamily: "Inter_600SemiBold", marginTop: 16 },
+  loadingText: { fontSize: 15, color: "#e5e7eb", fontFamily: "Inter_600SemiBold", marginTop: 18, textAlign: "center" },
   loadingSubtext: { fontSize: 12, color: "#6b7280", marginTop: 6 },
-  card: {
-    backgroundColor: CARD_BG, borderRadius: 12,
-    borderWidth: 1, borderColor: BORDER, padding: 16, marginTop: 12,
-  },
+  card: { backgroundColor: CARD_BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 16, marginTop: 12 },
   header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
-  iconBox: {
-    width: 40, height: 40, borderRadius: 8,
-    backgroundColor: "rgba(102,126,234,0.2)",
-    alignItems: "center", justifyContent: "center",
-  },
-  answerLabel: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff" },
-  typing: { fontSize: 11, color: "#a78bfa", fontFamily: "Inter_400Regular" },
-  validationBox: {
-    borderRadius: 8, borderWidth: 1, padding: 10, marginTop: 10,
-  },
-  validationText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  validationSub: { fontSize: 11, marginTop: 2 },
+  iconBox: { width: 40, height: 40, borderRadius: 10, backgroundColor: "rgba(102,126,234,0.2)", alignItems: "center", justifyContent: "center" },
+  answerLabel: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff" },
+  typing: { fontSize: 11, color: "#a78bfa", fontFamily: "Inter_400Regular", marginTop: 1 },
 });

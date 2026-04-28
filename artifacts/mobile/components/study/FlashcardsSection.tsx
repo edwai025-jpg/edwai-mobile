@@ -69,9 +69,9 @@ function FlipCard({ card, index, total }: { card: Flashcard; index: number; tota
 }
 
 const fc = StyleSheet.create({
-  wrapper: { minHeight: 180 },
+  wrapper: { minHeight: 220 },
   card: {
-    borderRadius: 16, padding: 20, minHeight: 180,
+    borderRadius: 16, padding: 20, minHeight: 220,
     justifyContent: "space-between", backfaceVisibility: "hidden",
   },
   cardBack: {
