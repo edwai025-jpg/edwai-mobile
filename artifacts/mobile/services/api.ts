@@ -108,15 +108,24 @@ export type BoardStatus = {
 export type DocumentItem = {
   id: number;
   title: string;
-  subject?: string;
-  document_type?: string;
+  book_type?: string;
   source_type: "pdf" | "youtube";
-  processing_status: "pending" | "processing" | "completed" | "failed";
-  progress_percent?: number;
+  youtube_url?: string | null;
+  file_size_bytes?: number;
   page_count?: number;
-  chunk_count?: number;
-  created_at: string;
+  processing_status: "uploaded" | "processing" | "completed" | "failed";
+  processing_progress?: number;
   is_ready: boolean;
+  created_at: string;
+  last_queried_at?: string | null;
+};
+
+export type Phase2Status = {
+  enabled: boolean;
+  max_file_size_mb: number;
+  max_books_per_user: number;
+  max_videos_per_user: number;
+  answer_model: string;
 };
 
 export type Phase1Document = {
@@ -223,8 +232,7 @@ export class ApiError extends Error {
   }
 }
 
-/* Parse SSE lines from a text buffer, calling onChunk for each chunk event.
-   Returns accumulated QueryResponse fields. */
+/* Parse Phase 1 SSE lines: {chunk:"..."} tokens, final blob has answer/sources/etc. */
 function parseSseText(
   text: string,
   onChunk: (chunk: string) => void
@@ -257,13 +265,53 @@ function parseSseText(
   return { fullAnswer, responseData };
 }
 
-export async function streamQuery(
+/* Parse Phase 2 SSE lines: {type:"token",content:"..."} and {type:"done",...} */
+function parseSseTextPhase2(
+  text: string,
+  onChunk: (chunk: string) => void
+): { fullAnswer: string; responseData: Partial<QueryResponse> } {
+  let fullAnswer = "";
+  const responseData: Partial<QueryResponse> = {};
+  const lines = text.split("\n");
+  for (const line of lines) {
+    if (!line.startsWith("data: ")) continue;
+    const payload = line.slice(6).trim();
+    if (payload === "[DONE]" || payload === "") continue;
+    try {
+      const parsed = JSON.parse(payload) as {
+        type?: string;
+        content?: string;
+        answer?: string;
+        sources?: PageCitation[];
+        citations?: number[];
+        model_used?: string;
+        cache_used?: boolean;
+        context_cached?: boolean;
+      };
+      if (parsed.type === "token" && parsed.content) {
+        fullAnswer += parsed.content;
+        onChunk(parsed.content);
+      } else if (parsed.type === "done") {
+        if (parsed.answer) responseData.answer = parsed.answer;
+        if (parsed.sources) responseData.sources = parsed.sources;
+        if (parsed.cache_used !== undefined) responseData.cached = parsed.cache_used;
+      } else if (parsed.type === "error") {
+        throw new ApiError(parsed.content ?? "Stream error", 500, null);
+      }
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+    }
+  }
+  return { fullAnswer, responseData };
+}
+
+/* ── Generic SSE streaming helper ─────────────────────────────────────── */
+async function fetchStream(
   path: string,
   body: Record<string, unknown>,
   accessToken: string,
-  onChunk: (chunk: string) => void,
   signal?: AbortSignal
-): Promise<QueryResponse> {
+): Promise<{ text: string; res: Response }> {
   const url = resolveUrl(path);
   const res = await fetch(url, {
     method: "POST",
@@ -277,68 +325,44 @@ export async function streamQuery(
   });
 
   if (!res.ok) {
-    const text = await res.text();
+    const errText = await res.text();
     let detail = `HTTP ${res.status}`;
     try {
-      detail = (JSON.parse(text) as { detail?: string }).detail ?? detail;
+      const parsed = JSON.parse(errText) as { detail?: string | { message?: string } };
+      if (typeof parsed.detail === "string") detail = parsed.detail;
+      else if (typeof parsed.detail === "object" && parsed.detail?.message) detail = parsed.detail.message;
     } catch {}
     throw new ApiError(detail, res.status, null);
   }
 
-  /* ── Streaming path (browser with full ReadableStream support) ── */
+  /* If ReadableStream is available (browser) read chunk-by-chunk */
   const reader = res.body?.getReader?.();
   if (reader) {
     const decoder = new TextDecoder();
-    let buffer = "";
-    let fullAnswer = "";
-    let responseData: Partial<QueryResponse> = {};
-
+    let accumulated = "";
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const payload = line.slice(6).trim();
-        if (payload === "[DONE]" || payload === "") continue;
-        try {
-          const parsed = JSON.parse(payload) as {
-            chunk?: string;
-            answer?: string;
-            sources?: PageCitation[];
-            diagram_images?: DiagramImage[];
-            citation_images?: CitationImage[];
-            validation?: ValidationResult;
-            cached?: boolean;
-          };
-          if (parsed.chunk) {
-            fullAnswer += parsed.chunk;
-            onChunk(parsed.chunk);
-          } else {
-            Object.assign(responseData, parsed);
-          }
-        } catch {}
-      }
+      accumulated += decoder.decode(value, { stream: true });
     }
-
-    return {
-      answer: responseData.answer ?? fullAnswer,
-      sources: responseData.sources,
-      diagram_images: responseData.diagram_images,
-      citation_images: responseData.citation_images,
-      validation: responseData.validation,
-      cached: responseData.cached,
-    };
+    return { text: accumulated, res };
   }
 
-  /* ── Fallback: React Native / buffered proxy — read full text ── */
+  /* React Native: body is undefined — read buffered text */
   const text = await res.text();
+  return { text, res };
+}
 
-  /* Try SSE format first (data: {...} lines) */
+/* ── Phase 1 query stream ──────────────────────────────────────────────── */
+export async function streamQuery(
+  path: string,
+  body: Record<string, unknown>,
+  accessToken: string,
+  onChunk: (chunk: string) => void,
+  signal?: AbortSignal
+): Promise<QueryResponse> {
+  const { text } = await fetchStream(path, body, accessToken, signal);
+
   if (text.includes("data: ")) {
     const { fullAnswer, responseData } = parseSseText(text, onChunk);
     return {
@@ -351,11 +375,41 @@ export async function streamQuery(
     };
   }
 
-  /* Try plain JSON object (API returned non-streaming response) */
   try {
     const parsed = JSON.parse(text) as QueryResponse;
     if (parsed.answer) onChunk(parsed.answer);
     return parsed;
+  } catch {}
+
+  throw new ApiError("Unexpected response from server", 200, null);
+}
+
+/* ── Phase 2 query stream ──────────────────────────────────────────────── */
+export async function streamQueryPhase2(
+  documentId: number,
+  body: { question: string; mode: "retrieve" | "explain" },
+  accessToken: string,
+  onChunk: (chunk: string) => void,
+  signal?: AbortSignal
+): Promise<QueryResponse> {
+  const path = `/api/phase2/documents/${documentId}/query/stream`;
+  const { text } = await fetchStream(path, body, accessToken, signal);
+
+  if (text.includes("data: ")) {
+    const { fullAnswer, responseData } = parseSseTextPhase2(text, onChunk);
+    return {
+      answer: responseData.answer ?? fullAnswer,
+      sources: responseData.sources,
+      cached: responseData.cached,
+    };
+  }
+
+  /* Non-streaming JSON fallback */
+  try {
+    const parsed = JSON.parse(text) as { answer?: string; sources?: PageCitation[]; cache_used?: boolean };
+    const answer = parsed.answer ?? "";
+    if (answer) onChunk(answer);
+    return { answer, sources: parsed.sources, cached: parsed.cache_used };
   } catch {}
 
   throw new ApiError("Unexpected response from server", 200, null);
@@ -594,8 +648,14 @@ const api = {
   },
 
   phase2: {
+    getStatus: (token: string) =>
+      request<Phase2Status>("/api/phase2/status", {}, token),
+
     listDocuments: (token: string) =>
       request<DocumentItem[]>("/api/phase2/documents", {}, token),
+
+    getDocument: (token: string, id: number) =>
+      request<DocumentItem>(`/api/phase2/documents/${id}`, {}, token),
 
     addYoutube: (token: string, url: string, title?: string) =>
       request<DocumentItem>(
@@ -604,7 +664,7 @@ const api = {
         token
       ),
 
-    uploadPdf: (token: string, fileUri: string, fileName: string, title: string, documentType: string) => {
+    uploadPdf: (token: string, fileUri: string, fileName: string, title: string, bookType: string) => {
       const formData = new FormData();
       formData.append("file", {
         uri: fileUri,
@@ -612,7 +672,7 @@ const api = {
         name: fileName,
       } as unknown as Blob);
       formData.append("title", title);
-      formData.append("document_type", documentType);
+      formData.append("book_type", bookType);
       return request<DocumentItem>(
         "/api/phase2/documents/upload",
         { method: "POST", body: formData, headers: {} },
@@ -621,7 +681,7 @@ const api = {
     },
 
     deleteDocument: (token: string, id: number) =>
-      request<{ message: string }>(
+      request<{ status: string; message: string }>(
         `/api/phase2/documents/${id}`,
         { method: "DELETE" },
         token
@@ -629,7 +689,7 @@ const api = {
 
     getQueryHistory: (token: string, documentId: number) =>
       request<QueryHistoryItem[]>(
-        `/api/phase2/query-history?document_id=${documentId}`,
+        `/api/phase2/documents/${documentId}/query-history`,
         {},
         token
       ),
@@ -639,7 +699,7 @@ const api = {
       body: { document_id: number; question: string; mode: "retrieve" | "explain" },
       onChunk: (chunk: string) => void,
       signal?: AbortSignal
-    ) => streamQuery("/api/phase2/query", body, token, onChunk, signal),
+    ) => streamQueryPhase2(body.document_id, { question: body.question, mode: body.mode }, token, onChunk, signal),
   },
 
   googleAuthUrl: `${PROD_URL}/api/auth/google`,

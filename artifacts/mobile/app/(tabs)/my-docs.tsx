@@ -38,13 +38,13 @@ const GREEN = "#22c55e";
 const STATUS_COLOR: Record<DocumentItem["processing_status"], string> = {
   completed: "#10b981",
   processing: "#f59e0b",
-  pending: "#60a5fa",
+  uploaded: "#60a5fa",
   failed: "#ef4444",
 };
 const STATUS_LABEL: Record<DocumentItem["processing_status"], string> = {
   completed: "Ready",
   processing: "Processing…",
-  pending: "Queued",
+  uploaded: "Queued",
   failed: "Failed",
 };
 
@@ -101,7 +101,7 @@ const dm = StyleSheet.create({
 
 /* ─── Doc Card ──────────────────────────────────────────────────────────── */
 function DocCard({ doc, selected, onSelect, onDelete }: { doc: DocumentItem; selected: boolean; onSelect: () => void; onDelete: () => void }) {
-  const isProcessing = doc.processing_status === "processing" || doc.processing_status === "pending";
+  const isProcessing = doc.processing_status === "processing" || doc.processing_status === "uploaded";
   const statusColor = STATUS_COLOR[doc.processing_status];
   return (
     <Pressable style={[dc.card, selected && dc.cardSelected, !doc.is_ready && dc.cardDim]} onPress={doc.is_ready ? onSelect : undefined}>
@@ -116,6 +116,11 @@ function DocCard({ doc, selected, onSelect, onDelete }: { doc: DocumentItem; sel
             <Text style={[dc.statusText, { color: statusColor }]}>{STATUS_LABEL[doc.processing_status]}</Text>
             {isProcessing && <ActivityIndicator size="small" color={statusColor} style={{ marginLeft: 4 }} />}
           </View>
+          {isProcessing && typeof doc.processing_progress === "number" && doc.processing_progress > 0 && (
+            <View style={dc.progressTrack}>
+              <View style={[dc.progressFill, { width: `${doc.processing_progress}%` as `${number}%`, backgroundColor: statusColor }]} />
+            </View>
+          )}
         </View>
         <Pressable style={dc.deleteBtn} onPress={onDelete} hitSlop={10}><Feather name="trash-2" size={16} color="#6b7280" /></Pressable>
       </View>
@@ -135,6 +140,8 @@ const dc = StyleSheet.create({
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 11, fontFamily: "Inter_500Medium" },
   deleteBtn: { padding: 6 },
+  progressTrack: { height: 3, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden", marginTop: 5 },
+  progressFill: { height: 3, borderRadius: 2 },
 });
 
 /* ─── Recent Questions ──────────────────────────────────────────────────── */
@@ -248,12 +255,12 @@ export default function OwnBooksScreen() {
   }, [loadDocs]);
 
   useEffect(() => {
-    const hasProcessing = docs.some((d) => d.processing_status === "processing" || d.processing_status === "pending");
+    const hasProcessing = docs.some((d) => d.processing_status === "processing" || d.processing_status === "uploaded");
     if (hasProcessing && !pollRef.current) {
       pollRef.current = setInterval(async () => {
         const list = await loadDocs();
         if (!list) return;
-        if (!list.some((d) => d.processing_status === "processing" || d.processing_status === "pending")) {
+        if (!list.some((d) => d.processing_status === "processing" || d.processing_status === "uploaded")) {
           if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         }
       }, 3000);
