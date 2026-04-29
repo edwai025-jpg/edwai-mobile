@@ -521,8 +521,8 @@ const api = {
         email?: string;
       }
     ) =>
-      request<{ message: string; user: ApiUser }>(
-        "/api/student/profile",
+      request<{ success: boolean; profile_complete: boolean; user: ApiUser }>(
+        "/api/auth/me/profile",
         { method: "PATCH", body: JSON.stringify(data) },
         token
       ),
