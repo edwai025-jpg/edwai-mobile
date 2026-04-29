@@ -3,8 +3,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   DimensionValue,
+  Image,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -14,119 +17,114 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import ProfileModal from "@/components/ProfileModal";
+import AccountEditModal from "@/components/AccountEditModal";
+import EducationEditModal from "@/components/EducationEditModal";
+import SessionsModal from "@/components/SessionsModal";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import api, { UsageInfo } from "@/services/api";
 
-type MaterialIconName = React.ComponentProps<typeof MaterialIcons>["name"];
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
+type MaterialIconName = React.ComponentProps<typeof MaterialIcons>["name"];
+type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
-function Avatar({ name }: { name: string }) {
-  const initials = name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
+/* ─── Avatar ─────────────────────────────────────────────────────────────── */
+function Avatar({ name, photoUrl, size = 72 }: { name: string; photoUrl?: string; size?: number }) {
+  const initials = name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+  const r = size / 2;
+  if (photoUrl) {
+    return <Image source={{ uri: photoUrl }} style={{ width: size, height: size, borderRadius: r, borderWidth: 2, borderColor: "rgba(255,255,255,0.25)" }} />;
+  }
   return (
-    <LinearGradient
-      colors={["#7c3aed", "#4f46e5"]}
-      style={avatarStyles.wrap}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
-      <Text style={avatarStyles.text}>{initials || "U"}</Text>
+    <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={{ width: size, height: size, borderRadius: r, alignItems: "center", justifyContent: "center" }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+      <Text style={{ fontSize: size * 0.34, fontFamily: "Inter_700Bold", color: "#fff" }}>{initials || "U"}</Text>
     </LinearGradient>
   );
 }
 
-const avatarStyles = StyleSheet.create({
-  wrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#7c3aed",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  text: {
-    fontSize: 26,
-    fontFamily: "Inter_700Bold",
-    color: Colors.white,
-  },
-});
-
-type MenuItemProps = {
+/* ─── Menu Row ───────────────────────────────────────────────────────────── */
+function MenuRow({
+  icon,
+  title,
+  subtitle,
+  onPress,
+  danger,
+  right,
+  loading,
+}: {
   icon: React.ReactNode;
   title: string;
   subtitle?: string;
   onPress?: () => void;
   danger?: boolean;
-  rightContent?: React.ReactNode;
-};
-
-function MenuItem({ icon, title, subtitle, onPress, danger, rightContent }: MenuItemProps) {
+  right?: React.ReactNode;
+  loading?: boolean;
+}) {
   return (
     <Pressable
-      style={({ pressed }) => [
-        styles.menuItem,
-        pressed && { backgroundColor: Colors.darkSurface },
-      ]}
+      style={({ pressed }) => [st.row, pressed && { backgroundColor: Colors.darkSurface }]}
       onPress={onPress}
     >
-      <View style={[styles.menuIcon, danger && styles.menuIconDanger]}>
-        {icon}
+      <View style={[st.rowIcon, danger && st.rowIconDanger]}>{icon}</View>
+      <View style={st.rowText}>
+        <Text style={[st.rowTitle, danger && st.rowTitleDanger]}>{title}</Text>
+        {subtitle ? <Text style={st.rowSub}>{subtitle}</Text> : null}
       </View>
-      <View style={styles.menuText}>
-        <Text style={[styles.menuTitle, danger && styles.menuTitleDanger]}>
-          {title}
-        </Text>
-        {subtitle ? <Text style={styles.menuSubtitle}>{subtitle}</Text> : null}
-      </View>
-      {rightContent ?? (
-        <Feather
-          name="chevron-right"
-          size={16}
-          color={danger ? Colors.danger : Colors.darkTextMuted}
-        />
-      )}
+      {loading
+        ? <ActivityIndicator size="small" color={Colors.darkTextMuted} />
+        : right ?? <Feather name="chevron-right" size={16} color={danger ? Colors.danger : Colors.darkTextMuted} />
+      }
     </Pressable>
   );
 }
 
+/* ─── Divider ────────────────────────────────────────────────────────────── */
+const RowDivider = () => <View style={st.divider} />;
+
+/* ─── Main Screen ────────────────────────────────────────────────────────── */
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser, accessToken } = useAuth();
-  const [loggingOut, setLoggingOut] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
+
   const [usage, setUsage] = useState<UsageInfo | null>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+  const [showEducation, setShowEducation] = useState(false);
+  const [showSessions, setShowSessions] = useState(false);
+
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
-  /* Refresh user profile + usage every time this tab is focused */
+  /* Refresh everything on every focus — never use stale cache for display */
   useFocusEffect(
     useCallback(() => {
       refreshUser();
       if (accessToken) {
-        api.study.getUsage(accessToken).then(setUsage).catch(() => {});
+        setUsageLoading(true);
+        api.study
+          .getUsage(accessToken)
+          .then(setUsage)
+          .catch(() => setUsage(null))
+          .finally(() => setUsageLoading(false));
+      } else {
+        setUsageLoading(false);
       }
     }, [refreshUser, accessToken])
   );
 
   const displayName = user?.name || "Student";
   const identifier = user?.email || user?.phone || "";
-  const used = usage?.questions_used ?? user?.questionsUsed ?? 0;
-  const limit = usage?.questions_limit ?? user?.questionsLimit ?? 1500;
-  const planName = usage?.plan_name ?? user?.plan ?? "Reader";
-  const usagePct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+  const photoUrl = user?.profilePhotoUrl;
+
+  /* Usage values: ONLY from live API, never from stale cached user object */
+  const planName = usage?.plan_name ?? null;
+  const used = usage?.questions_used ?? null;
+  const limit = usage?.questions_limit ?? null;
+  const usagePct = used !== null && limit && limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
   const barColor = usagePct >= 90 ? Colors.danger : usagePct >= 70 ? Colors.warning : Colors.primary;
 
-  const handleLogout = () => {
+  const handleLogout = () =>
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
       {
@@ -139,427 +137,294 @@ export default function ProfileScreen() {
         },
       },
     ]);
-  };
 
-  const handleDelete = () => {
+  const handleDeleteAccount = () =>
     Alert.alert(
       "Delete Account",
-      "This will permanently delete your account and all data. This cannot be undone.",
+      "This will permanently delete your account and all your data. This action cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: async () => { await logout(); } },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (accessToken) {
+              try { await api.profile.deleteAccount(accessToken); } catch {}
+            }
+            await logout();
+          },
+        },
       ]
     );
-  };
 
   return (
-    <View style={styles.root}>
+    <View style={st.root}>
+      {/* ── Gradient Header ── */}
       <LinearGradient
         colors={[Colors.navHeader1, Colors.navHeader2, Colors.navHeader3]}
-        style={[styles.profileHeader, { paddingTop: topInset + 16 }]}
+        style={[st.header, { paddingTop: topInset + 14 }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
-        <View style={styles.avatarRow}>
-          <Avatar name={displayName} />
-          <View style={styles.userInfo}>
-            <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
-            {identifier ? (
-              <Text style={styles.userIdentifier} numberOfLines={1}>{identifier}</Text>
-            ) : null}
-            {user?.state && user?.board && (
-              <View style={styles.educationRow}>
-                <MaterialIcons name="school" size={12} color={Colors.navLogoEdw} />
-                <Text style={styles.educationText} numberOfLines={1}>
-                  {user.board}{user.className ? ` · ${user.className}` : ""}
+        <View style={st.avatarRow}>
+          <Avatar name={displayName} photoUrl={photoUrl ?? undefined} size={70} />
+          <View style={st.nameBlock}>
+            <Text style={st.userName} numberOfLines={1}>{displayName}</Text>
+            {!!identifier && <Text style={st.userIdentifier} numberOfLines={1}>{identifier}</Text>}
+            {(user?.board || user?.className) && (
+              <View style={st.eduRow}>
+                <MaterialIcons name={"school" as MaterialIconName} size={11} color={Colors.navLogoEdw} />
+                <Text style={st.eduText} numberOfLines={1}>
+                  {[user?.board, user?.className].filter(Boolean).join(" · ")}
                 </Text>
               </View>
             )}
+            {user?.state && (
+              <View style={st.eduRow}>
+                <MaterialIcons name={"location-on" as MaterialIconName} size={11} color="rgba(255,255,255,0.45)" />
+                <Text style={st.stateText} numberOfLines={1}>{user.state}</Text>
+              </View>
+            )}
           </View>
-          <View style={styles.planBadgeSmall}>
-            <Text style={styles.planBadgeSmallText}>{planName}</Text>
-          </View>
+          {planName && (
+            <View style={st.planBadge}>
+              <Text style={st.planBadgeText}>{planName}</Text>
+            </View>
+          )}
         </View>
       </LinearGradient>
 
       <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: bottomInset + 100 }]}
+        style={st.scroll}
+        contentContainerStyle={[st.content, { paddingBottom: bottomInset + 100 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.planCard}>
-          <View style={styles.planHeader}>
-            <LinearGradient
-              colors={[Colors.primary, Colors.secondary]}
-              style={styles.planIcon}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Ionicons name={"flash" as IoniconsName} size={16} color={Colors.white} />
+        {/* ── Usage / Plan Card ── */}
+        <View style={st.card}>
+          <View style={st.planHeader}>
+            <LinearGradient colors={[Colors.primary, Colors.secondary]} style={st.planIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <Ionicons name={"flash" as IoniconsName} size={15} color="#fff" />
             </LinearGradient>
             <View style={{ flex: 1 }}>
-              <Text style={styles.planLabel}>Current Plan</Text>
-              <Text style={styles.planName}>{planName}</Text>
+              <Text style={st.planLabel}>Current Plan</Text>
+              {usageLoading
+                ? <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 2 }} />
+                : <Text style={st.planName}>{planName ?? "—"}</Text>
+              }
             </View>
-            <View style={styles.activeBadge}>
-              <Text style={styles.activeBadgeText}>Active</Text>
-            </View>
+            {!usageLoading && usage && (
+              <View style={st.activeBadge}>
+                <Text style={st.activeBadgeText}>{usage.status === "active" ? "Active" : usage.status === "free" ? "Free" : "Active"}</Text>
+              </View>
+            )}
           </View>
 
-          <View style={styles.usageSection}>
-            <View style={styles.usageTopRow}>
-              <Text style={styles.usageLabel}>Questions Used</Text>
-              <Text style={styles.usageCount}>
-                {used}
-                <Text style={styles.usageLimit}> / {limit}</Text>
-              </Text>
+          {/* Usage bar */}
+          {usageLoading ? (
+            <View style={st.usageSkeleton}>
+              <View style={st.skeletonLine} />
+              <View style={st.skeletonBar} />
+              <View style={[st.skeletonLine, { width: "55%" }]} />
             </View>
-            <View style={styles.progressBg}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${usagePct}%` as DimensionValue, backgroundColor: barColor },
-                ]}
-              />
+          ) : used !== null && limit !== null ? (
+            <View style={st.usageSection}>
+              <View style={st.usageTopRow}>
+                <Text style={st.usageLabel}>Questions Used</Text>
+                <Text style={st.usageCount}>
+                  {used}<Text style={st.usageLimit}> / {limit}</Text>
+                </Text>
+              </View>
+              <View style={st.progressBg}>
+                <View style={[st.progressFill, { width: `${usagePct}%` as DimensionValue, backgroundColor: barColor }]} />
+              </View>
+              <Text style={st.usageRemaining}>{limit - used} questions remaining this month</Text>
+              {!!usage?.renewal_date && (
+                <Text style={st.renewalDate}>
+                  Resets: {new Date(usage.renewal_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                </Text>
+              )}
             </View>
-            <Text style={styles.usageRemaining}>
-              {limit - used} questions remaining this month
-            </Text>
-          </View>
+          ) : null}
+        </View>
 
-          <View style={styles.planNotice}>
-            <Ionicons name={"globe-outline" as IoniconsName} size={14} color={Colors.darkTextMuted} />
-            <Text style={styles.planNoticeText}>
-              To manage your plan, visit edwai.com
-            </Text>
+        {/* ── Account Section ── */}
+        <View style={st.section}>
+          <Text style={st.sectionLabel}>Account</Text>
+          <View style={st.card}>
+            <MenuRow
+              icon={<Feather name={"user" as FeatherName} size={17} color={Colors.primary} />}
+              title="Edit Account"
+              subtitle="Name, email, phone number and photo"
+              onPress={() => setShowAccount(true)}
+            />
+            <RowDivider />
+            <MenuRow
+              icon={<MaterialIcons name={"school" as MaterialIconName} size={17} color={Colors.primary} />}
+              title="Academic Details"
+              subtitle={user?.board ? `${user.board}${user.className ? ` · Class ${user.className}` : ""}` : "State, board, class and medium"}
+              onPress={() => setShowEducation(true)}
+            />
+            <RowDivider />
+            <MenuRow
+              icon={<Feather name={"shield" as FeatherName} size={17} color={Colors.primary} />}
+              title="Active Sessions"
+              subtitle="Devices where you are signed in"
+              onPress={() => setShowSessions(true)}
+            />
           </View>
         </View>
 
-        {user?.state && (
-          <View style={styles.detailsCard}>
-            <Text style={styles.detailsTitle}>Academic Details</Text>
-            {(
-              [
-                { label: "State", value: user.state, icon: "location-on" as MaterialIconName },
-                { label: "Board", value: user.board, icon: "school" as MaterialIconName },
-                { label: "Class", value: user.className, icon: "class" as MaterialIconName },
-              ] as Array<{ label: string; value: string | undefined; icon: MaterialIconName }>
-            )
-              .filter((d) => d.value)
-              .map((d, i) => (
-                <View key={i} style={styles.detailRow}>
-                  <MaterialIcons name={d.icon} size={15} color={Colors.primary} />
-                  <Text style={styles.detailLabel}>{d.label}</Text>
-                  <Text style={styles.detailValue} numberOfLines={1}>{d.value}</Text>
-                </View>
-              ))}
+        {/* ── Payment ── */}
+        <View style={st.section}>
+          <Text style={st.sectionLabel}>Payment</Text>
+          <View style={st.card}>
+            <View style={st.payNotice}>
+              <View style={st.payNoticeIcon}>
+                <Ionicons name={"card-outline" as IoniconsName} size={20} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={st.payTitle}>Manage your subscription</Text>
+                <Text style={st.paySub}>Payments, billing and plan upgrades are managed at edwai.com</Text>
+                <Pressable onPress={() => Linking.openURL("https://edwai.com").catch(() => {})} style={st.payLink}>
+                  <Text style={st.payLinkText}>Visit edwai.com →</Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
-        )}
-
-        <View style={styles.menuCard}>
-          <Text style={styles.menuSectionLabel}>Account</Text>
-          <MenuItem
-            icon={<Feather name="user" size={17} color={Colors.primary} />}
-            title="Edit Profile"
-            subtitle="Update your name, education and details"
-            onPress={() => setShowProfileModal(true)}
-          />
-          <View style={styles.menuDivider} />
-          <MenuItem
-            icon={<Ionicons name={"notifications-outline" as IoniconsName} size={17} color={Colors.primary} />}
-            title="Notifications"
-            subtitle="Manage your notification preferences"
-            onPress={() => Alert.alert("Coming Soon", "Notification settings will be available soon")}
-          />
-          <View style={styles.menuDivider} />
-          <MenuItem
-            icon={<Feather name="shield" size={17} color={Colors.primary} />}
-            title="Privacy Policy"
-            onPress={() => Alert.alert("Privacy Policy", "Visit edwai.com/privacy for our full privacy policy")}
-          />
-          <View style={styles.menuDivider} />
-          <MenuItem
-            icon={<Feather name="file-text" size={17} color={Colors.primary} />}
-            title="Terms of Service"
-            onPress={() => Alert.alert("Terms of Service", "Visit edwai.com/terms for our terms of service")}
-          />
         </View>
 
-        <View style={styles.menuCard}>
-          <Text style={styles.menuSectionLabel}>Danger Zone</Text>
-          <MenuItem
-            icon={<Feather name="log-out" size={17} color={Colors.danger} />}
-            title={loggingOut ? "Signing out..." : "Sign Out"}
-            danger
-            onPress={handleLogout}
-          />
-          <View style={styles.menuDivider} />
-          <MenuItem
-            icon={<Feather name="trash-2" size={17} color={Colors.danger} />}
-            title="Delete Account"
-            subtitle="Permanently delete your data"
-            danger
-            onPress={handleDelete}
-          />
+        {/* ── Info & Legal ── */}
+        <View style={st.section}>
+          <Text style={st.sectionLabel}>Information</Text>
+          <View style={st.card}>
+            <MenuRow
+              icon={<Feather name={"bell" as FeatherName} size={17} color={Colors.primary} />}
+              title="Notifications"
+              subtitle="Manage notification preferences"
+              onPress={() => Alert.alert("Coming Soon", "Notification settings will be available soon.")}
+            />
+            <RowDivider />
+            <MenuRow
+              icon={<Feather name={"shield" as FeatherName} size={17} color={Colors.primary} />}
+              title="Privacy Policy"
+              onPress={() => Linking.openURL("https://edwai.com/privacy").catch(() => Alert.alert("Privacy Policy", "Visit edwai.com/privacy for our full privacy policy."))}
+            />
+            <RowDivider />
+            <MenuRow
+              icon={<Feather name={"file-text" as FeatherName} size={17} color={Colors.primary} />}
+              title="Terms of Service"
+              onPress={() => Linking.openURL("https://edwai.com/terms").catch(() => Alert.alert("Terms of Service", "Visit edwai.com/terms for our terms of service."))}
+            />
+          </View>
         </View>
 
-        <View style={styles.footer}>
-          <View style={styles.madeInIndia}>
-            <Text style={styles.madeInIndiaText}>Made in India 🇮🇳</Text>
+        {/* ── Danger Zone ── */}
+        <View style={st.section}>
+          <Text style={st.sectionLabel}>Account Actions</Text>
+          <View style={st.card}>
+            <MenuRow
+              icon={<Feather name={"log-out" as FeatherName} size={17} color={Colors.danger} />}
+              title={loggingOut ? "Signing out…" : "Sign Out"}
+              danger
+              onPress={handleLogout}
+              loading={loggingOut}
+            />
+            <RowDivider />
+            <MenuRow
+              icon={<Feather name={"trash-2" as FeatherName} size={17} color={Colors.danger} />}
+              title="Delete Account"
+              subtitle="Permanently delete your account and all data"
+              danger
+              onPress={handleDeleteAccount}
+            />
           </View>
-          <Text style={styles.version}>EdwAI v1.0.0</Text>
+        </View>
+
+        {/* ── Footer ── */}
+        <View style={st.footer}>
+          <View style={st.madeInIndia}>
+            <Text style={st.madeInIndiaText}>Made in India 🇮🇳</Text>
+          </View>
+          <Text style={st.version}>EdwAI v1.0.0</Text>
         </View>
       </ScrollView>
 
-      <ProfileModal
-        visible={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-      />
+      <AccountEditModal visible={showAccount} onClose={() => setShowAccount(false)} />
+      <EducationEditModal visible={showEducation} onClose={() => setShowEducation(false)} />
+      <SessionsModal visible={showSessions} onClose={() => setShowSessions(false)} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.darkBg1 },
-  profileHeader: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  avatarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  userInfo: { flex: 1 },
-  userName: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: Colors.white,
-    marginBottom: 2,
-  },
-  userIdentifier: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.55)",
-    marginBottom: 5,
-  },
-  educationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  educationText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: Colors.navLogoEdw,
-    flex: 1,
-  },
-  planBadgeSmall: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
-  planBadgeSmallText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.white,
-  },
+
+  /* header */
+  header: { paddingHorizontal: 20, paddingBottom: 20 },
+  avatarRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  nameBlock: { flex: 1, gap: 2 },
+  userName: { fontSize: 19, fontFamily: "Inter_700Bold", color: "#fff" },
+  userIdentifier: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.55)" },
+  eduRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 },
+  eduText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.navLogoEdw, flex: 1 },
+  stateText: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.45)", flex: 1 },
+  planBadge: { backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: "rgba(255,255,255,0.22)", alignSelf: "flex-start" },
+  planBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#fff" },
+
+  /* scroll */
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 14, gap: 12 },
-  planCard: {
-    backgroundColor: Colors.darkCard,
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.darkCardBorder,
-    gap: 16,
-  },
-  planHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
-  planIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  planLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: Colors.darkTextMuted,
-  },
-  planName: {
-    fontSize: 17,
-    fontFamily: "Inter_700Bold",
-    color: Colors.darkText,
-  },
-  activeBadge: {
-    backgroundColor: "rgba(22,163,74,0.2)",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: "rgba(22,163,74,0.3)",
-  },
-  activeBadgeText: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: "#22c55e",
-  },
-  usageSection: { gap: 8 },
-  usageTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  usageLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: Colors.darkTextSub,
-  },
-  usageCount: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: Colors.darkText,
-  },
-  usageLimit: {
-    fontFamily: "Inter_400Regular",
-    color: Colors.darkTextMuted,
-    fontSize: 13,
-  },
-  progressBg: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.darkSurface,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  usageRemaining: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: Colors.darkTextMuted,
-  },
-  planNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.darkSurface,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: Colors.darkDivider,
-  },
-  planNoticeText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: Colors.darkTextSub,
-    flex: 1,
-  },
-  detailsCard: {
-    backgroundColor: Colors.darkCard,
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.darkCardBorder,
-    gap: 12,
-  },
-  detailsTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.darkTextSub,
-    marginBottom: 4,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  detailLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: Colors.darkTextMuted,
-    width: 52,
-  },
-  detailValue: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: Colors.darkText,
-    flex: 1,
-  },
-  menuCard: {
-    backgroundColor: Colors.darkCard,
-    borderRadius: 20,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.darkCardBorder,
-  },
-  menuSectionLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.darkTextMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 6,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  menuIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: "rgba(102,126,234,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuIconDanger: { backgroundColor: "rgba(220,38,38,0.15)" },
-  menuText: { flex: 1 },
-  menuTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-    color: Colors.darkText,
-  },
-  menuTitleDanger: { color: Colors.danger },
-  menuSubtitle: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: Colors.darkTextMuted,
-    marginTop: 1,
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: Colors.darkDivider,
-    marginLeft: 64,
-  },
-  footer: { alignItems: "center", gap: 6, paddingTop: 8 },
-  madeInIndia: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  madeInIndiaText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.darkTextSub,
-    letterSpacing: 0.5,
-  },
-  version: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: Colors.darkTextMuted,
-  },
+  content: { paddingHorizontal: 16, paddingTop: 14, gap: 4 },
+
+  /* section label */
+  section: { gap: 6, marginTop: 10 },
+  sectionLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.darkTextMuted, textTransform: "uppercase", letterSpacing: 0.8, paddingHorizontal: 4 },
+
+  /* card */
+  card: { backgroundColor: Colors.darkCard, borderRadius: 16, borderWidth: 1, borderColor: Colors.darkCardBorder, overflow: "hidden" },
+
+  /* plan card internals */
+  planHeader: { flexDirection: "row", alignItems: "center", gap: 12, padding: 18, borderBottomWidth: 1, borderBottomColor: Colors.darkDivider },
+  planIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  planLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.darkTextMuted },
+  planName: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.darkText, marginTop: 1 },
+  activeBadge: { backgroundColor: "rgba(22,163,74,0.18)", borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1, borderColor: "rgba(22,163,74,0.3)" },
+  activeBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#22c55e" },
+
+  usageSkeleton: { padding: 18, gap: 10 },
+  skeletonLine: { height: 12, backgroundColor: Colors.darkSurface, borderRadius: 6, width: "80%" },
+  skeletonBar: { height: 8, backgroundColor: Colors.darkSurface, borderRadius: 4, width: "100%" },
+
+  usageSection: { padding: 18, gap: 8 },
+  usageTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  usageLabel: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.darkTextSub },
+  usageCount: { fontSize: 14, fontFamily: "Inter_700Bold", color: Colors.darkText },
+  usageLimit: { fontFamily: "Inter_400Regular", color: Colors.darkTextMuted, fontSize: 13 },
+  progressBg: { height: 8, borderRadius: 4, backgroundColor: Colors.darkSurface, overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 4 },
+  usageRemaining: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.darkTextMuted },
+  renewalDate: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.darkTextMuted, marginTop: -2 },
+
+  /* payment */
+  payNotice: { flexDirection: "row", alignItems: "flex-start", gap: 14, padding: 18 },
+  payNoticeIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: "rgba(102,126,234,0.15)", alignItems: "center", justifyContent: "center" },
+  payTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.darkText },
+  paySub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.darkTextMuted, lineHeight: 18 },
+  payLink: { marginTop: 4 },
+  payLinkText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: Colors.primary },
+
+  /* menu row */
+  row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 15, gap: 12 },
+  rowIcon: { width: 34, height: 34, borderRadius: 9, backgroundColor: "rgba(102,126,234,0.14)", alignItems: "center", justifyContent: "center" },
+  rowIconDanger: { backgroundColor: "rgba(220,38,38,0.14)" },
+  rowText: { flex: 1 },
+  rowTitle: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.darkText },
+  rowTitleDanger: { color: Colors.danger },
+  rowSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.darkTextMuted, marginTop: 1 },
+  divider: { height: 1, backgroundColor: Colors.darkDivider, marginLeft: 62 },
+
+  /* footer */
+  footer: { alignItems: "center", gap: 6, paddingTop: 16 },
+  madeInIndia: { backgroundColor: "rgba(255,255,255,0.07)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 5 },
+  madeInIndiaText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.darkTextSub, letterSpacing: 0.5 },
+  version: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.darkTextMuted },
 });
