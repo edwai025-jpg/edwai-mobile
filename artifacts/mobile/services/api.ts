@@ -95,6 +95,13 @@ export type UsageInfo = {
   renewal_date?: string;
   payment_method_update_url?: string;
   days_remaining?: number;
+  /* extended fields from API spec */
+  tier_slug?: string;
+  tier_name?: string;
+  percent_used?: number;
+  grace_period_ends?: string;
+  period_end?: string;
+  autopay_enabled?: boolean;
 };
 
 export type BoardStatus = {

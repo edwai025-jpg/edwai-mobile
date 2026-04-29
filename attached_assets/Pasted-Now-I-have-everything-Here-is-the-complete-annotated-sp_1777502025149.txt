@@ -1,0 +1,263 @@
+Now I have everything. Here is the complete, annotated spec for every element in the banner area — matched directly to the screenshot:
+Main Page Banner — Full Specification for Mobile App
+
+Base URL: https://edwai-api-953672603784.asia-south1.run.app
+Screenshot Reference
+
+The banner is made of three layers stacked vertically in this order, all appearing before the main page content:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ LAYER 0: Conditional System Banner (grace / past-due / phone nudge)     │
+├─────────────────────────────────────────────────────────────────────────┤
+│ LAYER 1: Main Nav Row (logo · avatar · name · [chips] · [plan] · btns)  │
+├─────────────────────────────────────────────────────────────────────────┤
+│ LAYER 2: Mobile Sub-Row (Board chip · Class chip · Plan widget · Btn)   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Layers 1 and 2 are always visible. Layer 0 banners are conditional.
+Layer 0 — Conditional System Banners
+
+Three possible banners. Only one shows at a time based on GET /api/usage → usage.status.
+A. Past Due Banner (shown in the screenshot)
+
+Trigger condition: usage.status === "past_due"
+Property	Value
+Background	Solid red #dc2626
+Text color	White
+Icon	⛔ (text emoji, before message)
+Message	"Your account has been downgraded. Questions are now limited. Renew to restore full access."
+CTA label	"Restore Access →"
+CTA style	White underlined bold text, right-aligned
+CTA action	Opens Upgrade modal (no API call, local UI action)
+
+⛔ Your account has been downgraded. Questions are now limited.
+Renew to restore full access.                    Restore Access →
+
+B. Grace Period Banner
+
+Trigger condition: usage.status === "grace_period"
+Property	Value
+Background	Amber #f59e0b
+Text color	Dark amber #451a03
+Icon	⚠️ (text emoji)
+Message	"Your last payment failed. Update your payment method to avoid losing access. (N days remaining)"
+N days	Math.ceil((grace_period_ends_date - now) / 86400000) — derived from usage.grace_period_ends
+
+CTA — two variants:
+Condition	CTA label	Action
+usage.payment_method_update_url exists	"Update Card →"	Opens that URL in external browser
+payment_method_update_url is null	"Resolve Now →"	Opens Upgrade modal (local UI action)
+
+API: No direct call from banner. Data comes from GET /api/usage response.
+C. Phone Nudge Banner
+
+Trigger condition: User has no phone number set (user.phone === null) AND user.profile_complete === true AND key "phoneNudgeDismissed" is NOT in local storage. Shown once per session.
+Property	Value
+Background	Light blue bg-blue-50 + bottom border
+Text color	Dark blue #1e3a5f
+Icon	📱 (text emoji)
+Message	"Add your mobile number to enable phone OTP login and faster payments →"
+CTA label	"My Profile > Account" (underlined, bold)
+CTA action	Opens Profile modal, pre-navigates to Account tab
+Dismiss button	× right-aligned. Sets localStorage["phoneNudgeDismissed"] = "1" so it never shows again
+
+API: No direct call. Data source: local auth store (user.phone).
+D. Payhall Banner (below the hero banner, in main content area)
+
+Trigger condition: User just asked a question and usage.percent_used >= 100
+Property	Value
+Background	Dark mode: bg-amber-500/10 border-amber-500/30 · Light mode: bg-amber-50 border-amber-300
+Icon	🎯 (text emoji)
+Message	"You've used your last free question. Upgrade to keep learning!"
+Primary CTA	"Upgrade Now" (purple filled button) → Opens Upgrade modal
+Dismiss	× button on far right → hides the banner (no API call, local state)
+
+API: fetchUsage() is called after every question answer. If percent_used >= 100 then this banner is shown.
+Layer 1 — Main Nav Row
+
+Background: Deep purple gradient
+
+    Dark mode: linear-gradient(135deg, #1a1040, #251662, #2e1875, #1d0e5c)
+    Light mode: linear-gradient(135deg, #3730a3, #4f46e5, #6d28d9, #4338ca)
+
+Drop shadow: 0 4px 32px rgba(99,71,234,0.35) (always same)
+
+Sticky: position: sticky; top: 0; z-index: 10 — stays at the top while scrolling
+
+Decorative elements (non-interactive, purely visual):
+
+    White dot grid pattern (7% opacity)
+    Two soft radial glow orbs (purple/indigo)
+    Faded book SVG icon (4% opacity, top-right corner)
+    Faded graduation cap SVG (4% opacity, bottom-center)
+    5 tiny white star icons scattered across the banner
+
+Component 1 — EdwAI Logo
+Property	Value
+Position	Far left
+Text	"EdwAI"
+"Edw" color	#a78bfa (light purple)
+"AI" color	White
+Font	Extra-bold, tight tracking
+On tap	Nothing (no navigation, no API call)
+Component 2 — Vertical Divider
+
+A thin white semi-transparent line (rgba(255,255,255,0.20), 24px tall) separating the logo from the avatar block.
+Component 3 — User Avatar + Name Block
+
+Data source: Logged-in user object from local auth store (set at login, updated on profile save)
+Element	Description
+Avatar ring	Purple glow ring behind the circle: linear-gradient(135deg, #a78bfa, #818cf8) with 1px blur
+Photo avatar	32×32 circle. Shown when photo is fetched from API. Fetched once on page load via GET /api/student/profile/photo
+Initial avatar	Shown when no photo exists. Purple gradient circle (#7c3aed → #4f46e5). Shows first letter of user.full_name uppercased, or "S" as fallback
+Name text	user.full_name, white bold, max-width 100px (140px on tablet+), truncated with ... if long. Long name shows full name on press-and-hold (title tooltip)
+Subtitle text	user.email or user.phone (whichever exists). 45% opacity white. Hidden on small screens
+
+Avatar API:
+
+GET /api/student/profile/photo
+Authorization: Bearer {token}
+
+Returns raw JPEG bytes. Fetch with auth header → convert to local image URI. Called once on mount.
+
+On tap: Nothing. The whole block is not interactive. The Profile button (Component 6) handles opening the profile modal.
+Component 4 — Info Chips (tablet / desktop only, hidden on mobile)
+
+Shown as a horizontally scrollable pill row, centered in the nav row. Hidden on phones — moved to Layer 2 (Mobile Sub-Row).
+
+Four possible chips. Each chip: white text on rgba(255,255,255,0.12) glass background, with rgba(255,255,255,0.18) border.
+Chip	Icon (SVG)	Label prefix	Value source	Shown when
+State	Pin/location icon	"State:"	user.state (state name string)	user.state is set
+Board	Building/school icon	"Board:"	user.board (board name string), truncated to 90px	user.board is set
+Class	Open book icon	"Class:"	user.class_name OR "Individual Usage" if no class	Always shown
+Medium	Language/translate icon	"Medium:"	user.medium_name	Only when user.medium_name is set
+
+All chip data comes from the user object stored locally — no separate API call. The user object is populated at login and updated on profile education save.
+Component 5 — Inline Subscription Widget (tablet / desktop only)
+
+A tappable dark card shown between the chips and the action buttons. Hidden on phones — moved to Layer 2.
+Element	Value
+Background	rgba(10,6,40,0.55) dark glass with backdrop-filter: blur(10px)
+Border	1px solid rgba(255,255,255,0.22)
+On tap	Opens Upgrade modal (local UI action, no API call)
+
+Contents:
+Element	Description
+Plan emoji	🆓 free · 🥉 tier1 · 🥈 tier2 · 🥇 tier3 · 💎 anything higher
+Plan name	usage.tier_name or "Free" — white bold 10px text
+"N/M Q" count	usage.questions_used / usage.question_limit — white 10px text, right-aligned
+Progress bar	Full-width, 6px tall rounded bar. Color: purple-indigo gradient <70% · amber-yellow 70–89% · red ≥90%
+Reset date	↺ DD Mon formatted from usage.period_end. Shown only on large screens (lg+). Grayed out
+Chevron →	Small white right-arrow icon indicating it is tappable
+
+API: GET /api/usage (called once on page mount via fetchUsage())
+Component 6 — Theme Toggle Button ☀️/🌙
+Property	Value
+Size	32×32px rounded square
+Background	rgba(255,255,255,0.10)
+Border	1px solid rgba(255,255,255,0.15)
+Icon (dark mode active)	☀️ — tap to switch to light mode
+Icon (light mode active)	🌙 — tap to switch to dark mode
+On tap	Calls toggleMode() — writes localStorage["edwai_mode"] = "primary" or "secondary", re-renders the whole app with the new theme
+API	No API call. Pure local localStorage state
+Component 7 — Profile Button 👤
+Property	Value
+Background	rgba(139,92,246,0.75) — translucent purple
+Border	1px solid rgba(167,139,250,0.5) — light purple
+Text color	White
+Icon	Person silhouette SVG (person with head + shoulders outline)
+Label	"Profile" (hidden on very small screens, icon only)
+On tap	Opens Profile Modal (local state showProfileModal = true)
+API	No API call from the button itself. The modal that opens makes API calls
+Component 8 — Logout Button 🚪
+Property	Value
+Background	rgba(239,68,68,0.70) — translucent red
+Border	1px solid rgba(252,165,165,0.40) — light red
+Text color	White
+Label	"Logout" (text on tablet+) / Arrow-out-of-box SVG icon (phones only)
+Icon	Door-exit / arrow-pointing-right-out-of-box SVG
+On tap	Clears local auth state (token + user cleared from memory/storage) → navigates to /login screen
+API	No API call. Token is simply discarded locally
+Layer 2 — Mobile Sub-Row (phone screens only)
+
+A second row below the main nav row, separated by a thin rgba(255,255,255,0.08) top border. Shown only on screens smaller than md breakpoint (≈ 768px). On tablet/desktop this row is hidden entirely because that info is in Layer 1.
+
+Horizontal layout: [Board chip] [Class chip] ——spacer—— [Plan widget] [Upgrade button]
+Component 9 — Board Chip (mobile sub-row)
+Property	Value
+Icon	Building/school SVG (same as desktop chip)
+Label	"Board:" (50% opacity white)
+Value	user.board — white bold, max-width 90px, truncated
+Background	rgba(255,255,255,0.12) glass pill
+Border	1px solid rgba(255,255,255,0.18)
+Shown when	user.board is set
+On tap	Nothing (display only)
+API	None — data from local user object
+Component 10 — Class Chip (mobile sub-row)
+Property	Value
+Icon	Open book SVG
+Label	"Class:" (50% opacity white)
+Value	user.class_name OR "Individual" if no class set
+Background	Same glass pill style as Board chip
+Shown	Always
+On tap	Nothing
+API	None
+Component 11 — Mini Plan Widget (mobile sub-row)
+
+Tappable compact version of Component 5.
+Element	Value
+Background	rgba(10,6,40,0.55) dark glass
+Border	1px solid rgba(255,255,255,0.22)
+Plan emoji	🆓/🥉/🥈/🥇/💎 based on usage.tier_slug
+Plan name	usage.tier_name — white bold 10px, line 1
+Progress bar	64px wide, 6px tall. Same color rules as Component 5
+Count	usage.questions_used / usage.question_limit — 9px white text
+On tap	Opens Upgrade modal
+API	GET /api/usage (same data as Component 5)
+
+This is the widget visible in the screenshot as the plan section on the right of the sub-row.
+Component 12 — Upgrade Button (mobile sub-row)
+Property	Value
+Label	"Upgrade"
+Background	rgba(10,6,40,0.55) dark glass
+Border	1px solid rgba(255,255,255,0.22)
+Text	White, 11px, semi-bold
+On tap	Opens Upgrade modal
+API	No direct call
+All API Calls for the Entire Banner Area
+API	When Called	Data Used By
+GET /api/usage	Once on page mount (fetchUsage())	Grace banner, Past Due banner, Payhall banner, Plan widget (Components 5 and 11), Upgrade button
+GET /api/student/profile/photo	Once on page mount	Avatar image in Component 3
+POST /api/billing/autopay/toggle	From Payment tab inside Profile modal	Not in banner directly
+
+Local-only (no API calls):
+
+    Theme toggle → localStorage["edwai_mode"]
+    Logout → clear token from memory/localStorage → navigate to login
+    Dismiss phone nudge → localStorage["phoneNudgeDismissed"] = "1"
+    Open Profile modal → local showProfileModal state
+    Open Upgrade modal → local showUpgradeModal state
+
+GET /api/usage Full Response Reference
+
+This single API call drives all billing-related visuals across the banner:
+
+{
+  "tier_slug": "free",
+  "tier_name": "Free Plan",
+  "status": "active",
+  "questions_used": 16,
+  "question_limit": 50,
+  "percent_used": 32.0,
+  "period_end": "2025-05-28T00:00:00",
+  "grace_period_ends": null,
+  "payment_method_update_url": null,
+  "autopay_enabled": false
+}
+
+status → Banner mapping:
+status value	Banner shown	Color
+"active"	None	—
+"free"	None	—
+"grace_period"	Grace Period Banner	Amber
+"past_due"	Past Due Banner (screenshot)	Red
