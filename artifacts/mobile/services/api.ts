@@ -523,7 +523,7 @@ const api = {
     ) =>
       request<{ message: string; user: ApiUser }>(
         "/api/student/profile",
-        { method: "PUT", body: JSON.stringify(data) },
+        { method: "PATCH", body: JSON.stringify(data) },
         token
       ),
 
