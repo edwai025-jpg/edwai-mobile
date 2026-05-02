@@ -8,6 +8,7 @@ import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
 import { Colors } from "@/constants/colors";
+import { useTheme } from "@/context/theme";
 
 const DARK_TAB_BG = "#16213e";
 const DARK_ACTIVE = "#a78bfa";
@@ -36,18 +37,24 @@ function NativeTabLayout() {
 function ClassicTabLayout() {
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+  const { isDark } = useTheme();
+
+  const tabBg = isDark ? DARK_TAB_BG : "#ffffff";
+  const tabActive = isDark ? DARK_ACTIVE : Colors.primary;
+  const tabInactive = isDark ? DARK_INACTIVE : Colors.gray400;
+  const tabBorder = isDark ? DARK_BORDER : Colors.gray200;
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: DARK_ACTIVE,
-        tabBarInactiveTintColor: DARK_INACTIVE,
+        tabBarActiveTintColor: tabActive,
+        tabBarInactiveTintColor: tabInactive,
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : DARK_TAB_BG,
+          backgroundColor: isIOS ? "transparent" : tabBg,
           borderTopWidth: 1,
-          borderTopColor: DARK_BORDER,
+          borderTopColor: tabBorder,
           elevation: 0,
           ...(isWeb ? { height: 84 } : {}),
         },
@@ -55,12 +62,12 @@ function ClassicTabLayout() {
           isIOS ? (
             <BlurView
               intensity={80}
-              tint="dark"
+              tint={isDark ? "dark" : "light"}
               style={StyleSheet.absoluteFill}
             />
           ) : isWeb ? (
             <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: DARK_TAB_BG }]}
+              style={[StyleSheet.absoluteFill, { backgroundColor: tabBg }]}
             />
           ) : null,
       }}

@@ -27,6 +27,7 @@ import FlashcardsSection from "@/components/study/FlashcardsSection";
 import IndianLanguageKeyboard from "@/components/study/IndianLanguageKeyboard";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
+import { useTheme } from "@/context/theme";
 import api, {
   ApiError,
   BoardStatus,
@@ -108,11 +109,15 @@ function HomeBanner({
   usageLoading,
   onUpgrade,
   onLogout,
+  isDark,
+  onToggleTheme,
 }: {
   usage: UsageInfo | null;
   usageLoading: boolean;
   onUpgrade: () => void;
   onLogout: () => void;
+  isDark: boolean;
+  onToggleTheme: () => void;
 }) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -217,7 +222,9 @@ function HomeBanner({
 
       {/* ── Layer 1: Main Nav ── */}
       <LinearGradient
-        colors={["#1a1040", "#251662", "#2e1875", "#1d0e5c"]}
+        colors={isDark
+          ? ["#1a1040", "#251662", "#2e1875", "#1d0e5c"]
+          : ["#3730a3", "#4f46e5", "#6d28d9", "#4338ca"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[
@@ -225,12 +232,16 @@ function HomeBanner({
           { paddingTop: statusBanner || !phoneNudgeDismissed ? 12 : topPad + 12 },
         ]}
       >
-        {/* Decorative dots */}
+        {/* Decorative dot-grid (28×28 repeat, 1.5px dots) */}
         <View style={nb.dotGrid} pointerEvents="none">
-          {Array.from({ length: 20 }).map((_, i) => (
+          {Array.from({ length: 45 }).map((_, i) => (
             <View key={i} style={nb.dot} />
           ))}
         </View>
+
+        {/* Glow orbs */}
+        <View style={nb.glowTopRight} pointerEvents="none" />
+        <View style={nb.glowBottomLeft} pointerEvents="none" />
 
         <View style={nb.navRow}>
           {/* Logo */}
@@ -264,6 +275,9 @@ function HomeBanner({
 
           {/* Action buttons */}
           <View style={nb.actions}>
+            <Pressable style={nb.themeBtn} onPress={onToggleTheme} hitSlop={6}>
+              <Text style={nb.themeBtnIcon}>{isDark ? "☀️" : "🌙"}</Text>
+            </Pressable>
             <Pressable style={nb.logoutBtn} onPress={onLogout} hitSlop={6}>
               <Ionicons name="log-out-outline" size={17} color="#fff" />
             </Pressable>
@@ -359,8 +373,10 @@ const bn = StyleSheet.create({
 /* Nav styles */
 const nb = StyleSheet.create({
   nav: { paddingHorizontal: 14, paddingBottom: 12, overflow: "hidden" },
-  dotGrid: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, flexDirection: "row", flexWrap: "wrap", gap: 14, padding: 10, opacity: 0.07 },
-  dot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: "#fff" },
+  dotGrid: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, flexDirection: "row", flexWrap: "wrap", gap: 26, padding: 8, opacity: 0.07 },
+  dot: { width: 2, height: 2, borderRadius: 1, backgroundColor: "#fff" },
+  glowTopRight: { position: "absolute", top: -60, right: "18%", width: 220, height: 220, borderRadius: 110, backgroundColor: "rgba(139,92,246,0.40)" },
+  glowBottomLeft: { position: "absolute", bottom: -40, left: "30%", width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(99,102,241,0.30)" },
   navRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   logoWrap: { flexDirection: "row", alignItems: "baseline" },
   logoEdw: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.navLogoEdw, letterSpacing: -0.5 },
@@ -373,6 +389,8 @@ const nb = StyleSheet.create({
   userName: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#fff", maxWidth: 110 },
   userSub: { fontSize: 10, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.45)", maxWidth: 110 },
   actions: { flexDirection: "row", gap: 6 },
+  themeBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.10)", borderWidth: 1, borderColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
+  themeBtnIcon: { fontSize: 14 },
   logoutBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(239,68,68,0.70)", borderWidth: 1, borderColor: "rgba(252,165,165,0.40)", alignItems: "center", justifyContent: "center" },
   subRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
   chipsGroup: { flexDirection: "row", gap: 6, flex: 1, flexWrap: "wrap" },
@@ -403,23 +421,27 @@ function DarkPicker({
   loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const { isDark } = useTheme();
+  const inputBg = isDark ? "#2a2a3e" : "#ffffff";
+  const textCol = isDark ? TEXT_COLOR : "#111827";
+  const borderCol = isDark ? BORDER : "#e5e7eb";
   const selectedName = options.find((o) => String(o.id) === String(selected))?.name ?? "";
   return (
     <View style={dp.wrap}>
-      <Text style={dp.label}>{label}</Text>
-      <Pressable style={[dp.sel, disabled && dp.disabled]} onPress={() => !disabled && !loading && setOpen((v) => !v)}>
+      <Text style={[dp.label, !isDark && { color: "#374151" }]}>{label}</Text>
+      <Pressable style={[dp.sel, disabled && dp.disabled, { backgroundColor: inputBg }]} onPress={() => !disabled && !loading && setOpen((v) => !v)}>
         {loading
           ? <ActivityIndicator size="small" color={PRIMARY} style={{ marginRight: 8 }} />
-          : <Text style={[dp.selText, !selectedName && dp.placeholder]} numberOfLines={1}>{selectedName || placeholder}</Text>
+          : <Text style={[dp.selText, !selectedName && dp.placeholder, { color: selectedName ? textCol : MUTED }]} numberOfLines={1}>{selectedName || placeholder}</Text>
         }
-        <Feather name={open ? "chevron-up" : "chevron-down"} size={14} color={MUTED} />
+        <Feather name={open ? "chevron-up" : "chevron-down"} size={14} color={isDark ? MUTED : Colors.gray500} />
       </Pressable>
       {open && (
-        <View style={dp.dropdown}>
+        <View style={[dp.dropdown, { backgroundColor: inputBg, borderColor: borderCol }]}>
           <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: 164 }}>
             {options.map((opt) => (
-              <Pressable key={String(opt.id)} style={[dp.option, String(opt.id) === String(selected) && dp.optSel]} onPress={() => { onSelect(opt); setOpen(false); }}>
-                <Text style={[dp.optText, String(opt.id) === String(selected) && dp.optTextSel]}>{opt.name}</Text>
+              <Pressable key={String(opt.id)} style={[dp.option, { borderBottomColor: borderCol }, String(opt.id) === String(selected) && dp.optSel]} onPress={() => { onSelect(opt); setOpen(false); }}>
+                <Text style={[dp.optText, { color: textCol }, String(opt.id) === String(selected) && dp.optTextSel]}>{opt.name}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -818,20 +840,32 @@ export default function TextbooksScreen() {
     } finally { setStartingProcess(false); }
   }, [accessToken]);
 
+  const { isDark, toggleTheme } = useTheme();
   const isQuerying = queryLoading || streaming;
   const isRestricted = !!boardStatus?.is_restricted && boardStatus.processing_status !== "completed";
   const boardReady = !boardStatusLoading && !isRestricted;
   const hasNoBoard = !boardId;
   const activeLang = TRANS_LANGS.find((l) => l.code === transLang);
+  const cardBg = isDark ? CARD_BG : "#ffffff";
+  const cardBorder = isDark ? BORDER : "#e5e7eb";
+  const textCol = isDark ? TEXT_COLOR : "#111827";
+  const mutedCol = isDark ? MUTED : "#6b7280";
 
   return (
-    <View style={sc.root}>
+    <LinearGradient
+      colors={isDark ? ["#1a1a2e", "#16213e"] : ["#eff6ff", "#ffffff", "#faf5ff"]}
+      style={sc.root}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
       {/* ── Sticky Banner ── */}
       <HomeBanner
         usage={usage}
         usageLoading={usageLoading}
         onUpgrade={() => setShowUpgrade(true)}
         onLogout={handleLogout}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
       />
 
       <ScrollView
@@ -841,9 +875,9 @@ export default function TextbooksScreen() {
       >
         {/* ─── BOARD STATUS ─── */}
         {boardStatusLoading && (
-          <View style={[sc.card, { alignItems: "center", paddingVertical: 28 }]}>
+          <View style={[sc.card, { alignItems: "center", paddingVertical: 28, backgroundColor: cardBg, borderColor: cardBorder }]}>
             <ActivityIndicator color={PRIMARY} />
-            <Text style={{ color: MUTED, marginTop: 10, fontSize: 13 }}>Checking board status…</Text>
+            <Text style={{ color: mutedCol, marginTop: 10, fontSize: 13 }}>Checking board status…</Text>
           </View>
         )}
 
@@ -871,8 +905,8 @@ export default function TextbooksScreen() {
 
         {/* ─── BOOK SELECTION ─── */}
         {boardReady && !hasNoBoard && (
-          <View style={sc.card}>
-            <Text style={sc.cardTitle}>📖 Select Your Textbook</Text>
+          <View style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+            <Text style={[sc.cardTitle, { color: textCol }]}>📖 Select Your Textbook</Text>
             <DarkPicker label="Class / Year" options={classes} selected={selectedClass?.id ?? null} onSelect={(v) => onClassSelect({ id: v.id as number, name: v.name })} placeholder="Select Class" loading={classesLoading} disabled={classes.length === 0 && !classesLoading} />
             <DarkPicker label="Subject" options={subjects.map((s) => ({ id: s, name: s }))} selected={selectedSubject} onSelect={(v) => onSubjectSelect(v.name)} placeholder="Select Subject" disabled={!selectedClass || subjects.length === 0} loading={docsLoading && !!selectedClass && !selectedSubject} />
             <DarkPicker label="Textbook" options={documents.map((d) => ({ id: d.id, name: d.title }))} selected={selectedDoc?.id ?? null} onSelect={(v) => { const d = documents.find((x) => x.id === v.id); if (d) onDocSelect(d); }} placeholder="Select Textbook" disabled={!selectedSubject || documents.length === 0} loading={docsLoading && !!selectedSubject && !selectedDoc} />
@@ -890,22 +924,22 @@ export default function TextbooksScreen() {
 
         {/* ─── HELP ─── */}
         {boardReady && !hasNoBoard && !selectedDoc && (
-          <View style={sc.card}>
-            <Text style={sc.cardTitle}>💬 How to use EdwAI</Text>
+          <View style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+            <Text style={[sc.cardTitle, { color: textCol }]}>💬 How to use EdwAI</Text>
             {[["📚","Select your class, subject, and textbook above"],["✍️","Type your question in the box below"],["🔍","Choose Answer from Book to get the exact answer"],["💡","Choose Learn Concept for a detailed explanation"]].map(([icon, text], i) => (
-              <View key={i} style={sc.helpRow}><Text style={sc.helpIcon}>{icon}</Text><Text style={sc.helpText}>{text}</Text></View>
+              <View key={i} style={sc.helpRow}><Text style={sc.helpIcon}>{icon}</Text><Text style={[sc.helpText, { color: mutedCol }]}>{text}</Text></View>
             ))}
           </View>
         )}
 
         {/* ─── QUESTION INTERFACE ─── */}
         {selectedDoc && (
-          <View style={sc.card}>
+          <View style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <View style={sc.qHeader}>
-              <View style={sc.qIconBox}><Text style={{ fontSize: 18 }}>💬</Text></View>
+              <View style={[sc.qIconBox, !isDark && { backgroundColor: "rgba(102,126,234,0.10)" }]}><Text style={{ fontSize: 18 }}>💬</Text></View>
               <View style={{ flex: 1 }}>
-                <Text style={sc.cardTitle}>Ask a Question</Text>
-                <Text style={sc.qDocName} numberOfLines={1}>From: <Text style={{ color: PRIMARY }}>{selectedDoc.title}</Text></Text>
+                <Text style={[sc.cardTitle, { color: textCol }]}>Ask a Question</Text>
+                <Text style={[sc.qDocName, { color: mutedCol }]} numberOfLines={1}>From: <Text style={{ color: PRIMARY }}>{selectedDoc.title}</Text></Text>
               </View>
             </View>
 
@@ -963,13 +997,13 @@ export default function TextbooksScreen() {
             </View>
 
             {/* Textarea */}
-            <View style={sc.textareaWrap}>
+            <View style={[sc.textareaWrap, !isDark && { backgroundColor: "#f9fafb", borderColor: "#e5e7eb" }]}>
               <TextInput
-                style={sc.textarea}
+                style={[sc.textarea, { backgroundColor: isDark ? "#2a2a3e" : "#f9fafb", color: textCol }]}
                 multiline
                 numberOfLines={4}
                 placeholder={inputMode === "transliterate" ? 'Type in English, press Space to convert (e.g., "namaste ")' : "e.g., What are the main relief features of India?"}
-                placeholderTextColor={MUTED}
+                placeholderTextColor={mutedCol}
                 value={question}
                 onChangeText={handleQuestionChange}
                 editable={!isQuerying && !ocrLoading}
@@ -1049,7 +1083,7 @@ export default function TextbooksScreen() {
       )}
 
       <UpgradeModal visible={showUpgrade} onClose={() => setShowUpgrade(false)} />
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -1077,7 +1111,7 @@ const im = StyleSheet.create({
 });
 
 const sc = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#1a1a2e" },
+  root: { flex: 1 },
   scroll: { paddingHorizontal: 16, paddingTop: 12 },
   card: { backgroundColor: CARD_BG, borderRadius: 12, borderWidth: 1, borderColor: BORDER, padding: 16, marginBottom: 12 },
   cardTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: TEXT_COLOR, marginBottom: 12 },

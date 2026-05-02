@@ -22,6 +22,7 @@ import EducationEditModal from "@/components/EducationEditModal";
 import SessionsModal from "@/components/SessionsModal";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
+import { useTheme } from "@/context/theme";
 import api, { UsageInfo } from "@/services/api";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
@@ -60,31 +61,40 @@ function MenuRow({
   right?: React.ReactNode;
   loading?: boolean;
 }) {
+  const { isDark } = useTheme();
+  const pressedBg = isDark ? Colors.darkSurface : "#f3f4f6";
+  const titleColor = isDark ? Colors.darkText : "#111827";
+  const subColor = isDark ? Colors.darkTextMuted : "#6b7280";
+  const chevronColor = isDark ? Colors.darkTextMuted : "#9ca3af";
   return (
     <Pressable
-      style={({ pressed }) => [st.row, pressed && { backgroundColor: Colors.darkSurface }]}
+      style={({ pressed }) => [st.row, pressed && { backgroundColor: pressedBg }]}
       onPress={onPress}
     >
       <View style={[st.rowIcon, danger && st.rowIconDanger]}>{icon}</View>
       <View style={st.rowText}>
-        <Text style={[st.rowTitle, danger && st.rowTitleDanger]}>{title}</Text>
-        {subtitle ? <Text style={st.rowSub}>{subtitle}</Text> : null}
+        <Text style={[st.rowTitle, { color: danger ? Colors.danger : titleColor }]}>{title}</Text>
+        {subtitle ? <Text style={[st.rowSub, { color: subColor }]}>{subtitle}</Text> : null}
       </View>
       {loading
-        ? <ActivityIndicator size="small" color={Colors.darkTextMuted} />
-        : right ?? <Feather name="chevron-right" size={16} color={danger ? Colors.danger : Colors.darkTextMuted} />
+        ? <ActivityIndicator size="small" color={chevronColor} />
+        : right ?? <Feather name="chevron-right" size={16} color={danger ? Colors.danger : chevronColor} />
       }
     </Pressable>
   );
 }
 
 /* ─── Divider ────────────────────────────────────────────────────────────── */
-const RowDivider = () => <View style={st.divider} />;
+const RowDivider = () => {
+  const { isDark } = useTheme();
+  return <View style={[st.divider, !isDark && { backgroundColor: "#f3f4f6" }]} />;
+};
 
 /* ─── Main Screen ────────────────────────────────────────────────────────── */
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser, accessToken } = useAuth();
+  const { isDark } = useTheme();
 
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [usageLoading, setUsageLoading] = useState(true);
@@ -157,8 +167,23 @@ export default function ProfileScreen() {
       ]
     );
 
+  const pageBgColors = isDark
+    ? [Colors.darkBg1, Colors.darkBg2] as const
+    : ["#eff6ff", "#ffffff", "#faf5ff"] as const;
+  const cardBg = isDark ? Colors.darkCard : "#ffffff";
+  const cardBorder = isDark ? Colors.darkCardBorder : "#e5e7eb";
+  const textMain = isDark ? "#ffffff" : "#111827";
+  const textMuted = isDark ? Colors.darkTextMuted : "#374151";
+  const dividerColor = isDark ? Colors.darkDivider : "#f3f4f6";
+  const rowPressedBg = isDark ? Colors.darkSurface : "#f9fafb";
+
   return (
-    <View style={st.root}>
+    <LinearGradient
+      colors={pageBgColors}
+      style={st.root}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
       {/* ── Gradient Header ── */}
       <LinearGradient
         colors={[Colors.navHeader1, Colors.navHeader2, Colors.navHeader3]}
@@ -200,16 +225,16 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Usage / Plan Card ── */}
-        <View style={st.card}>
+        <View style={[st.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
           <View style={st.planHeader}>
             <LinearGradient colors={[Colors.primary, Colors.secondary]} style={st.planIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
               <Ionicons name={"flash" as IoniconsName} size={15} color="#fff" />
             </LinearGradient>
             <View style={{ flex: 1 }}>
-              <Text style={st.planLabel}>Current Plan</Text>
+              <Text style={[st.planLabel, { color: textMuted }]}>Current Plan</Text>
               {usageLoading
                 ? <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 2 }} />
-                : <Text style={st.planName}>{planName ?? "—"}</Text>
+                : <Text style={[st.planName, { color: textMain }]}>{planName ?? "—"}</Text>
               }
             </View>
             {!usageLoading && usage && (
@@ -229,17 +254,17 @@ export default function ProfileScreen() {
           ) : used !== null && limit !== null ? (
             <View style={st.usageSection}>
               <View style={st.usageTopRow}>
-                <Text style={st.usageLabel}>Questions Used</Text>
-                <Text style={st.usageCount}>
-                  {used}<Text style={st.usageLimit}> / {limit}</Text>
+                <Text style={[st.usageLabel, { color: textMain }]}>Questions Used</Text>
+                <Text style={[st.usageCount, { color: textMain }]}>
+                  {used}<Text style={[st.usageLimit, { color: textMuted }]}> / {limit}</Text>
                 </Text>
               </View>
-              <View style={st.progressBg}>
+              <View style={[st.progressBg, !isDark && { backgroundColor: "#e5e7eb" }]}>
                 <View style={[st.progressFill, { width: `${usagePct}%` as DimensionValue, backgroundColor: barColor }]} />
               </View>
-              <Text style={st.usageRemaining}>{limit - used} questions remaining this month</Text>
+              <Text style={[st.usageRemaining, { color: textMuted }]}>{limit - used} questions remaining this month</Text>
               {!!usage?.renewal_date && (
-                <Text style={st.renewalDate}>
+                <Text style={[st.renewalDate, { color: textMuted }]}>
                   Resets: {new Date(usage.renewal_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                 </Text>
               )}
@@ -249,8 +274,8 @@ export default function ProfileScreen() {
 
         {/* ── Account Section ── */}
         <View style={st.section}>
-          <Text style={st.sectionLabel}>Account</Text>
-          <View style={st.card}>
+          <Text style={[st.sectionLabel, { color: textMuted }]}>Account</Text>
+          <View style={[st.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <MenuRow
               icon={<Feather name={"user" as FeatherName} size={17} color={Colors.primary} />}
               title="Edit Account"
@@ -276,8 +301,8 @@ export default function ProfileScreen() {
 
         {/* ── Payment ── */}
         <View style={st.section}>
-          <Text style={st.sectionLabel}>Payment</Text>
-          <View style={st.card}>
+          <Text style={[st.sectionLabel, { color: textMuted }]}>Payment</Text>
+          <View style={[st.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <View style={st.payNotice}>
               <View style={st.payNoticeIcon}>
                 <Ionicons name={"card-outline" as IoniconsName} size={20} color={Colors.primary} />
@@ -295,8 +320,8 @@ export default function ProfileScreen() {
 
         {/* ── Info & Legal ── */}
         <View style={st.section}>
-          <Text style={st.sectionLabel}>Information</Text>
-          <View style={st.card}>
+          <Text style={[st.sectionLabel, { color: textMuted }]}>Information</Text>
+          <View style={[st.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <MenuRow
               icon={<Feather name={"bell" as FeatherName} size={17} color={Colors.primary} />}
               title="Notifications"
@@ -320,8 +345,8 @@ export default function ProfileScreen() {
 
         {/* ── Danger Zone ── */}
         <View style={st.section}>
-          <Text style={st.sectionLabel}>Account Actions</Text>
-          <View style={st.card}>
+          <Text style={[st.sectionLabel, { color: textMuted }]}>Account Actions</Text>
+          <View style={[st.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <MenuRow
               icon={<Feather name={"log-out" as FeatherName} size={17} color={Colors.danger} />}
               title={loggingOut ? "Signing out…" : "Sign Out"}
@@ -352,12 +377,12 @@ export default function ProfileScreen() {
       <AccountEditModal visible={showAccount} onClose={() => setShowAccount(false)} />
       <EducationEditModal visible={showEducation} onClose={() => setShowEducation(false)} />
       <SessionsModal visible={showSessions} onClose={() => setShowSessions(false)} />
-    </View>
+    </LinearGradient>
   );
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.darkBg1 },
+  root: { flex: 1 },
 
   /* header */
   header: { paddingHorizontal: 20, paddingBottom: 20 },

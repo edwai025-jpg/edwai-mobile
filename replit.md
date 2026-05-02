@@ -4,6 +4,28 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
+## Mobile App (EdwAI — artifacts/mobile)
+
+Expo React Native app (iOS + Android + Web).
+
+### Theme System
+- `context/theme.tsx` — `ThemeProvider` + `useTheme()` hook
+  - `mode: "primary"` = dark (default), `mode: "secondary"` = light
+  - Persisted to AsyncStorage under key `"theme-storage"`
+- Root layout wraps with `<ThemeProvider>`
+- Tab bar (`(tabs)/_layout.tsx`) responds to `isDark`
+- `HomeBanner` (index.tsx): conditional purple gradients, dot-grid (opacity 0.07),
+  glow orbs, ☀️/🌙 theme toggle button
+- `TextbooksScreen` and `ProfileScreen`: LinearGradient root, inline card overrides
+- `DarkPicker`: themed bg/text/border via inline style overrides
+
+### Key Files
+- `app/(tabs)/index.tsx` — Textbooks tab (HomeBanner + TextbooksScreen)
+- `app/(tabs)/profile.tsx` — Profile tab
+- `context/theme.tsx` — theme context
+- `constants/colors.ts` — design tokens (dark* and gray* keys)
+- `services/api.ts` — API client with dynamic proxy URL
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

@@ -1,0 +1,79 @@
+Here is the complete color theme and dark/light mode reference for the mobile project:
+EdwAI Color Theme & Dark/Light Mode — Mobile Reference Spec
+1. Theme System
+
+Storage key: theme-storage (Zustand persist → localStorage)
+Field: mode
+Values: "primary" (dark/deep blue) | "secondary" (light/cream)
+Default: "primary"
+
+On mobile, persist this in AsyncStorage under the same key "theme-storage" and hydrate it on app start.
+2. Brand Colors (Tailwind config)
+Token	Hex	Use
+primary	#667eea	Accent, CTA buttons, scrollbar thumb, active states
+primary-dark	#5568d3	Hover state of primary buttons
+secondary	#faf8f3	Light mode background surface
+secondary-dark	#e8e5df	Light mode card hover / pressed state
+3. Page-level Background
+Mode	Value
+Dark (primary)	linear-gradient(135deg, #1a1a2e → #16213e) (bottom-right)
+Light (secondary)	linear-gradient(135deg, blue-50 → white → purple-50)
+
+In React Native use: dark ['#1a1a2e', '#16213e'], light ['#eff6ff', '#ffffff', '#faf5ff'] with LinearGradient at { start: {x:0,y:0}, end: {x:1,y:1} }.
+4. Card / Surface Colors
+Token	Dark	Light
+cardBg	rgba(30,30,46,0.90)	#ffffff
+borderClass	rgba(102,126,234,0.30)	#e5e7eb (gray-200)
+Input background	#1f2937 (gray-800)	#ffffff
+Input text	#ffffff	#111827 (gray-900)
+Muted label / subtext	#9ca3af (gray-400)	#374151 (gray-700)
+Section inner bg	rgba(31,41,55,0.30) (gray-800/30)	#f9fafb (gray-50)
+5. Banner / Navigation Bar
+
+The banner is always dark-purple regardless of light/dark mode — it does not flip. It is a sticky full-width strip.
+5a. Banner background gradient
+
+Dark mode:   linear-gradient(135deg, #1a1040 0%, #251662 35%, #2e1875 60%, #1d0e5c 100%)
+Light mode:  linear-gradient(135deg, #3730a3 0%, #4f46e5 40%, #6d28d9 75%, #4338ca 100%)
+
+Drop shadow on both: rgba(99,71,234,0.35) blur 32px.
+5b. Banner decorative layer (behind all content)
+Element	Value
+Dot-grid overlay	radial-gradient(circle, rgba(255,255,255,0.07) 1.5px, transparent 1.5px) at 28 × 28 px repeat
+Top-right glow orb	220 × 220 px circle, radial-gradient(circle, rgba(139,92,246,0.4) 0%, transparent 70%), position top:-60px, right:18%
+Bottom-left glow orb	160 × 160 px circle, radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%), position bottom:-40px, left:30%
+Watermark SVG opacity	0.04
+Star opacity	0.25
+5c. Banner layout (single row, px:16 py:10)
+
+Left → Right order:
+
+    Logo — "EdwAI", white, bold. "Edw" in #a78bfa (violet-400)
+    Divider — 1px vertical, rgba(255,255,255,0.20), height 24px
+    Avatar + name — 32 × 32 rounded circle with linear-gradient(135deg, #7c3aed, #4f46e5) fallback (initial letter). Photo ring: linear-gradient(135deg, #a78bfa, #818cf8) blur 1px
+    Flex spacer (left)
+    Info chips (desktop/tablet only, hide on mobile) — State, Board, Class, Medium. Each chip: rgba(255,255,255,0.12) bg, 1px solid rgba(255,255,255,0.18), rounded-full, px:12 py:6. Label text: rgba(255,255,255,0.50). Value text: #ffffff bold
+    Flex spacer (right)
+    Subscription widget — rgba(10,6,40,0.55) bg, 1px solid rgba(255,255,255,0.22), backdropFilter: blur(10px), borderRadius: 12px
+    Divider — same as #2
+    Action buttons — theme toggle, Profile, Logout
+
+5d. Mobile sub-row (shown only on small screens, below main row)
+
+Border-top: 1px solid rgba(255,255,255,0.08), px:12 pt:8 pb:10
+
+    Board chip and Class chip — same pill style as info chips above
+    Subscription mini widget — same deep-dark bg as desktop widget
+    Upgrade button — same deep-dark bg
+
+6. Action Buttons in Banner
+Button	Background	Border	Text
+Theme toggle	rgba(255,255,255,0.10)	rgba(255,255,255,0.15)	emoji ☀️ or 🌙, 14px
+Profile	rgba(139,92,246,0.75)	rgba(167,139,250,0.50)	white, 12px bold
+Logout	rgba(239,68,68,0.70)	rgba(252,165,165,0.40)	white, 12px bold
+
+All buttons: 8px border radius, hover: scale(1.05) brightness(1.1)
+7. Theme Toggle Button — Behaviour
+
+current mode = "primary"  →  show ☀️  (clicking switches to light)
+current mode = "secondary" →  show 🌙  (clicking switches to dark)
