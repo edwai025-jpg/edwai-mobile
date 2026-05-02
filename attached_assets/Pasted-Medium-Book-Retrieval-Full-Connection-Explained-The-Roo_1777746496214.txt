@@ -1,0 +1,202 @@
+Medium → Book Retrieval: Full Connection Explained
+The Root Cause
+
+The mobile app is treating medium as optional and not saving it to the user's profile via the API. This breaks book loading because the GET /api/documents endpoint does not accept medium_id as a query parameter from your mobile app — it reads medium_id silently from the server-side user profile. If it isn't saved there, the wrong books (or no books) appear.
+The Full Chain — 5 Steps
+
+User selects Board + Class + Medium
+         │
+         ▼
+Step 1:  PUT /api/student/profile/education   ← CRITICAL — saves medium_id to server
+         │
+         ▼
+Step 2:  GET /api/student/available-classes   ← filtered by board only
+         │
+         ▼
+Step 3:  GET /api/student/available-subjects?class_id={id}  ← filtered by board only
+         │
+         ▼
+Step 4:  GET /api/documents?class_id={id}&subject={name}   ← medium_id applied automatically
+         │                                                     from saved profile on server
+         ▼
+Step 5:  Books appear (or not) based on whether medium_id was saved in Step 1
+
+Step-by-Step API Breakdown
+Step 1 — Save Education Profile (including medium_id) ✅ MUST DO THIS FIRST
+
+PUT /api/student/profile/education
+Authorization: Bearer {token}
+Content-Type: application/json
+{
+  "board_id": 3,
+  "class_id": 7,
+  "medium_id": 2      ← THIS IS WHAT DRIVES BOOK FILTERING
+}
+
+This is not optional. If medium_id is not sent here, the server stores null and all subsequent book queries ignore medium filtering entirely — meaning books in the wrong medium appear, or in some board setups no matching books appear at all.
+
+Response: { "user": { ...updated user object with medium_id, medium_name, etc... } } — store this locally as your cached user object.
+Step 2 — Load Available Classes
+
+GET /api/student/available-classes
+Authorization: Bearer {token}
+
+What the backend does:
+
+# Filters by current_user.board_id only
+# Medium is NOT used here
+db.query(Class).join(Document, Document.class_id == Class.id)
+  .filter(Document.board_id == current_user.board_id,
+          Document.processed == True)
+  .distinct()
+
+Response:
+
+[
+  { "id": 7,  "name": "Class 10" },
+  { "id": 8,  "name": "Class 11" },
+  { "id": 9,  "name": "Class 12" }
+]
+
+Important: This endpoint shows all classes that have ANY uploaded book for this board — regardless of medium. So the class list is always correct even before medium is picked.
+Step 3 — Load Available Subjects for the selected class
+
+GET /api/student/available-subjects?class_id={classId}
+Authorization: Bearer {token}
+
+What the backend does:
+
+# Filters by current_user.board_id + class_id only
+# Medium is NOT used here either
+db.query(Document.subject)
+  .filter(Document.board_id == current_user.board_id,
+          Document.processed == True,
+          Document.class_id == class_id)
+  .distinct()
+
+Response:
+
+["Mathematics", "Science", "Social Studies", "English", "Telugu"]
+
+Important: Like classes, subjects also show all that have any uploaded book for this board + class — regardless of medium. Medium is still not applied here.
+Step 4 — Load Books (Documents)
+
+GET /api/documents?class_id={classId}&subject={subjectName}
+Authorization: Bearer {token}
+
+What the backend does (this is the key part):
+
+query = db.query(Document).filter(Document.processed == True)
+# Automatically applies user's saved profile filters:
+if current_user.board_id:
+    query = query.filter(Document.board_id == current_user.board_id)
+if current_user.class_id:
+    query = query.filter(Document.class_id == current_user.class_id)
+if current_user.medium_id:
+    query = query.filter(Document.medium_id == current_user.medium_id)  # ← KEY LINE
+# Then applies the query params:
+if class_id:
+    query = query.filter(Document.class_id == class_id)
+if subject:
+    query = query.filter(Document.subject == subject)
+
+Medium filtering happens silently from the server's stored user profile — not from the URL.
+
+The mobile app calls this endpoint with only class_id and subject in the URL. The server automatically adds the medium filter internally, reading it from the database.
+
+Response:
+
+[
+  {
+    "id": 45,
+    "title": "Mathematics Class 10 Telugu Medium",
+    "subject": "Mathematics",
+    "board_id": 3,
+    "class_id": 7,
+    "medium_id": 2,
+    "processed": true,
+    "page_count": 280,
+    ...
+  }
+]
+
+The Bug Explained
+
+Here is exactly what goes wrong in your mobile app:
+Scenario	What the mobile app does	What the server returns
+Bug: medium not saved	User picks board + class + medium → saves only board_id + class_id, skips medium_id	GET /documents returns ALL mediums' books (no medium filter on server), or books from the previously saved medium
+Bug: medium saved but then board changed without re-saving	User changes board in profile modal → saves new board_id but medium dropdown reset and not saved again	Old medium_id still on server — may belong to old board, causing 0 books returned
+Correct flow	User picks board + class + medium → saves all three → then selects class + subject on study screen	GET /documents returns only the right medium's books
+The Fix for Your Mobile App
+Rule 1 — Medium is REQUIRED before book loading works correctly
+
+Even though the UI shows medium as optional, you must enforce saving it before the user reaches the study screen. Either:
+
+    Make medium selection mandatory in the onboarding/profile flow
+    Or if medium can genuinely be skipped (some boards have only one medium), detect that and auto-select it
+
+Rule 2 — Always save all three together
+
+// After user picks board → class → medium:
+await fetch('/api/student/profile/education', {
+  method: 'PUT',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    board_id: selectedBoardId,   // required
+    class_id: selectedClassId,   // required for books
+    medium_id: selectedMediumId, // REQUIRED for correct books to appear
+  }),
+});
+// Store the returned user object locally — it contains medium_id, medium_name
+
+Rule 3 — Reload subjects and books after saving
+
+After PUT /api/student/profile/education succeeds:
+
+    Call GET /api/student/available-classes → refresh class list
+    User picks a class → call GET /api/student/available-subjects?class_id={id}
+    User picks a subject → call GET /api/documents?class_id={id}&subject={name}
+
+At step 3, the server automatically applies the saved medium_id — no need to pass it in the URL.
+Why available-subjects Might Show Subjects With No Books
+
+Because GET /api/student/available-subjects does not filter by medium, it can show subjects that exist in the database for this board + class but only in a different medium. For example:
+
+    "Sanskrit" might only exist in Hindi Medium
+    If the user selected Telugu Medium and then picks Sanskrit → GET /documents returns empty
+
+Recommended fix for mobile: After loading books (GET /api/documents), if the result is empty, show:
+
+    "No textbooks available for this subject in your selected medium ([medium name]). Change your medium in Profile → Education."
+
+Complete Cascade Summary
+
+Board changes
+    │
+    ├─► Reset: class, subject, medium all cleared locally
+    │
+    ▼
+User picks Medium  ──────────────────────────────────┐
+    │                                                 │
+    ▼                                                 │
+User picks Class                                     │
+    │                                                 │
+    ▼                                                 │
+PUT /api/student/profile/education ◄─────────────────┘
+  { board_id, class_id, medium_id }   ← ALL THREE at once
+    │
+    ▼
+GET /api/student/available-subjects?class_id={id}
+    │
+    ▼
+User picks Subject
+    │
+    ▼
+GET /api/documents?class_id={id}&subject={name}
+  (medium_id applied automatically server-side from saved profile)
+    │
+    ▼
+Books displayed

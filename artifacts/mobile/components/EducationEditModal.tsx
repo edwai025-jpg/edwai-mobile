@@ -233,7 +233,9 @@ export default function EducationEditModal({ visible, onClose }: Props) {
     setBoardName(user?.board ?? "");
     setClassId(user?.classId ?? null);
     setClassName(user?.className ?? "");
-    setMediumId(null); setMediumName("");
+    /* Pre-populate medium from saved profile so it's never lost on re-save */
+    setMediumId(user?.mediumId ?? null);
+    setMediumName(user?.medium ?? "");
     setActiveSheet(null);
     setToast(null);
 
@@ -289,13 +291,15 @@ export default function EducationEditModal({ visible, onClose }: Props) {
 
   const handleSave = async () => {
     if (!boardId) { showToast("err", "Please select a board."); return; }
+    if (classId && !mediumId) { showToast("err", "Please select a medium of instruction."); return; }
     setSaving(true);
     try {
-      const res = await api.profile.updateStudentProfile(token, {
-        state_id: stateId ?? undefined,
+      /* Use the correct education endpoint — this saves medium_id to the server
+         so that GET /api/documents can apply it automatically server-side */
+      const res = await api.profile.saveEducation(token, {
         board_id: boardId,
-        class_id: classId ?? undefined,
-        medium_id: mediumId ?? undefined,
+        class_id: classId ?? null,
+        medium_id: mediumId ?? null,
       });
       await updateUser({
         state: res.user.state,
@@ -363,9 +367,9 @@ export default function EducationEditModal({ visible, onClose }: Props) {
               onPress={() => setActiveSheet("class")}
             />
             <SelectorRow
-              label="Medium of Instruction"
+              label="Medium of Instruction *"
               value={mediumName || undefined}
-              placeholder={classId ? "Select medium (optional)" : "Select a class first"}
+              placeholder={classId ? "Select medium" : "Select a class first"}
               disabled={!classId || classesLoading}
               loading={mediumsLoading}
               onPress={() => setActiveSheet("medium")}

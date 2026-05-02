@@ -534,6 +534,17 @@ const api = {
         token
       ),
 
+    /* Correct endpoint for saving education details (board + class + medium) */
+    saveEducation: (
+      token: string,
+      data: { board_id: number; class_id?: number | null; medium_id?: number | null }
+    ) =>
+      request<{ user: ApiUser }>(
+        "/api/student/profile/education",
+        { method: "PUT", body: JSON.stringify(data) },
+        token
+      ),
+
     uploadPhoto: (token: string, imageUri: string) => {
       const formData = new FormData();
       formData.append("photo", {
@@ -608,11 +619,17 @@ const api = {
         token
       ),
 
-    getDocuments: (token: string, boardId: number, classId: number, subject?: string, mediumId?: number) => {
+    /* Server automatically applies board_id + medium_id from saved profile */
+    getAvailableClasses: (token: string) =>
+      request<{ id: number; name: string }[]>("/api/student/available-classes", {}, token),
+
+    getAvailableSubjects: (token: string, classId: number) =>
+      request<string[]>(`/api/student/available-subjects?class_id=${classId}`, {}, token),
+
+    /* Server applies board_id + medium_id from saved profile — only pass class_id + subject */
+    getDocuments: (token: string, classId: number, subject?: string) => {
       const params = new URLSearchParams();
-      params.set("board_id", String(boardId));
       params.set("class_id", String(classId));
-      if (mediumId) params.set("medium_id", String(mediumId));
       if (subject) params.set("subject", subject);
       return request<Phase1Document[]>(`/api/documents?${params.toString()}`, {}, token);
     },

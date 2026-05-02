@@ -616,7 +616,6 @@ export default function TextbooksScreen() {
   const abortCtrl = useRef<AbortController | null>(null);
   const prevQuestion = useRef("");
   const boardId = user?.boardId;
-  const mediumId = user?.mediumId;
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;
 
   /* ── Fetch usage on mount ── */
@@ -694,32 +693,33 @@ export default function TextbooksScreen() {
     return () => clearInterval(t);
   }, [boardStatus?.processing_status, accessToken]);
 
+  /* Load available classes — server applies board_id from saved profile automatically */
   useEffect(() => {
     if (!accessToken || !boardId) return;
     if (boardStatus?.processing_status === "in_progress") return;
     setClassesLoading(true);
-    api.data.getClassesForBoard(boardId).then(setClasses).catch(() => {}).finally(() => setClassesLoading(false));
+    api.study.getAvailableClasses(accessToken).then(setClasses).catch(() => {}).finally(() => setClassesLoading(false));
   }, [accessToken, boardId, boardStatus?.processing_status]);
 
-  /* ── class select ── */
+  /* ── class select: load subjects via dedicated endpoint ── */
   const onClassSelect = useCallback(async (cls: { id: number; name: string }) => {
     setSelectedClass(cls); setSelectedSubject(null); setSelectedDoc(null); setSubjects([]); setDocuments([]);
-    if (!accessToken || !boardId) return;
+    if (!accessToken) return;
     setDocsLoading(true);
     try {
-      const docs = await api.study.getDocuments(accessToken, boardId, cls.id, undefined, mediumId ?? undefined);
-      setDocuments(docs);
-      setSubjects(Array.from(new Set(docs.map((d) => d.subject).filter(Boolean))) as string[]);
+      const subjs = await api.study.getAvailableSubjects(accessToken, cls.id);
+      setSubjects(subjs);
     } catch {} finally { setDocsLoading(false); }
-  }, [accessToken, boardId, mediumId]);
+  }, [accessToken]);
 
+  /* ── subject select: load documents — server applies board+medium from profile ── */
   const onSubjectSelect = useCallback(async (subj: string) => {
-    setSelectedSubject(subj); setSelectedDoc(null);
-    if (!accessToken || !boardId || !selectedClass) return;
+    setSelectedSubject(subj); setSelectedDoc(null); setDocuments([]);
+    if (!accessToken || !selectedClass) return;
     setDocsLoading(true);
-    try { setDocuments(await api.study.getDocuments(accessToken, boardId, selectedClass.id, subj, mediumId ?? undefined)); }
+    try { setDocuments(await api.study.getDocuments(accessToken, selectedClass.id, subj)); }
     catch {} finally { setDocsLoading(false); }
-  }, [accessToken, boardId, mediumId, selectedClass]);
+  }, [accessToken, selectedClass]);
 
   const onDocSelect = useCallback(async (doc: Phase1Document) => {
     setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText(""); setFlashcards([]);
