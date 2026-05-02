@@ -239,10 +239,6 @@ function HomeBanner({
           ))}
         </View>
 
-        {/* Glow orbs */}
-        <View style={nb.glowTopRight} pointerEvents="none" />
-        <View style={nb.glowBottomLeft} pointerEvents="none" />
-
         <View style={nb.navRow}>
           {/* Logo */}
           <View style={nb.logoWrap}>
@@ -375,8 +371,6 @@ const nb = StyleSheet.create({
   nav: { paddingHorizontal: 14, paddingBottom: 12, overflow: "hidden" },
   dotGrid: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, flexDirection: "row", flexWrap: "wrap", gap: 26, padding: 8, opacity: 0.07 },
   dot: { width: 2, height: 2, borderRadius: 1, backgroundColor: "#fff" },
-  glowTopRight: { position: "absolute", top: -60, right: "18%", width: 220, height: 220, borderRadius: 110, backgroundColor: "rgba(139,92,246,0.40)" },
-  glowBottomLeft: { position: "absolute", bottom: -40, left: "30%", width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(99,102,241,0.30)" },
   navRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   logoWrap: { flexDirection: "row", alignItems: "baseline" },
   logoEdw: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.navLogoEdw, letterSpacing: -0.5 },
