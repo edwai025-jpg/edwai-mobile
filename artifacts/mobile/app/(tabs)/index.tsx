@@ -661,10 +661,24 @@ export default function TextbooksScreen() {
     }
   }, [accessToken]);
 
+  /* Re-fetch board status whenever boardId changes (e.g. after profile edit) */
   useEffect(() => {
     if (!accessToken) { setBoardStatusLoading(false); return; }
     loadBoardStatus();
-  }, [accessToken]);
+  }, [accessToken, boardId]);
+
+  /* Reset all book selections when the user changes board */
+  useEffect(() => {
+    setSelectedClass(null);
+    setSelectedSubject(null);
+    setSelectedDoc(null);
+    setSubjects([]);
+    setDocuments([]);
+    setClasses([]);
+    setResponse(null);
+    setStreamText("");
+    setFlashcards([]);
+  }, [boardId]);
 
   useEffect(() => {
     if (boardStatus?.processing_status !== "in_progress") return;
