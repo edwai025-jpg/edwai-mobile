@@ -608,11 +608,13 @@ const api = {
         token
       ),
 
-    getDocuments: (token: string, boardId: number, classId: number, subject?: string) => {
-      const qs = subject
-        ? `board_id=${boardId}&class_id=${classId}&subject=${encodeURIComponent(subject)}`
-        : `board_id=${boardId}&class_id=${classId}`;
-      return request<Phase1Document[]>(`/api/documents?${qs}`, {}, token);
+    getDocuments: (token: string, boardId: number, classId: number, subject?: string, mediumId?: number) => {
+      const params = new URLSearchParams();
+      params.set("board_id", String(boardId));
+      params.set("class_id", String(classId));
+      if (mediumId) params.set("medium_id", String(mediumId));
+      if (subject) params.set("subject", subject);
+      return request<Phase1Document[]>(`/api/documents?${params.toString()}`, {}, token);
     },
 
     getQueryHistory: (token: string, documentId: number) =>

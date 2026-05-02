@@ -616,6 +616,7 @@ export default function TextbooksScreen() {
   const abortCtrl = useRef<AbortController | null>(null);
   const prevQuestion = useRef("");
   const boardId = user?.boardId;
+  const mediumId = user?.mediumId;
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;
 
   /* ── Fetch usage on mount ── */
@@ -706,19 +707,19 @@ export default function TextbooksScreen() {
     if (!accessToken || !boardId) return;
     setDocsLoading(true);
     try {
-      const docs = await api.study.getDocuments(accessToken, boardId, cls.id);
+      const docs = await api.study.getDocuments(accessToken, boardId, cls.id, undefined, mediumId ?? undefined);
       setDocuments(docs);
       setSubjects(Array.from(new Set(docs.map((d) => d.subject).filter(Boolean))) as string[]);
     } catch {} finally { setDocsLoading(false); }
-  }, [accessToken, boardId]);
+  }, [accessToken, boardId, mediumId]);
 
   const onSubjectSelect = useCallback(async (subj: string) => {
     setSelectedSubject(subj); setSelectedDoc(null);
     if (!accessToken || !boardId || !selectedClass) return;
     setDocsLoading(true);
-    try { setDocuments(await api.study.getDocuments(accessToken, boardId, selectedClass.id, subj)); }
+    try { setDocuments(await api.study.getDocuments(accessToken, boardId, selectedClass.id, subj, mediumId ?? undefined)); }
     catch {} finally { setDocsLoading(false); }
-  }, [accessToken, boardId, selectedClass]);
+  }, [accessToken, boardId, mediumId, selectedClass]);
 
   const onDocSelect = useCallback(async (doc: Phase1Document) => {
     setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText(""); setFlashcards([]);

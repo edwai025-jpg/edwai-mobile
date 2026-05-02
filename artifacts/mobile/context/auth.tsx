@@ -21,6 +21,7 @@ export type UserProfile = {
   className?: string;
   classId?: number;
   medium?: string;
+  mediumId?: number;
   plan?: string;
   questionsUsed?: number;
   questionsLimit?: number;
@@ -45,6 +46,7 @@ export function apiUserToProfile(u: ApiUser): UserProfile {
     className: u.class_name,
     classId: u.class_id,
     medium: u.medium_name,
+    mediumId: u.medium_id,
     profilePhotoUrl: u.profile_photo_url,
     role: u.role,
     authProvider: u.auth_provider,

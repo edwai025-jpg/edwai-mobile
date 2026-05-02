@@ -305,6 +305,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
         className: res.user.class_name,
         classId: res.user.class_id,
         medium: res.user.medium_name,
+        mediumId: res.user.medium_id,
       });
       await refreshUser();
       showToast("ok", "Academic details saved.");
