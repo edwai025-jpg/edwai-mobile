@@ -7,9 +7,30 @@ const PROXY_BASE = process.env.EXPO_PUBLIC_DOMAIN
   : null;
 
 function resolveUrl(path: string): string {
-  if (Platform.OS === "web" && PROXY_BASE) {
-    return `${PROXY_BASE}${path.replace(/^\/api/, "")}`;
+  const apiPath = path.replace(/^\/api/, "");
+
+  if (Platform.OS === "web") {
+    /* 1. Prefer the env-var-configured proxy (set at bundle time) */
+    if (PROXY_BASE) {
+      return `${PROXY_BASE}${apiPath}`;
+    }
+    /* 2. Fallback: derive proxy from window.location so web canvas always
+          routes through the API-server proxy and avoids production-API CORS.
+          Replit Expo web domain:  *.expo.janeway.replit.dev
+          Replit proxy domain:     *.janeway.replit.dev  (drops "expo." prefix) */
+    if (typeof window !== "undefined" && window.location?.hostname) {
+      const h = window.location.hostname;
+      const proxyHost = h.replace(/\.expo\.janeway\.replit\.dev$/, ".janeway.replit.dev");
+      if (proxyHost !== h) {
+        return `https://${proxyHost}/api-server/api/edwai${apiPath}`;
+      }
+      /* Generic Replit preview — same origin proxy path */
+      if (h.endsWith(".replit.dev") || h.endsWith(".janeway.replit.dev")) {
+        return `https://${h}/api-server/api/edwai${apiPath}`;
+      }
+    }
   }
+
   return `${PROD_URL}${path}`;
 }
 

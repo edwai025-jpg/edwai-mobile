@@ -83,7 +83,12 @@ export default function LoginScreen() {
         router.push({ pathname: "/otp", params: { type: "email", value: email.trim() } });
       }
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "Something went wrong. Please try again.";
+      let msg = "Something went wrong. Please try again.";
+      if (e instanceof ApiError) {
+        msg = e.message;
+      } else if (e instanceof TypeError && String(e.message).toLowerCase().includes("fetch")) {
+        msg = "Network error — check your connection and try again.";
+      }
       setErrorMsg(msg);
     } finally {
       setLoading(false);
