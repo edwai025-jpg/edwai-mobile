@@ -532,7 +532,7 @@ const api = {
     getClassesForBoard: (boardId: number) =>
       request<ClassItem[]>(`/api/classes?board_id=${boardId}`),
     getMediums: (boardId: number, classId: number) =>
-      request<MediumItem[]>(`/api/medium?board_id=${boardId}&class_id=${classId}`),
+      request<MediumItem[]>(`/api/mediums?board_id=${boardId}&class_id=${classId}`),
     getWhatsNew: () => request<WhatsNewResponse>("/api/whats-new"),
     getAppConfig: () => request<AppConfig>("/api/app-config"),
   },

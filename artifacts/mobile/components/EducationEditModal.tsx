@@ -268,8 +268,17 @@ export default function EducationEditModal({ visible, onClose }: Props) {
     if (!visible || !boardId || !classId) { setMediums([]); return; }
     setMediumsLoading(true);
     api.data.getMediums(boardId, classId)
-      .then(setMediums)
-      .catch(() => {})
+      .then((list) => {
+        /* Deduplicate by name so "English x5" doesn't confuse users */
+        const seen = new Set<string>();
+        const deduped = list.filter((m) => {
+          if (seen.has(m.name)) return false;
+          seen.add(m.name);
+          return true;
+        });
+        setMediums(deduped);
+      })
+      .catch(() => showToast("err", "Could not load mediums. Check your connection."))
       .finally(() => setMediumsLoading(false));
   }, [visible, boardId, classId]);
 
