@@ -945,8 +945,12 @@ export default function TextbooksScreen() {
                 const label = m === "normal" ? "✍️ Normal" : m === "transliterate" ? "🔤 Transliterate" : "⌨️ Keyboard";
                 const active = inputMode === m;
                 return (
-                  <Pressable key={m} style={[im.btn, active && im.btnActive]} onPress={() => { setInputMode(m); setSuggestions([]); }}>
-                    <Text style={active ? im.btnTextActive : im.btnText}>{label}</Text>
+                  <Pressable
+                    key={m}
+                    style={[im.btn, active && im.btnActive, !active && !isDark && { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" }]}
+                    onPress={() => { setInputMode(m); setSuggestions([]); }}
+                  >
+                    <Text style={[active ? im.btnTextActive : im.btnText, !active && !isDark && { color: "#374151" }]}>{label}</Text>
                   </Pressable>
                 );
               })}
@@ -982,11 +986,17 @@ export default function TextbooksScreen() {
 
             {/* Mode tabs */}
             <View style={sc.modeTabs}>
-              <Pressable style={[sc.modeTab, mode === "retrieve" && sc.modeTabActive]} onPress={() => setMode("retrieve")}>
-                <Text style={mode === "retrieve" ? sc.modeTabTextActive : sc.modeTabText}>📖 Answer from Book</Text>
+              <Pressable
+                style={[sc.modeTab, mode === "retrieve" && sc.modeTabActive, !isDark && mode !== "retrieve" && { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" }, !isDark && mode === "retrieve" && { backgroundColor: "rgba(102,126,234,0.12)", borderColor: "rgba(102,126,234,0.40)" }]}
+                onPress={() => setMode("retrieve")}
+              >
+                <Text style={[mode === "retrieve" ? sc.modeTabTextActive : sc.modeTabText, !isDark && mode !== "retrieve" && { color: "#374151" }]}>📖 Answer from Book</Text>
               </Pressable>
-              <Pressable style={[sc.modeTab, mode === "explain" && sc.modeTabActive]} onPress={() => setMode("explain")}>
-                <Text style={mode === "explain" ? sc.modeTabTextActive : sc.modeTabText}>💡 Learn Concept</Text>
+              <Pressable
+                style={[sc.modeTab, mode === "explain" && sc.modeTabActive, !isDark && mode !== "explain" && { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" }, !isDark && mode === "explain" && { backgroundColor: "rgba(102,126,234,0.12)", borderColor: "rgba(102,126,234,0.40)" }]}
+                onPress={() => setMode("explain")}
+              >
+                <Text style={[mode === "explain" ? sc.modeTabTextActive : sc.modeTabText, !isDark && mode !== "explain" && { color: "#374151" }]}>💡 Learn Concept</Text>
               </Pressable>
             </View>
 

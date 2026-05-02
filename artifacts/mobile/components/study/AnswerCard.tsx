@@ -15,13 +15,14 @@ import {
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 
+import { useTheme } from "@/context/theme";
 import { CitationImage, DiagramImage, PageCitation, QueryResponse } from "@/services/api";
 
 const PRIMARY = "#667eea";
 const CARD_BG = "#1e1e3a";
 const BORDER = "rgba(255,255,255,0.10)";
 
-/* ─── Preprocess markdown text (10c spec) ──────────────────────────────── */
+/* ─── Preprocess markdown text ─────────────────────────────────────────── */
 function preprocessMarkdown(text: string): string {
   let out = text;
   out = out.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$${inner}$$`);
@@ -30,7 +31,41 @@ function preprocessMarkdown(text: string): string {
   return out;
 }
 
-/* ─── Animated Spinner Ring (10a spec) ─────────────────────────────────── */
+/* ─── Dynamic markdown styles ───────────────────────────────────────────── */
+function getMdStyles(isDark: boolean) {
+  const body = isDark ? "#e5e7eb" : "#374151";
+  const heading = isDark ? "#fff" : "#111827";
+  const h3 = isDark ? "#c4b5fd" : "#6d28d9";
+  const em = isDark ? "#d1d5db" : "#4b5563";
+  const item = isDark ? "#e5e7eb" : "#374151";
+  const border = isDark ? BORDER : "#e5e7eb";
+  const thBg = isDark ? "rgba(102,126,234,0.2)" : "rgba(102,126,234,0.10)";
+  const tdColor = isDark ? "#e5e7eb" : "#374151";
+  const fenceBg = isDark ? "#111827" : "#f3f4f6";
+  const codeColor = isDark ? "#a7f3d0" : "#065f46";
+
+  return {
+    body: { color: body, fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 22 },
+    heading1: { color: heading, fontFamily: "Inter_700Bold", fontSize: 18, marginTop: 10, marginBottom: 4 },
+    heading2: { color: heading, fontFamily: "Inter_700Bold", fontSize: 16, marginTop: 8, marginBottom: 4 },
+    heading3: { color: h3, fontFamily: "Inter_600SemiBold", fontSize: 15, marginTop: 6, marginBottom: 2 },
+    strong: { color: heading, fontFamily: "Inter_700Bold" },
+    em: { color: em, fontStyle: "italic" as const },
+    bullet_list: { marginLeft: 4 },
+    ordered_list: { marginLeft: 4 },
+    bullet_list_item: { color: item },
+    ordered_list_item: { color: item },
+    code_inline: { backgroundColor: "rgba(102,126,234,0.2)", color: "#a78bfa", fontFamily: "Inter_500Medium", borderRadius: 4, paddingHorizontal: 4 },
+    fence: { backgroundColor: fenceBg, borderRadius: 8, padding: 12, marginVertical: 8 },
+    code_block: { color: codeColor, fontFamily: "Inter_400Regular", fontSize: 12 },
+    blockquote: { borderLeftWidth: 4, borderLeftColor: "#60a5fa", paddingLeft: 12, opacity: 0.9 },
+    table: { borderWidth: 1, borderColor: border, borderRadius: 4 },
+    th: { backgroundColor: thBg, color: heading, fontFamily: "Inter_600SemiBold", padding: 8 },
+    td: { color: tdColor, padding: 8, borderTopWidth: 1, borderTopColor: border },
+  };
+}
+
+/* ─── Animated Spinner Ring ─────────────────────────────────────────────── */
 function SpinnerRing() {
   const spin = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -41,24 +76,15 @@ function SpinnerRing() {
     return () => loop.stop();
   }, [spin]);
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
-  return (
-    <Animated.View style={[sp.ring, { transform: [{ rotate }] }]} />
-  );
+  return <Animated.View style={[sp.ring, { transform: [{ rotate }] }]} />;
 }
 const sp = StyleSheet.create({
-  ring: {
-    width: 48, height: 48, borderRadius: 24,
-    borderWidth: 4,
-    borderColor: PRIMARY,
-    borderTopColor: "transparent",
-  },
+  ring: { width: 48, height: 48, borderRadius: 24, borderWidth: 4, borderColor: PRIMARY, borderTopColor: "transparent" },
 });
 
-/* ─── Image Zoom Modal (section 11) ────────────────────────────────────── */
+/* ─── Image Zoom Modal ───────────────────────────────────────────────────── */
 function ImageZoomModal({ visible, uri, label, onClose }: { visible: boolean; uri: string; label: string; onClose: () => void }) {
   const isDiagram = label.toLowerCase().startsWith("🖼️");
-  const footerLabel = isDiagram ? "🖼️ Diagram" : label;
-
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
       <TouchableWithoutFeedback onPress={onClose}>
@@ -69,17 +95,11 @@ function ImageZoomModal({ visible, uri, label, onClose }: { visible: boolean; ur
             </Pressable>
             <TouchableWithoutFeedback>
               <View style={zm.card}>
-                <ScrollView
-                  maximumZoomScale={4}
-                  minimumZoomScale={1}
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{ alignItems: "center" }}
-                  style={{ maxHeight: "85%" as `${number}%` }}
-                >
+                <ScrollView maximumZoomScale={4} minimumZoomScale={1} showsVerticalScrollIndicator={false} contentContainerStyle={{ alignItems: "center" }} style={{ maxHeight: "85%" as `${number}%` }}>
                   <Image source={{ uri }} style={zm.image} resizeMode="contain" />
                 </ScrollView>
                 <View style={zm.footer}>
-                  <Text style={zm.footerText}>{footerLabel}</Text>
+                  <Text style={zm.footerText}>{isDiagram ? "🖼️ Diagram" : label}</Text>
                 </View>
               </View>
             </TouchableWithoutFeedback>
@@ -92,20 +112,22 @@ function ImageZoomModal({ visible, uri, label, onClose }: { visible: boolean; ur
 const zm = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.78)", justifyContent: "center", padding: 16 },
   container: { position: "relative" },
-  closeBtn: {
-    position: "absolute", top: -44, right: 0, zIndex: 20,
-    backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 22, padding: 8,
-  },
+  closeBtn: { position: "absolute", top: -44, right: 0, zIndex: 20, backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 22, padding: 8 },
   card: { backgroundColor: "#fff", borderRadius: 14, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.5, shadowRadius: 20, elevation: 20 },
   image: { width: "100%", height: 420 },
   footer: { backgroundColor: "#f9fafb", borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingVertical: 10, paddingHorizontal: 14 },
   footerText: { fontSize: 12, color: "#6b7280", textAlign: "center" },
 });
 
-/* ─── Sources Section (10d) ─────────────────────────────────────────────── */
-function SourcesSection({ sources }: { sources: PageCitation[] }) {
+/* ─── Sources Section ───────────────────────────────────────────────────── */
+function SourcesSection({ sources, isDark }: { sources: PageCitation[]; isDark: boolean }) {
   const [zoomUri, setZoomUri] = React.useState<string | null>(null);
   const [zoomLabel, setZoomLabel] = React.useState("");
+
+  const cardBg = isDark ? CARD_BG : "#ffffff";
+  const cardBorder = isDark ? BORDER : "#e5e7eb";
+  const headingColor = isDark ? "#fff" : "#111827";
+  const pillTextColor = isDark ? "#d1d5db" : "#4b5563";
 
   const pageNumbers = Array.from(new Set(sources.map((s) => s.page))).sort((a, b) => a - b);
   const allImages = sources.flatMap((s) => s.base64_images ?? []);
@@ -113,47 +135,31 @@ function SourcesSection({ sources }: { sources: PageCitation[] }) {
 
   return (
     <>
-      <View style={src.card}>
-        <Text style={src.heading}>📄 Sources</Text>
-
-        {/* Page number pills */}
+      <View style={[src.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+        <Text style={[src.heading, { color: headingColor }]}>📄 Sources</Text>
         <View style={src.pillRow}>
           {pageNumbers.map((pg) => (
-            <View key={pg} style={src.pill}>
-              <Text style={src.pillText}>Page {pg}</Text>
+            <View key={pg} style={[src.pill, !isDark && { backgroundColor: "rgba(102,126,234,0.10)", borderColor: "rgba(102,126,234,0.30)" }]}>
+              <Text style={[src.pillText, { color: pillTextColor }]}>Page {pg}</Text>
             </View>
           ))}
         </View>
-
-        {/* NCERT embedded mode (10f) */}
         {isNcert && (
           <View style={src.ncertCard}>
             <Text style={src.ncertTitle}>NCERT Source:</Text>
-            <Text style={src.ncertDesc}>Please refer to all the listed pages in your NCERT textbook.</Text>
+            <Text style={[src.ncertDesc, !isDark && { color: "#065f46" }]}>Please refer to all the listed pages in your NCERT textbook.</Text>
             <View style={src.ncertLinks}>
-              {allImages
-                .filter((img) => img.ncert_url)
-                .map((img, i) => (
-                  <Pressable
-                    key={i}
-                    style={src.ncertPageBtn}
-                    onPress={() => img.ncert_url && Linking.openURL(img.ncert_url)}
-                  >
-                    <Text style={src.ncertPageBtnText}>Page {img.page}</Text>
-                    <Feather name="external-link" size={11} color="#065f46" />
-                  </Pressable>
-                ))}
+              {allImages.filter((img) => img.ncert_url).map((img, i) => (
+                <Pressable key={i} style={src.ncertPageBtn} onPress={() => img.ncert_url && Linking.openURL(img.ncert_url)}>
+                  <Text style={src.ncertPageBtnText}>Page {img.page}</Text>
+                  <Feather name="external-link" size={11} color="#065f46" />
+                </Pressable>
+              ))}
             </View>
           </View>
         )}
-
-        {/* Original / EdwAI Generated page images (10f) */}
         {!isNcert && allImages.slice(0, 8).map((img, idx) => (
-          <Pressable
-            key={idx}
-            style={src.imageCard}
-            onPress={() => { setZoomUri(img.data); setZoomLabel(`📖 Page Citation — Page ${img.page}`); }}
-          >
+          <Pressable key={idx} style={[src.imageCard, !isDark && { borderColor: "#e5e7eb" }]} onPress={() => { setZoomUri(img.data); setZoomLabel(`📖 Page Citation — Page ${img.page}`); }}>
             <Image source={{ uri: img.data }} style={src.image} resizeMode="contain" />
             <View style={src.imageFooter}>
               <Text style={src.imageFooterText}>Page {img.page}</Text>
@@ -165,45 +171,40 @@ function SourcesSection({ sources }: { sources: PageCitation[] }) {
     </>
   );
 }
-
 const src = StyleSheet.create({
   card: { backgroundColor: CARD_BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 16, marginTop: 12 },
   heading: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff", marginBottom: 10 },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
   pill: { backgroundColor: "rgba(102,126,234,0.25)", borderRadius: 20, borderWidth: 1, borderColor: "rgba(102,126,234,0.40)", paddingHorizontal: 12, paddingVertical: 5 },
   pillText: { fontSize: 12, color: "#d1d5db" },
-
-  /* NCERT card */
   ncertCard: { backgroundColor: "rgba(16,185,129,0.07)", borderRadius: 10, borderWidth: 2, borderColor: "#34d399", padding: 14 },
   ncertTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#10b981", marginBottom: 4 },
   ncertDesc: { fontSize: 12, color: "#a7f3d0", lineHeight: 18, marginBottom: 10 },
   ncertLinks: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   ncertPageBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#fff", borderRadius: 6, borderWidth: 2, borderColor: "#34d399", paddingHorizontal: 10, paddingVertical: 6 },
   ncertPageBtnText: { fontSize: 12, color: "#065f46", fontFamily: "Inter_600SemiBold" },
-
-  /* Page images */
   imageCard: { borderRadius: 10, borderWidth: 1, borderColor: BORDER, overflow: "hidden", marginTop: 10, backgroundColor: "#fff" },
   image: { width: "100%", height: 180 },
   imageFooter: { backgroundColor: "#f9fafb", borderTopWidth: 1, borderTopColor: "#e5e7eb", padding: 8 },
   imageFooterText: { fontSize: 11, color: "#6b7280", textAlign: "center" },
 });
 
-/* ─── Diagrams Section (10e) ────────────────────────────────────────────── */
-function DiagramsSection({ diagrams }: { diagrams: DiagramImage[] }) {
+/* ─── Diagrams Section ───────────────────────────────────────────────────── */
+function DiagramsSection({ diagrams, isDark }: { diagrams: DiagramImage[]; isDark: boolean }) {
   const [zoomUri, setZoomUri] = React.useState<string | null>(null);
   const [zoomLabel, setZoomLabel] = React.useState("");
 
+  const cardBg = isDark ? CARD_BG : "#ffffff";
+  const cardBorder = isDark ? BORDER : "#e5e7eb";
+  const headingColor = isDark ? "#fff" : "#111827";
+
   return (
     <>
-      <View style={dg.card}>
-        <Text style={dg.heading}>🖼️ Diagrams from Textbook</Text>
+      <View style={[dg.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+        <Text style={[dg.heading, { color: headingColor }]}>🖼️ Diagrams from Textbook</Text>
         <View style={dg.grid}>
           {diagrams.map((d, idx) => (
-            <Pressable
-              key={idx}
-              style={dg.item}
-              onPress={() => { setZoomUri(d.data); setZoomLabel(`🖼️ Diagram — Page ${d.page}`); }}
-            >
+            <Pressable key={idx} style={[dg.item, !isDark && { borderColor: "#e5e7eb" }]} onPress={() => { setZoomUri(d.data); setZoomLabel(`🖼️ Diagram — Page ${d.page}`); }}>
               <Image source={{ uri: d.data }} style={dg.image} resizeMode="contain" />
               <View style={dg.itemFooter}>
                 <Text style={dg.itemFooterText}>Page {d.page}</Text>
@@ -217,7 +218,6 @@ function DiagramsSection({ diagrams }: { diagrams: DiagramImage[] }) {
     </>
   );
 }
-
 const dg = StyleSheet.create({
   card: { backgroundColor: CARD_BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 16, marginTop: 12 },
   heading: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff", marginBottom: 12 },
@@ -228,23 +228,23 @@ const dg = StyleSheet.create({
   itemFooterText: { fontSize: 10, color: "#6b7280" },
 });
 
-/* ─── Phase-2 Citation Images Section (10g) ─────────────────────────────── */
-function CitationsSection({ citations }: { citations: CitationImage[] }) {
+/* ─── Citations Section ──────────────────────────────────────────────────── */
+function CitationsSection({ citations, isDark }: { citations: CitationImage[]; isDark: boolean }) {
   const [zoomUri, setZoomUri] = React.useState<string | null>(null);
   const [zoomLabel, setZoomLabel] = React.useState("");
 
+  const cardBg = isDark ? CARD_BG : "#ffffff";
+  const cardBorder = isDark ? BORDER : "#e5e7eb";
+  const headingColor = isDark ? "#fff" : "#111827";
+
   return (
     <>
-      <View style={src.card}>
-        <Text style={src.heading}>📄 Sources</Text>
+      <View style={[src.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+        <Text style={[src.heading, { color: headingColor }]}>📄 Sources</Text>
         {citations.map((c, idx) => {
           const uri = `data:image/jpeg;base64,${c.base64_image}`;
           return (
-            <Pressable
-              key={idx}
-              style={src.imageCard}
-              onPress={() => { setZoomUri(uri); setZoomLabel(`📖 Page Citation — Page ${c.page_number}`); }}
-            >
+            <Pressable key={idx} style={[src.imageCard, !isDark && { borderColor: "#e5e7eb" }]} onPress={() => { setZoomUri(uri); setZoomLabel(`📖 Page Citation — Page ${c.page_number}`); }}>
               <Image source={{ uri }} style={src.image} resizeMode="contain" />
               <View style={src.imageFooter}>
                 <Text style={src.imageFooterText}>Page {c.page_number}</Text>
@@ -258,7 +258,7 @@ function CitationsSection({ citations }: { citations: CitationImage[] }) {
   );
 }
 
-/* ─── Validation Badge (10c) ────────────────────────────────────────────── */
+/* ─── Validation Badge ───────────────────────────────────────────────────── */
 function ValidationBadge({ v }: { v: NonNullable<QueryResponse["validation"]> }) {
   const bg = v.is_reliable ? "rgba(16,185,129,0.1)" : v.confidence >= 0.6 ? "rgba(245,158,11,0.1)" : "rgba(239,68,68,0.1)";
   const border = v.is_reliable ? "rgba(16,185,129,0.3)" : v.confidence >= 0.6 ? "rgba(245,158,11,0.3)" : "rgba(239,68,68,0.3)";
@@ -267,12 +267,8 @@ function ValidationBadge({ v }: { v: NonNullable<QueryResponse["validation"]> })
   return (
     <View style={[vb.box, { backgroundColor: bg, borderColor: border }]}>
       <Text style={[vb.title, { color }]}>{icon} Answer Validation: {Math.round(v.confidence * 100)}% Verified</Text>
-      <Text style={[vb.sub, { color }]}>
-        {v.validated_facts} verified · {v.partial_facts} partial · {v.unverified_facts} unverified
-      </Text>
-      {!!v.warnings?.length && (
-        <Text style={[vb.warn, { color }]}>{v.warnings.join(" · ")}</Text>
-      )}
+      <Text style={[vb.sub, { color }]}>{v.validated_facts} verified · {v.partial_facts} partial · {v.unverified_facts} unverified</Text>
+      {!!v.warnings?.length && <Text style={[vb.warn, { color }]}>{v.warnings.join(" · ")}</Text>}
     </View>
   );
 }
@@ -283,28 +279,7 @@ const vb = StyleSheet.create({
   warn: { fontSize: 11, marginTop: 2, fontStyle: "italic" },
 });
 
-/* ─── Markdown styles ───────────────────────────────────────────────────── */
-const mdStyles = {
-  body: { color: "#e5e7eb", fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 22 },
-  heading1: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 18, marginTop: 10, marginBottom: 4 },
-  heading2: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 16, marginTop: 8, marginBottom: 4 },
-  heading3: { color: "#c4b5fd", fontFamily: "Inter_600SemiBold", fontSize: 15, marginTop: 6, marginBottom: 2 },
-  strong: { color: "#fff", fontFamily: "Inter_700Bold" },
-  em: { color: "#d1d5db", fontStyle: "italic" as const },
-  bullet_list: { marginLeft: 4 },
-  ordered_list: { marginLeft: 4 },
-  bullet_list_item: { color: "#e5e7eb" },
-  ordered_list_item: { color: "#e5e7eb" },
-  code_inline: { backgroundColor: "rgba(102,126,234,0.2)", color: "#a78bfa", fontFamily: "Inter_500Medium", borderRadius: 4, paddingHorizontal: 4 },
-  fence: { backgroundColor: "#111827", borderRadius: 8, padding: 12, marginVertical: 8 },
-  code_block: { color: "#a7f3d0", fontFamily: "Inter_400Regular", fontSize: 12 },
-  blockquote: { borderLeftWidth: 4, borderLeftColor: "#60a5fa", paddingLeft: 12, opacity: 0.9 },
-  table: { borderWidth: 1, borderColor: BORDER, borderRadius: 4 },
-  th: { backgroundColor: "rgba(102,126,234,0.2)", color: "#fff", fontFamily: "Inter_600SemiBold", padding: 8 },
-  td: { color: "#e5e7eb", padding: 8, borderTopWidth: 1, borderTopColor: BORDER },
-};
-
-/* ─── Main AnswerCard ───────────────────────────────────────────────────── */
+/* ─── Main AnswerCard ────────────────────────────────────────────────────── */
 type AnswerCardProps = {
   streaming: boolean;
   streamText: string;
@@ -314,12 +289,20 @@ type AnswerCardProps = {
 };
 
 export default function AnswerCard({ streaming, streamText, response, loading, mode }: AnswerCardProps) {
-  /* 10a — Loading State */
+  const { isDark } = useTheme();
+
+  const cardBg = isDark ? CARD_BG : "#ffffff";
+  const cardBorder = isDark ? BORDER : "#e5e7eb";
+  const answerLabelColor = isDark ? "#fff" : "#111827";
+  const loadingTextColor = isDark ? "#e5e7eb" : "#374151";
+  const loadingCardBg = isDark ? "rgba(102,126,234,0.15)" : "rgba(102,126,234,0.06)";
+  const loadingCardBorder = isDark ? BORDER : "rgba(102,126,234,0.25)";
+
   if (loading && !streaming) {
     return (
-      <View style={an.loadingCard}>
+      <View style={[an.loadingCard, { backgroundColor: loadingCardBg, borderColor: loadingCardBorder }]}>
         <SpinnerRing />
-        <Text style={an.loadingText}>Searching through your textbook...</Text>
+        <Text style={[an.loadingText, { color: loadingTextColor }]}>Searching through your textbook...</Text>
         <Text style={an.loadingSubtext}>This may take a few moments</Text>
       </View>
     );
@@ -331,51 +314,40 @@ export default function AnswerCard({ streaming, streamText, response, loading, m
   const displayText = preprocessMarkdown(rawText);
 
   return (
-    <View style={an.card}>
-      {/* Header: ✨ icon + Answer label + typing indicator (10b/10c) */}
+    <View style={[an.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
       <View style={an.header}>
-        <View style={an.iconBox}>
+        <View style={[an.iconBox, !isDark && { backgroundColor: "rgba(102,126,234,0.10)" }]}>
           <Text style={{ fontSize: 20 }}>✨</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={an.answerLabel}>Answer</Text>
+          <Text style={[an.answerLabel, { color: answerLabelColor }]}>Answer</Text>
           {streaming && <Text style={an.typing}>typing...</Text>}
         </View>
       </View>
 
-      {/* Answer text */}
-      <Markdown style={mdStyles as never}>{displayText}</Markdown>
+      <Markdown style={getMdStyles(isDark) as never}>{displayText}</Markdown>
 
-      {/* Validation badge (explain mode, 10c) */}
       {!streaming && response?.validation && mode === "explain" && (
         <ValidationBadge v={response.validation} />
       )}
 
-      {/* Sources / page citations (10d, 10f) */}
       {!streaming && response?.sources && response.sources.length > 0 && (
-        <SourcesSection sources={response.sources} />
+        <SourcesSection sources={response.sources} isDark={isDark} />
       )}
 
-      {/* Diagrams (10e) */}
       {!streaming && response?.diagram_images && response.diagram_images.length > 0 && (
-        <DiagramsSection diagrams={response.diagram_images} />
+        <DiagramsSection diagrams={response.diagram_images} isDark={isDark} />
       )}
 
-      {/* Phase-2 citation images (10g) */}
       {!streaming && response?.citation_images && response.citation_images.length > 0 && (
-        <CitationsSection citations={response.citation_images} />
+        <CitationsSection citations={response.citation_images} isDark={isDark} />
       )}
     </View>
   );
 }
 
 const an = StyleSheet.create({
-  loadingCard: {
-    backgroundColor: "rgba(102,126,234,0.15)", borderRadius: 14,
-    borderWidth: 1, borderColor: BORDER,
-    paddingVertical: 48, paddingHorizontal: 20,
-    alignItems: "center", marginTop: 12,
-  },
+  loadingCard: { backgroundColor: "rgba(102,126,234,0.15)", borderRadius: 14, borderWidth: 1, borderColor: BORDER, paddingVertical: 48, paddingHorizontal: 20, alignItems: "center", marginTop: 12 },
   loadingText: { fontSize: 15, color: "#e5e7eb", fontFamily: "Inter_600SemiBold", marginTop: 18, textAlign: "center" },
   loadingSubtext: { fontSize: 12, color: "#6b7280", marginTop: 6 },
   card: { backgroundColor: CARD_BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER, padding: 16, marginTop: 12 },
