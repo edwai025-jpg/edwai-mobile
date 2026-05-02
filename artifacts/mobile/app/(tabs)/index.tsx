@@ -984,22 +984,6 @@ export default function TextbooksScreen() {
               </Pressable>
             )}
 
-            {/* Mode tabs */}
-            <View style={sc.modeTabs}>
-              <Pressable
-                style={[sc.modeTab, mode === "retrieve" && sc.modeTabActive, !isDark && mode !== "retrieve" && { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" }, !isDark && mode === "retrieve" && { backgroundColor: "rgba(102,126,234,0.12)", borderColor: "rgba(102,126,234,0.40)" }]}
-                onPress={() => setMode("retrieve")}
-              >
-                <Text style={[mode === "retrieve" ? sc.modeTabTextActive : sc.modeTabText, !isDark && mode !== "retrieve" && { color: "#374151" }]}>📖 Answer from Book</Text>
-              </Pressable>
-              <Pressable
-                style={[sc.modeTab, mode === "explain" && sc.modeTabActive, !isDark && mode !== "explain" && { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" }, !isDark && mode === "explain" && { backgroundColor: "rgba(102,126,234,0.12)", borderColor: "rgba(102,126,234,0.40)" }]}
-                onPress={() => setMode("explain")}
-              >
-                <Text style={[mode === "explain" ? sc.modeTabTextActive : sc.modeTabText, !isDark && mode !== "explain" && { color: "#374151" }]}>💡 Learn Concept</Text>
-              </Pressable>
-            </View>
-
             {/* Textarea */}
             <View style={[sc.textareaWrap, !isDark && { backgroundColor: "#f9fafb", borderColor: "#e5e7eb" }]}>
               <TextInput
