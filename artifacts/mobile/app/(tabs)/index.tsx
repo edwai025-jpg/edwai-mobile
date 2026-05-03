@@ -644,17 +644,24 @@ export default function TextbooksScreen() {
     AsyncStorage.getItem(P1_SELECTION_KEY).then(async (raw) => {
       if (!raw) return;
       try {
-        const { cls, subject, doc } = JSON.parse(raw) as {
+        const { cls, subject, doc, history: savedHistory } = JSON.parse(raw) as {
           cls: { id: number; name: string };
           subject: string;
           doc: Phase1Document;
+          history?: QueryHistoryItem[];
         };
         setSelectedClass(cls);
         setSelectedSubject(subject);
         setSelectedDoc(doc);
         setSelectionRestored(true);
-        /* Fetch history for restored doc */
-        api.study.getQueryHistory(accessToken, doc.id).then(setHistory).catch(() => {});
+        /* Restore saved history immediately — works even when server is unreachable */
+        if (savedHistory && savedHistory.length > 0) {
+          setHistory(savedHistory);
+        }
+        /* Also try fetching from server — updates with any newer entries */
+        api.study.getQueryHistory(accessToken, doc.id).then((serverHistory) => {
+          if (serverHistory.length > 0) setHistory(serverHistory);
+        }).catch(() => {});
         /* Silently reload subjects + docs so the dropdowns are populated */
         api.study.getAvailableSubjects(accessToken, cls.id).then(setSubjects).catch(() => {});
         api.study.getDocuments(accessToken, cls.id, subject).then(setDocuments).catch(() => {});
@@ -833,11 +840,20 @@ export default function TextbooksScreen() {
         api.study.generateFlashcards(accessToken, question.trim(), finalRes.answer)
           .then((r) => setFlashcards(r.flashcards ?? [])).catch(() => {}).finally(() => setFlashcardsLoading(false));
       }
-      /* Add to local history immediately — server already saves it automatically */
+      /* Add to local history immediately and persist to AsyncStorage */
       setHistory((prev) => {
         const newItem = { id: Date.now(), question: question.trim(), mode: qMode, created_at: new Date().toISOString() };
         const deduped = prev.filter((h) => h.question.toLowerCase() !== newItem.question.toLowerCase());
-        return [newItem, ...deduped].slice(0, 25);
+        const updated = [newItem, ...deduped].slice(0, 25);
+        /* Persist updated history so it survives app restarts */
+        AsyncStorage.getItem(P1_SELECTION_KEY).then((raw) => {
+          if (!raw) return;
+          try {
+            const saved = JSON.parse(raw);
+            AsyncStorage.setItem(P1_SELECTION_KEY, JSON.stringify({ ...saved, history: updated })).catch(() => {});
+          } catch {}
+        }).catch(() => {});
+        return updated;
       });
       /* Refresh usage after each query */
       api.study.getUsage(accessToken).then(setUsage).catch(() => {});
