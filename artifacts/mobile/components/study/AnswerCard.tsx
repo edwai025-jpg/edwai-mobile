@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 
+import FlashcardsSection from "@/components/study/FlashcardsSection";
 import { useTheme } from "@/context/theme";
 import {
   BoardPageConfig,
@@ -417,11 +418,14 @@ export type AnswerCardProps = {
   boardPageConfig?: BoardPageConfig | null;
   typographySettings?: TypographySettings | null;
   imagesLoading?: boolean;
+  question?: string;
+  accessToken?: string;
 };
 
 export default function AnswerCard({
   streaming, streamText, response, loading, mode,
   disclaimerMessages, boardPageConfig, typographySettings, imagesLoading,
+  question, accessToken,
 }: AnswerCardProps) {
   const { isDark } = useTheme();
 
@@ -504,6 +508,11 @@ export default function AnswerCard({
             <ValidationBadge v={response.validation} />
           )}
         </LinearGradient>
+      )}
+
+      {/* BOX 6 — Flashcard Practice (between answer and sources) */}
+      {!streaming && response?.answer && question && accessToken && (
+        <FlashcardsSection question={question} answer={response.answer} accessToken={accessToken} />
       )}
 
       {/* BOX 3 — Sources (page badge pills) */}

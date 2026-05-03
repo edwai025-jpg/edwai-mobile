@@ -1165,12 +1165,9 @@ export default function TextbooksScreen() {
             boardPageConfig={boardPageConfig}
             typographySettings={typographySettings}
             imagesLoading={imagesLoading}
+            question={question}
+            accessToken={accessToken ?? undefined}
           />
-        )}
-
-        {/* ─── FLASHCARDS ─── */}
-        {!streaming && response?.answer && accessToken && (
-          <FlashcardsSection question={question} answer={response.answer} accessToken={accessToken} />
         )}
 
         <View style={sc.footer}>
