@@ -128,11 +128,38 @@ export default function ProfileScreen() {
   const photoUrl = user?.profilePhotoUrl;
 
   /* Usage values: ONLY from live API, never from stale cached user object */
-  const planName = usage?.plan_name ?? null;
+  const planName = usage?.tier_name ?? usage?.plan_name ?? null;
   const used = usage?.questions_used ?? null;
-  const limit = usage?.questions_limit ?? null;
-  const usagePct = used !== null && limit && limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+  const limit = usage?.question_limit ?? usage?.questions_limit ?? null;
+  const usagePct = usage?.percent_used ?? (used !== null && limit && limit > 0 ? Math.min((used / limit) * 100, 100) : 0);
   const barColor = usagePct >= 90 ? Colors.danger : usagePct >= 70 ? Colors.warning : Colors.primary;
+
+  /* Status badge — derived inline to avoid React Compiler issues with module-level helpers */
+  const badgeLabel = (() => {
+    switch (usage?.status) {
+      case "active":        return "Active";
+      case "grace_period":  return "⚠️ Grace Period";
+      case "past_due":      return "❌ Past Due";
+      case "cancelled":     return "Cancelled";
+      default:              return "Free";
+    }
+  })();
+  const badgeBg = (() => {
+    switch (usage?.status) {
+      case "active":        return { backgroundColor: "rgba(34,197,94,0.20)",   borderColor: "rgba(34,197,94,0.30)" };
+      case "grace_period":  return { backgroundColor: "rgba(245,158,11,0.20)", borderColor: "rgba(245,158,11,0.30)" };
+      case "past_due":      return { backgroundColor: "rgba(239,68,68,0.20)",   borderColor: "rgba(239,68,68,0.30)" };
+      default:              return { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)" };
+    }
+  })();
+  const badgeTextColor = (() => {
+    switch (usage?.status) {
+      case "active":        return "#4ade80";
+      case "grace_period":  return "#fbbf24";
+      case "past_due":      return "#f87171";
+      default:              return "#9ca3af";
+    }
+  })();
 
   const handleLogout = () =>
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -238,8 +265,8 @@ export default function ProfileScreen() {
               }
             </View>
             {!usageLoading && usage && (
-              <View style={st.activeBadge}>
-                <Text style={st.activeBadgeText}>{usage.status === "active" ? "Active" : usage.status === "free" ? "Free" : "Active"}</Text>
+              <View style={[st.activeBadge, badgeBg]}>
+                <Text style={[st.activeBadgeText, { color: badgeTextColor }]}>{badgeLabel}</Text>
               </View>
             )}
           </View>
@@ -263,9 +290,9 @@ export default function ProfileScreen() {
                 <View style={[st.progressFill, { width: `${usagePct}%` as DimensionValue, backgroundColor: barColor }]} />
               </View>
               <Text style={[st.usageRemaining, { color: textMuted }]}>{limit - used} questions remaining this month</Text>
-              {!!usage?.renewal_date && (
+              {!!(usage?.period_end ?? usage?.renewal_date) && (
                 <Text style={[st.renewalDate, { color: textMuted }]}>
-                  Resets: {new Date(usage.renewal_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                  Resets on: {new Date((usage?.period_end ?? usage?.renewal_date)!).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                 </Text>
               )}
             </View>
@@ -412,8 +439,8 @@ const st = StyleSheet.create({
   planIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   planLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.darkTextMuted },
   planName: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.darkText, marginTop: 1 },
-  activeBadge: { backgroundColor: "rgba(22,163,74,0.18)", borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1, borderColor: "rgba(22,163,74,0.3)" },
-  activeBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#22c55e" },
+  activeBadge: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1 },
+  activeBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
 
   usageSkeleton: { padding: 18, gap: 10 },
   skeletonLine: { height: 12, backgroundColor: Colors.darkSurface, borderRadius: 6, width: "80%" },
