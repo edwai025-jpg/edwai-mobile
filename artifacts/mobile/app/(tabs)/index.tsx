@@ -614,10 +614,6 @@ export default function TextbooksScreen() {
   const [streamText, setStreamText] = useState("");
   const [response, setResponse] = useState<QueryResponse | null>(null);
 
-  /* flashcards */
-  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
-  const [flashcardsLoading, setFlashcardsLoading] = useState(false);
-
   /* ocr */
   const [captureUri, setCaptureUri] = useState<string | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -835,11 +831,6 @@ export default function TextbooksScreen() {
       );
       const finalRes = res.answer ? res : { ...res, answer: accumulated };
       setResponse(finalRes); setStreaming(false); setQueryLoading(false);
-      if (finalRes.answer) {
-        setFlashcardsLoading(true);
-        api.study.generateFlashcards(accessToken, question.trim(), finalRes.answer)
-          .then((r) => setFlashcards(r.flashcards ?? [])).catch(() => {}).finally(() => setFlashcardsLoading(false));
-      }
       /* Add to local history immediately and persist to AsyncStorage */
       setHistory((prev) => {
         const newItem = { id: Date.now(), question: question.trim(), mode: qMode, created_at: new Date().toISOString() };
@@ -1112,8 +1103,8 @@ export default function TextbooksScreen() {
         )}
 
         {/* ─── FLASHCARDS ─── */}
-        {(flashcardsLoading || flashcards.length > 0) && (
-          <FlashcardsSection loading={flashcardsLoading} cards={flashcards} />
+        {!streaming && response?.answer && accessToken && (
+          <FlashcardsSection question={question} answer={response.answer} accessToken={accessToken} />
         )}
 
         <View style={sc.footer}>

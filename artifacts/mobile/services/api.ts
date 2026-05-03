@@ -685,7 +685,7 @@ const api = {
 
     generateFlashcards: (token: string, question: string, answer: string) =>
       request<{ flashcards: Flashcard[] }>(
-        "/api/generate-flashcards",
+        "/api/flashcards",
         { method: "POST", body: JSON.stringify({ question, answer }) },
         token
       ),

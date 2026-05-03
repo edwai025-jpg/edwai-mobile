@@ -1,0 +1,163 @@
+EdwAI — Flashcards: Complete Mobile Reference
+
+Production Base URL:
+
+https://edwai-api-953672603784.asia-south1.run.app
+
+1. How It Works — End to End
+
+    Student asks a question and receives an answer (Phase 1 textbook or Phase 2 own book)
+    Once the answer is fully received, a "Generate Flashcards" button appears below the answer
+    Student taps it → the app sends the original question + the full answer text to the server
+    The server uses the LLM router (DeepSeek → Groq fallback → OpenAI fallback) to generate cards
+    Cards are returned instantly as JSON — not stored in the database, purely generated on demand
+    Student flips through cards, marks each one as Mastered, and can regenerate at any time
+
+Key point for mobile: Flashcards are stateless — there is no save, no fetch, no history. Every generation is a fresh LLM call. The mastered/unmastered state lives only in local UI memory and resets when the user navigates away.
+2. The Only API Endpoint
+
+POST https://edwai-api-953672603784.asia-south1.run.app/api/flashcards
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+Request body:
+
+{
+  "question": "What is photosynthesis?",
+  "answer": "Photosynthesis is the process by which green plants and other organisms use sunlight to synthesise nutrients from carbon dioxide and water..."
+}
+
+Both fields are required. answer is trimmed to 3000 characters server-side if longer.
+
+Response:
+
+{
+  "flashcards": [
+    {
+      "front": "What gas do plants absorb during photosynthesis?",
+      "back": "Carbon dioxide (CO₂)",
+      "type": "fact"
+    },
+    {
+      "front": "Define photosynthesis",
+      "back": "Process where plants use sunlight, CO₂ and water to produce glucose and oxygen",
+      "type": "definition"
+    }
+  ],
+  "count": 5
+}
+
+Error response (500):
+
+{ "detail": "Flashcard generation failed: <reason>" }
+
+3. How Many Cards Are Generated
+
+The server decides card count based on the word count of the answer — the client has no control over this:
+Answer length	Cards generated
+< 150 words	3 cards
+150 – 349 words	5 cards
+350 – 599 words	7 cards
+600+ words	10 cards
+4. Card Types
+
+Five types, each with its own color identity:
+Type	Meaning	Front gradient	Back gradient	Icon
+definition	Key term + its meaning	#667eea → #764ba2 (indigo→purple)	#764ba2 → #667eea	📖
+concept	How/why something works	#0ea5e9 → #2563eb (sky→blue)	#2563eb → #0ea5e9	💡
+process	Step-by-step mechanism	#10b981 → #0d9488 (emerald→teal)	#0d9488 → #10b981	⚙️
+fact	Key value, number, or stat	#f59e0b → #ef4444 (amber→red)	#ef4444 → #f59e0b	⚡
+diagram	Visual/spatial relationship	#ec4899 → #8b5cf6 (pink→violet)	#8b5cf6 → #ec4899	🖼️
+
+If the server returns an unknown type, treat it as concept.
+
+Each card object fields:
+
+    front — max 150 chars, one crisp question or key term
+    back — max 200 chars, precise answer
+    type — one of the five values above
+
+5. UI States and Flow
+
+[Answer received from query]
+        ↓
+[Generate Flashcards button — violet/indigo gradient]
+        ↓ tap
+[Loading skeleton — animated pulse, indigo gradient, min 220px height]
+[Text: "Creating your study cards..."]
+        ↓ response received
+[Card deck displayed — flip card UI]
+
+State machine:
+State	generated	loading	visible	What shows
+Initial	false	false	false	"Generate Flashcards" button only
+Loading	false	true	false	Animated skeleton card
+Cards ready	true	false	true	Flip card deck
+Cards collapsed	true	false	false	Header only (tap to expand)
+6. Flip Card Behaviour
+
+    Card has two faces: Front (question/term) and Back (answer)
+    Tap anywhere on the card → flip (3D rotateY 180°, 550ms ease)
+    backfaceVisibility: hidden on both faces
+    Front face shows: type badge, type icon, card number (e.g. "2 / 5"), question text, "Tap to reveal answer" hint
+    Back face shows: "✓ Answer" badge, card number, answer text, "Tap to flip back" hint
+    Card min height: 220px
+
+On mobile replace the CSS 3D flip with a react-native-flip-card or a react-native-reanimated rotateY animation — the same visual behaviour.
+7. Navigation Controls
+Action	Web	Mobile equivalent
+Next card	Tap Next button / → key	Swipe left or tap Next
+Previous card	Tap Prev button / ← key	Swipe right or tap Prev
+Jump to card	Tap dot indicator	Tap dot indicator
+Flip card	Tap card / Space key	Tap card
+
+Dot indicators:
+
+    Active card: wider pill shape (20×10px), colored with the card type's front gradient
+    Mastered card: round dot, #10b981 (emerald)
+    Unvisited card: round dot, rgba(255,255,255,0.20) dark / #d1d5db light
+
+8. Mark Mastered
+
+    Each card has a "○ Mark Mastered" toggle button (local state only, not saved to server)
+    Mastered → button turns bg-emerald-100 text-emerald-700 and shows "✓ Mastered"
+    Progress bar at top: mastered_count / total_cards × 100%, gradient #10b981 → #3b82f6 (emerald→blue)
+    Header subtitle shows: "{n} cards · {mastered} mastered"
+    When ALL cards are marked mastered: celebration banner appears — linear-gradient(135deg, #10b981 0%, #3b82f6 100%) with text "🎉 You've mastered all X cards! Great work!"
+
+Mastered state is not persisted — resets when the component unmounts or cards are regenerated.
+9. Regenerate
+
+Once cards are generated, a "Regenerate" button appears in the header alongside the collapse toggle. Tapping it calls POST /api/flashcards again with the same question + answer, resets activeIndex to 0, clears flipped and masteredCards, and replaces the card list with fresh results.
+10. Where the Section Appears
+
+The FlashcardSection appears below the answer block, shown only when:
+
+    An answer has been received (answer.answer is non-empty)
+    The answer stream has finished (streaming === false)
+    Works for both Phase 1 (textbook) and Phase 2 (own book / YouTube) answers — same component, same endpoint
+
+On mobile: render the "Generate Flashcards" button at the bottom of the answer screen, below the source pages / citations block.
+11. Section Colors (Outer Container)
+Element	Dark mode	Light mode
+Container border	rgba(255,255,255,0.10)	#e5e7eb (gray-200)
+Container background	rgba(255,255,255,0.05)	linear-gradient(135deg, #f8fafc → #ffffff)
+Header icon bg	linear-gradient(135deg, #8b5cf6, #4f46e5) (violet→indigo)	same
+Title text	#ffffff	#111827 (gray-900)
+Subtitle text	#9ca3af (gray-400)	#6b7280 (gray-500)
+Nav buttons (active)	rgba(255,255,255,0.10) bg, white text	#f3f4f6 bg, #374151 text
+Nav buttons (disabled)	opacity: 0.30	same
+Progress bar track	rgba(255,255,255,0.10)	#f3f4f6 (gray-100)
+12. Implementation Checklist for Mobile
+
+    Show "Generate Flashcards" button only after answer is fully received (not during streaming)
+    POST /api/flashcards with { question, answer } — use the full answer text, not the preview
+    Handle loading state with a skeleton/spinner
+    Render flip card with front/back using the type's gradient colors
+    Apply getTypeConfig(type) fallback — unknown types default to concept
+    Dot navigation + Prev/Next buttons
+    Mastered toggle per card (local state only)
+    Progress bar driven by mastered count
+    Show celebration when all cards mastered
+    "Regenerate" button re-calls the same endpoint
+    No save/fetch endpoints needed — everything is on-demand and ephemeral

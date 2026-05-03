@@ -235,10 +235,6 @@ export default function OwnBooksScreen() {
   const [streamText, setStreamText] = useState("");
   const [response, setResponse] = useState<QueryResponse | null>(null);
 
-  /* flashcards */
-  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
-  const [flashcardsLoading, setFlashcardsLoading] = useState(false);
-
   const abortCtrl = useRef<AbortController | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -366,11 +362,6 @@ export default function OwnBooksScreen() {
       );
       const finalRes = res.answer ? res : { ...res, answer: accumulated };
       setResponse(finalRes); setStreaming(false); setQueryLoading(false);
-      if (finalRes.answer) {
-        setFlashcardsLoading(true);
-        api.study.generateFlashcards(accessToken, q.trim(), finalRes.answer)
-          .then((r) => setFlashcards(r.flashcards ?? [])).catch(() => {}).finally(() => setFlashcardsLoading(false));
-      }
       /* Add to local history immediately — server already saves it automatically */
       setHistory((prev) => {
         const newItem = { id: Date.now(), question: q.trim(), mode: qMode, created_at: new Date().toISOString() };
@@ -638,8 +629,8 @@ export default function OwnBooksScreen() {
         )}
 
         {/* ─── FLASHCARDS ─── */}
-        {(flashcardsLoading || flashcards.length > 0) && (
-          <FlashcardsSection loading={flashcardsLoading} cards={flashcards} />
+        {!streaming && response?.answer && accessToken && (
+          <FlashcardsSection question={question} answer={response.answer} accessToken={accessToken} />
         )}
 
         <View style={sc.footer}>
