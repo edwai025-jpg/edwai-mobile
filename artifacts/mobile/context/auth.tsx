@@ -9,6 +9,7 @@ import React, {
 
 import api, { ApiUser } from "@/services/api";
 
+
 export type UserProfile = {
   id?: number;
   name: string;
@@ -61,6 +62,7 @@ type AuthState = {
   isProfileComplete: boolean;
   user: UserProfile | null;
   accessToken: string | null;
+  hasPhoto: boolean | null;
 
   sendPhoneOtp: (phone: string) => Promise<void>;
   sendEmailOtp: (email: string) => Promise<void>;
@@ -77,6 +79,8 @@ type AuthState = {
   logout: () => Promise<void>;
   updateUser: (updates: Partial<UserProfile>) => Promise<void>;
   refreshUser: () => Promise<void>;
+  setHasPhoto: (v: boolean | null) => void;
+  probeHasPhoto: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -93,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isProfileComplete, setIsProfileComplete] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [hasPhoto, setHasPhoto] = useState<boolean | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -110,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setAccessToken(tokenData);
           setIsLoggedIn(true);
           setIsProfileComplete(isComplete);
+          api.profile.probePhoto(tokenData).then(setHasPhoto).catch(() => setHasPhoto(false));
         }
       } catch {
         // ignore storage errors
@@ -233,6 +239,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [accessToken]);
 
+  const probeHasPhoto = useCallback(async () => {
+    try {
+      const token = accessToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.accessToken));
+      if (!token) { setHasPhoto(false); return; }
+      const result = await api.profile.probePhoto(token);
+      setHasPhoto(result);
+    } catch {
+      setHasPhoto(false);
+    }
+  }, [accessToken]);
+
   const logout = useCallback(async () => {
     try {
       const token = accessToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.accessToken));
@@ -248,6 +265,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccessToken(null);
     setIsLoggedIn(false);
     setIsProfileComplete(false);
+    setHasPhoto(null);
   }, [accessToken]);
 
   return (
@@ -257,6 +275,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isProfileComplete,
         user,
         accessToken,
+        hasPhoto,
         sendPhoneOtp,
         sendEmailOtp,
         verifyPhoneOtp,
@@ -266,6 +285,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         updateUser,
         refreshUser,
+        setHasPhoto,
+        probeHasPhoto,
       }}
     >
       {children}

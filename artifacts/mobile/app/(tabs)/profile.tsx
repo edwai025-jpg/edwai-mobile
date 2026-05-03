@@ -1,5 +1,6 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
@@ -35,28 +36,38 @@ function Avatar({
   token,
   hasPhoto,
   size = 72,
+  onPress,
 }: {
   name: string;
   token?: string | null;
   hasPhoto?: boolean | null;
   size?: number;
+  onPress?: () => void;
 }) {
   const initials = name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
   const r = size / 2;
-  if (hasPhoto && token) {
-    return (
+  const inner = hasPhoto && token
+    ? (
       <ExpoImage
         source={{ uri: PHOTO_ENDPOINT, headers: { Authorization: `Bearer ${token}` } }}
         style={{ width: size, height: size, borderRadius: r, borderWidth: 2, borderColor: "rgba(255,255,255,0.25)" }}
         contentFit="cover"
         cachePolicy="memory-disk"
       />
+    )
+    : (
+      <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={{ width: size, height: size, borderRadius: r, alignItems: "center", justifyContent: "center" }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <Text style={{ fontSize: size * 0.34, fontFamily: "Inter_700Bold", color: "#fff" }}>{initials || "U"}</Text>
+      </LinearGradient>
     );
-  }
+  if (!onPress) return inner;
   return (
-    <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={{ width: size, height: size, borderRadius: r, alignItems: "center", justifyContent: "center" }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-      <Text style={{ fontSize: size * 0.34, fontFamily: "Inter_700Bold", color: "#fff" }}>{initials || "U"}</Text>
-    </LinearGradient>
+    <Pressable onPress={onPress} style={{ position: "relative" }}>
+      {inner}
+      <View style={{ position: "absolute", bottom: 0, right: 0, width: 22, height: 22, borderRadius: 11, backgroundColor: "#667eea", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(255,255,255,0.3)" }}>
+        <Ionicons name={"camera" as IoniconsName} size={11} color="#fff" />
+      </View>
+    </Pressable>
   );
 }
 
@@ -110,12 +121,12 @@ const RowDivider = () => {
 /* ─── Main Screen ────────────────────────────────────────────────────────── */
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, logout, refreshUser, accessToken } = useAuth();
+  const { user, logout, refreshUser, accessToken, hasPhoto, setHasPhoto } = useAuth();
   const { isDark } = useTheme();
 
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [usageLoading, setUsageLoading] = useState(true);
-  const [hasPhoto, setHasPhoto] = useState<boolean | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [showEducation, setShowEducation] = useState(false);
@@ -124,7 +135,7 @@ export default function ProfileScreen() {
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
-  /* Refresh everything on every focus — never use stale cache for display */
+  /* Refresh everything on every focus */
   useFocusEffect(
     useCallback(() => {
       refreshUser();
@@ -135,13 +146,68 @@ export default function ProfileScreen() {
           .then(setUsage)
           .catch(() => setUsage(null))
           .finally(() => setUsageLoading(false));
-        api.profile.probePhoto(accessToken).then(setHasPhoto).catch(() => setHasPhoto(false));
       } else {
         setUsageLoading(false);
-        setHasPhoto(false);
       }
     }, [refreshUser, accessToken])
   );
+
+  /* ── Photo actions (also accessible from tappable avatar) ── */
+  const doUploadPhoto = useCallback(async (uri: string) => {
+    if (!accessToken) return;
+    setPhotoUploading(true);
+    try {
+      await api.profile.uploadPhoto(accessToken, uri);
+      setHasPhoto(true);
+    } catch {
+      Alert.alert("Upload Failed", "Could not upload photo. Please try again.");
+    } finally {
+      setPhotoUploading(false);
+    }
+  }, [accessToken, setHasPhoto]);
+
+  const handlePickFromLibrary = useCallback(async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert("Permission needed", "Allow photo library access in Settings."); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.85 });
+    if (result.canceled || !result.assets[0]) return;
+    await doUploadPhoto(result.assets[0].uri);
+  }, [doUploadPhoto]);
+
+  const handlePickFromCamera = useCallback(async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { Alert.alert("Permission needed", "Allow camera access in Settings."); return; }
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.85 });
+    if (result.canceled || !result.assets[0]) return;
+    await doUploadPhoto(result.assets[0].uri);
+  }, [doUploadPhoto]);
+
+  const handleRemovePhoto = useCallback(() => {
+    Alert.alert("Remove Photo", "Are you sure you want to remove your profile photo?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove", style: "destructive", onPress: async () => {
+          if (!accessToken) return;
+          try {
+            await api.profile.deletePhoto(accessToken);
+            setHasPhoto(false);
+          } catch {
+            Alert.alert("Error", "Could not remove photo. Please try again.");
+          }
+        },
+      },
+    ]);
+  }, [accessToken, setHasPhoto]);
+
+  const handleAvatarPress = useCallback(() => {
+    const options: { text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive" }[] = [
+      { text: "Take Photo", onPress: handlePickFromCamera },
+      { text: "Choose from Library", onPress: handlePickFromLibrary },
+      ...(hasPhoto ? [{ text: "Remove Photo", style: "destructive" as const, onPress: handleRemovePhoto }] : []),
+      { text: "Cancel", style: "cancel" as const },
+    ];
+    Alert.alert("Profile Photo", photoUploading ? "Uploading…" : "Choose an option", options, { cancelable: true });
+  }, [hasPhoto, photoUploading, handlePickFromCamera, handlePickFromLibrary, handleRemovePhoto]);
 
   const displayName = user?.name || "Student";
   const identifier = user?.email || user?.phone || "";
@@ -238,7 +304,7 @@ export default function ProfileScreen() {
         end={{ x: 1, y: 1 }}
       >
         <View style={st.avatarRow}>
-          <Avatar name={displayName} token={accessToken} hasPhoto={hasPhoto} size={70} />
+          <Avatar name={displayName} token={accessToken} hasPhoto={hasPhoto} size={70} onPress={handleAvatarPress} />
           <View style={st.nameBlock}>
             <Text style={st.userName} numberOfLines={1}>{displayName}</Text>
             {!!identifier && <Text style={st.userIdentifier} numberOfLines={1}>{identifier}</Text>}

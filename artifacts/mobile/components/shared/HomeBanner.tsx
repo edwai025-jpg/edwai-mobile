@@ -1,13 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   DimensionValue,
-  Image,
   Linking,
   Modal,
   Platform,
@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/auth";
 import { Colors } from "@/constants/colors";
-import { UsageInfo } from "@/services/api";
+import { PHOTO_ENDPOINT, UsageInfo } from "@/services/api";
 
 const PRIMARY = "#667eea";
 
@@ -85,7 +85,7 @@ export function HomeBanner({
   isDark: boolean;
   onToggleTheme: () => void;
 }) {
-  const { user } = useAuth();
+  const { user, hasPhoto, accessToken } = useAuth();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const topPad = Platform.OS === "web" ? 0 : insets.top;
@@ -95,7 +95,6 @@ export function HomeBanner({
 
   const displayName = user?.name ?? "Student";
   const nameShort = displayName.split(" ")[0] ?? "Student";
-  const photoUrl = user?.profilePhotoUrl;
   const initials = displayName.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
 
   /* phone nudge */
@@ -227,10 +226,17 @@ export function HomeBanner({
           {/* Avatar + Name */}
           <View style={nb.userBlock}>
             <View style={nb.avatarWrap}>
-              {photoUrl
-                ? <Image source={{ uri: photoUrl }} style={nb.avatarImg} />
+              {hasPhoto && accessToken
+                ? (
+                  <ExpoImage
+                    source={{ uri: PHOTO_ENDPOINT, headers: { Authorization: `Bearer ${accessToken}` } }}
+                    style={nb.avatarImg}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                  />
+                )
                 : (
-                  <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={nb.avatarImg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                  <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={[nb.avatarImg, { alignItems: "center", justifyContent: "center" }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                     <Text style={nb.avatarInitials}>{initials || "S"}</Text>
                   </LinearGradient>
                 )
