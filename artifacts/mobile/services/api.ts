@@ -110,19 +110,22 @@ export type SessionInfo = {
 
 export type UsageInfo = {
   status: "active" | "grace_period" | "past_due" | "free" | "cancelled";
-  plan_name: string;
-  questions_used: number;
-  questions_limit: number;
-  renewal_date?: string;
-  payment_method_update_url?: string;
-  days_remaining?: number;
-  /* extended fields from API spec */
   tier_slug?: string;
   tier_name?: string;
+  plan_name?: string;
+  questions_used: number;
+  question_limit: number;
+  questions_limit?: number;
   percent_used?: number;
-  grace_period_ends?: string;
+  period_start?: string;
   period_end?: string;
+  days_remaining?: number;
+  grace_period_ends?: string | null;
+  payment_method_update_url?: string | null;
   autopay_enabled?: boolean;
+  warning_80_sent?: boolean;
+  limit_reached_sent?: boolean;
+  renewal_date?: string;
 };
 
 export type BoardStatus = {
@@ -670,7 +673,7 @@ const api = {
 
   study: {
     getUsage: (token: string) =>
-      request<UsageInfo>("/api/usage", {}, token),
+      request<UsageInfo>("/api/billing/usage/me", {}, token),
 
     getBoardStatus: (token: string) =>
       request<BoardStatus>("/api/student/board/status", {}, token),

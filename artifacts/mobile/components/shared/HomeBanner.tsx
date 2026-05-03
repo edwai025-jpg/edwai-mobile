@@ -118,28 +118,23 @@ export function HomeBanner({
   }, [usage?.percent_used]);
 
   const usedQ = usage?.questions_used ?? 0;
-  const limitQ = usage?.questions_limit ?? 0;
+  const limitQ = usage?.question_limit ?? usage?.questions_limit ?? 0;
   const usagePct = usage?.percent_used ?? (limitQ > 0 ? Math.min((usedQ / limitQ) * 100, 100) : 0);
   const barColor = usagePct >= 90 ? "#ef4444" : usagePct >= 70 ? "#f59e0b" : "#818cf8";
   const statusBanner = usage?.status;
 
+  /* reset date — "↺ 2 Jun" format */
+  const resetLabel = (() => {
+    if (!usage?.period_end) return null;
+    try {
+      const d = new Date(usage.period_end);
+      return "↺ " + d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    } catch { return null; }
+  })();
+
   return (
     <View>
-      {/* ── Layer 0: Past Due Banner ── */}
-      {statusBanner === "past_due" && (
-        <View style={[bn.pastDue, { paddingTop: topPad + 10 }]}>
-          <View style={bn.pastDueInner}>
-            <View style={{ flex: 1 }}>
-              <Text style={bn.pastDueText}>⛔ Your account has been downgraded. Questions are now limited. Renew to restore full access.</Text>
-            </View>
-            <Pressable onPress={onUpgrade} style={bn.pastDueCta}>
-              <Text style={bn.pastDueCtaText}>Restore Access →</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-      {/* ── Layer 0: Grace Period Banner ── */}
+      {/* ── Layer 0: Grace Period Banner (priority 1) ── */}
       {statusBanner === "grace_period" && (
         <View style={[bn.grace, { paddingTop: topPad + 10 }]}>
           <View style={bn.graceInner}>
@@ -164,6 +159,20 @@ export function HomeBanner({
               <Text style={bn.graceCtaText}>
                 {usage?.payment_method_update_url ? "Update Card →" : "Resolve Now →"}
               </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* ── Layer 0: Past Due Banner (priority 2) ── */}
+      {statusBanner === "past_due" && (
+        <View style={[bn.pastDue, { paddingTop: topPad + 10 }]}>
+          <View style={bn.pastDueInner}>
+            <View style={{ flex: 1 }}>
+              <Text style={bn.pastDueText}>⛔ Your account has been downgraded. Questions are now limited. Renew to restore full access.</Text>
+            </View>
+            <Pressable onPress={onUpgrade} style={bn.pastDueCta}>
+              <Text style={bn.pastDueCtaText}>Restore Access →</Text>
             </Pressable>
           </View>
         </View>
@@ -276,11 +285,14 @@ export function HomeBanner({
             <Pressable style={nb.planWidget} onPress={onUpgrade}>
               <Text style={nb.planEmoji}>{planEmoji(usage?.tier_slug)}</Text>
               <View style={{ gap: 2 }}>
-                <Text style={nb.planName} numberOfLines={1}>{usage?.tier_name ?? usage?.plan_name ?? "Free"}</Text>
-                <View style={nb.planBarBg}>
-                  <View style={[nb.planBarFill, { width: `${usagePct}%` as DimensionValue, backgroundColor: barColor }]} />
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                  <Text style={nb.planName} numberOfLines={1}>{usage?.tier_name ?? usage?.plan_name ?? "Free"}</Text>
+                  <Text style={nb.planCount}>{usedQ}/{limitQ} Q</Text>
                 </View>
-                <Text style={nb.planCount}>{usedQ}/{limitQ} Q</Text>
+                <View style={nb.planBarBg}>
+                  <View style={[nb.planBarFill, { width: `${Math.min(usagePct, 100)}%` as DimensionValue, backgroundColor: barColor }]} />
+                </View>
+                {resetLabel ? <Text style={nb.planReset}>{resetLabel}</Text> : null}
               </View>
             </Pressable>
           )}
@@ -364,6 +376,7 @@ const nb = StyleSheet.create({
   planBarBg: { width: 60, height: 5, borderRadius: 2.5, backgroundColor: "rgba(255,255,255,0.18)", overflow: "hidden" },
   planBarFill: { height: "100%", borderRadius: 2.5 },
   planCount: { fontSize: 9, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.7)" },
+  planReset: { fontSize: 9, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.55)" },
   upgradeBtn: { backgroundColor: "rgba(10,6,40,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   upgradeBtnText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#fff" },
 });
