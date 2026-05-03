@@ -31,6 +31,7 @@
     "android": {
       "package": "com.edwai.app",
       "versionCode": 1,
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#667eea"

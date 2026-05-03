@@ -104,7 +104,7 @@ function SearchSheet({
     /* Full-cover overlay inside the outer Modal */
     <KeyboardAvoidingView
       style={sh.overlay}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior="padding"
     >
       {/* Dim top area — tap to close */}
       <Pressable style={sh.dimArea} onPress={() => { Keyboard.dismiss(); onClose(); }} />

@@ -621,8 +621,7 @@ export default function TextbooksScreen() {
     >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
       {/* ── Sticky Banner ── */}
       <HomeBanner
