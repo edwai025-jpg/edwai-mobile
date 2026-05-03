@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
-import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -19,12 +19,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnswerCard from "@/components/study/AnswerCard";
 import FlashcardsSection from "@/components/study/FlashcardsSection";
+import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { useAuth } from "@/context/auth";
+import { useTheme } from "@/context/theme";
 import api, {
   ApiError,
   DocumentItem,
   QueryHistoryItem,
   QueryResponse,
+  UsageInfo,
 } from "@/services/api";
 
 const PRIMARY = "#667eea";
@@ -196,9 +199,22 @@ const up = StyleSheet.create({
 /* ─── Main Screen ───────────────────────────────────────────────────────── */
 export default function OwnBooksScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const { accessToken } = useAuth();
-  const topPad = Platform.OS === "web" ? 16 : insets.top + 16;
+  const { accessToken, logout } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
+
+  /* usage / upgrade */
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    api.study.getUsage(accessToken).then(setUsage).catch(() => {}).finally(() => setUsageLoading(false));
+  }, [accessToken]);
+
+  const handleLogout = useCallback(async () => {
+    try { await logout(); } catch {}
+  }, [logout]);
 
   const [activeTab, setActiveTab] = useState<"pdf" | "youtube">("pdf");
 
@@ -393,16 +409,22 @@ export default function OwnBooksScreen() {
   const showQAInterface = selectedDoc && selectedDoc.is_ready && (!isYoutube || ytMode !== null);
 
   return (
-    <View style={sc.root}>
-      <ScrollView contentContainerStyle={[sc.scroll, { paddingTop: topPad }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <LinearGradient
+      colors={isDark ? ["#1a1a2e", "#16213e"] : ["#eff6ff", "#ffffff", "#faf5ff"]}
+      style={sc.root}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
+      <HomeBanner
+        usage={usage}
+        usageLoading={usageLoading}
+        onUpgrade={() => setShowUpgrade(true)}
+        onLogout={handleLogout}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
+      />
 
-        {/* ─── SOURCE TOGGLE ─── */}
-        <View style={sc.card}>
-          <View style={sc.toggleRow}>
-            <Pressable style={sc.toggleBtn} onPress={() => router.replace("/(tabs)")}><Text style={sc.toggleText}>📚 Textbooks</Text></Pressable>
-            <View style={[sc.toggleBtn, sc.toggleActive]}><Text style={sc.toggleTextActive}>📖 Own Books</Text></View>
-          </View>
-        </View>
+      <ScrollView contentContainerStyle={sc.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
         {/* ─── PDF / YOUTUBE TABS ─── */}
         <View style={sc.card}>
@@ -639,7 +661,8 @@ export default function OwnBooksScreen() {
       </ScrollView>
 
       {deleteTarget && <DeleteModal doc={deleteTarget} onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} loading={deleting} />}
-    </View>
+      <UpgradeModal visible={showUpgrade} onClose={() => setShowUpgrade(false)} />
+    </LinearGradient>
   );
 }
 
@@ -659,15 +682,10 @@ const ymp = StyleSheet.create({
 });
 
 const sc = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#1a1a2e" },
-  scroll: { paddingHorizontal: 16, paddingBottom: 110 },
+  root: { flex: 1 },
+  scroll: { paddingHorizontal: 16, paddingBottom: 110, paddingTop: 12 },
   card: { backgroundColor: CARD_BG, borderRadius: 12, borderWidth: 1, borderColor: BORDER, padding: 16, marginBottom: 12 },
   cardTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: TEXT_COLOR, marginBottom: 8 },
-  toggleRow: { flexDirection: "row", gap: 8 },
-  toggleBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: BORDER, alignItems: "center", backgroundColor: "#2a2a3e" },
-  toggleActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  toggleText: { fontSize: 14, color: MUTED, fontFamily: "Inter_500Medium" },
-  toggleTextActive: { fontSize: 14, color: "#fff", fontFamily: "Inter_600SemiBold" },
   subTabRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
   subTab: { flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: BORDER, alignItems: "center", backgroundColor: "#2a2a3e" },
   subTabActive: { backgroundColor: "#2d2a4a", borderColor: "rgba(102,126,234,0.6)" },
