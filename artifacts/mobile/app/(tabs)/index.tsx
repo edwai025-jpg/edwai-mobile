@@ -31,7 +31,6 @@ import { useTheme } from "@/context/theme";
 import api, {
   ApiError,
   BoardStatus,
-  Flashcard,
   Phase1Document,
   QueryHistoryItem,
   QueryResponse,
@@ -731,7 +730,6 @@ export default function TextbooksScreen() {
     setClasses([]);
     setResponse(null);
     setStreamText("");
-    setFlashcards([]);
   }, [boardId]);
 
   useEffect(() => {
@@ -776,7 +774,7 @@ export default function TextbooksScreen() {
   }, [accessToken, selectedClass]);
 
   const onDocSelect = useCallback(async (doc: Phase1Document) => {
-    setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText(""); setFlashcards([]);
+    setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText("");
     if (!accessToken) return;
     try { setHistory(await api.study.getQueryHistory(accessToken, doc.id)); } catch {}
     /* Persist selection so history survives app restarts */
@@ -820,7 +818,7 @@ export default function TextbooksScreen() {
     const ctrl = new AbortController();
     abortCtrl.current = ctrl;
     setMode(qMode); setQueryLoading(true); setStreaming(true);
-    setStreamText(""); setResponse(null); setFlashcards([]); setFlashcardsLoading(false);
+    setStreamText(""); setResponse(null);
     let accumulated = "";
     try {
       const res = await api.study.streamQuery(

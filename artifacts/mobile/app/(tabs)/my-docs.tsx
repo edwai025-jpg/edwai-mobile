@@ -23,7 +23,6 @@ import { useAuth } from "@/context/auth";
 import api, {
   ApiError,
   DocumentItem,
-  Flashcard,
   QueryHistoryItem,
   QueryResponse,
 } from "@/services/api";
@@ -328,7 +327,7 @@ export default function OwnBooksScreen() {
     try {
       await api.phase2.deleteDocument(accessToken, deleteTarget.id);
       setDocs((prev) => prev.filter((d) => d.id !== deleteTarget.id));
-      if (selectedDoc?.id === deleteTarget.id) { setSelectedDoc(null); setResponse(null); setStreamText(""); setFlashcards([]); setYtMode(null); }
+      if (selectedDoc?.id === deleteTarget.id) { setSelectedDoc(null); setResponse(null); setStreamText(""); setYtMode(null); }
       setDeleteTarget(null);
     } catch (e) {
       Alert.alert("Error", e instanceof ApiError ? e.message : "Could not delete document");
@@ -337,7 +336,7 @@ export default function OwnBooksScreen() {
 
   /* ── select doc ── */
   const onDocSelect = useCallback(async (doc: DocumentItem) => {
-    setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText(""); setFlashcards([]);
+    setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText("");
     setYtMode(doc.source_type === "youtube" ? null : "qa");
     if (!accessToken) return;
     try { setHistory(await api.phase2.getQueryHistory(accessToken, doc.id)); } catch {}
@@ -351,7 +350,7 @@ export default function OwnBooksScreen() {
     const ctrl = new AbortController();
     abortCtrl.current = ctrl;
     setQueryMode(qMode); setQueryLoading(true); setStreaming(true);
-    setStreamText(""); setResponse(null); setFlashcards([]); setFlashcardsLoading(false);
+    setStreamText(""); setResponse(null);
     let accumulated = "";
     try {
       const res = await api.phase2.streamQuery(
