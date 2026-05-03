@@ -371,6 +371,13 @@ export default function OwnBooksScreen() {
         api.study.generateFlashcards(accessToken, q.trim(), finalRes.answer)
           .then((r) => setFlashcards(r.flashcards ?? [])).catch(() => {}).finally(() => setFlashcardsLoading(false));
       }
+      /* Optimistically add to local history so it appears immediately */
+      setHistory((prev) => {
+        const newItem = { id: Date.now(), question: q.trim(), mode: qMode, created_at: new Date().toISOString() };
+        const deduped = prev.filter((h) => h.question.toLowerCase() !== newItem.question.toLowerCase());
+        return [newItem, ...deduped].slice(0, 20);
+      });
+      /* Also re-fetch from server — replaces with real DB data when successful */
       api.phase2.getQueryHistory(accessToken, selectedDoc.id).then(setHistory).catch(() => {});
     } catch (e) {
       if ((e as Error)?.name !== "AbortError") {

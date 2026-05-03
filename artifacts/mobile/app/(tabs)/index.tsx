@@ -833,7 +833,13 @@ export default function TextbooksScreen() {
         api.study.generateFlashcards(accessToken, question.trim(), finalRes.answer)
           .then((r) => setFlashcards(r.flashcards ?? [])).catch(() => {}).finally(() => setFlashcardsLoading(false));
       }
-      /* Re-fetch history from server so it reflects the DB (survives restarts) */
+      /* Optimistically add to local history so it appears immediately */
+      setHistory((prev) => {
+        const newItem = { id: Date.now(), question: question.trim(), mode: qMode, created_at: new Date().toISOString() };
+        const deduped = prev.filter((h) => h.question.toLowerCase() !== newItem.question.toLowerCase());
+        return [newItem, ...deduped].slice(0, 25);
+      });
+      /* Also re-fetch from server — replaces with real DB data when successful */
       api.study.getQueryHistory(accessToken, selectedDoc.id).then(setHistory).catch(() => {});
       /* Refresh usage after each query */
       api.study.getUsage(accessToken).then(setUsage).catch(() => {});
