@@ -9,6 +9,7 @@ import {
   Alert,
   DimensionValue,
   Image,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -618,6 +619,11 @@ export default function TextbooksScreen() {
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
       {/* ── Sticky Banner ── */}
       <HomeBanner
         usage={usage}
@@ -629,9 +635,10 @@ export default function TextbooksScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={[sc.scroll, { paddingBottom: bottomInset }]}
+        contentContainerStyle={[sc.scroll, { paddingBottom: bottomInset + 16 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
       >
         {/* ─── BOARD STATUS ─── */}
         {boardStatusLoading && (
@@ -833,6 +840,7 @@ export default function TextbooksScreen() {
           <Text style={sc.footerText}>AI responses should be verified with citations.</Text>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {showKeyboard && (
         <IndianLanguageKeyboard

@@ -4,7 +4,9 @@ import {
   ActivityIndicator,
   FlatList,
   Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -100,7 +102,10 @@ function SearchSheet({
 
   return (
     /* Full-cover overlay inside the outer Modal */
-    <View style={sh.overlay}>
+    <KeyboardAvoidingView
+      style={sh.overlay}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       {/* Dim top area — tap to close */}
       <Pressable style={sh.dimArea} onPress={() => { Keyboard.dismiss(); onClose(); }} />
 
@@ -167,7 +172,7 @@ function SearchSheet({
           />
         )}
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
