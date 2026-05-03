@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 
 const PROD_URL = "https://edwai-api-953672603784.asia-south1.run.app";
+export const PHOTO_ENDPOINT = `${PROD_URL}/api/student/profile/photo`;
 
 const PROXY_BASE = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api-server/api/edwai`
@@ -611,14 +612,21 @@ const api = {
         token
       ),
 
+    probePhoto: (token: string): Promise<boolean> =>
+      fetch(PHOTO_ENDPOINT, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.status === 200)
+        .catch(() => false),
+
     uploadPhoto: (token: string, imageUri: string) => {
       const formData = new FormData();
-      formData.append("photo", {
+      formData.append("file", {
         uri: imageUri,
         type: "image/jpeg",
         name: "photo.jpg",
       } as unknown as Blob);
-      return request<{ profile_photo_url: string }>(
+      return request<{ success: boolean; profile_photo_url: string }>(
         "/api/student/profile/photo",
         { method: "POST", body: formData, headers: {} },
         token
@@ -626,7 +634,7 @@ const api = {
     },
 
     deletePhoto: (token: string) =>
-      request<{ message: string }>(
+      request<{ success: boolean }>(
         "/api/student/profile/photo",
         { method: "DELETE" },
         token

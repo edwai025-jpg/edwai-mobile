@@ -1,10 +1,10 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Modal,
   Pressable,
   Text,
@@ -18,14 +18,15 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
-import api, { ApiError } from "@/services/api";
+import api, { ApiError, PHOTO_ENDPOINT } from "@/services/api";
 
 type Props = {
   visible: boolean;
   onClose: () => void;
+  onPhotoChanged?: (hasPhoto: boolean) => void;
 };
 
-export default function AccountEditModal({ visible, onClose }: Props) {
+export default function AccountEditModal({ visible, onClose, onPhotoChanged }: Props) {
   const { user, updateUser, refreshUser, accessToken } = useAuth();
   const token = accessToken ?? "";
 
@@ -38,13 +39,13 @@ export default function AccountEditModal({ visible, onClose }: Props) {
   const [otp, setOtp] = useState("");
   const [otpLoading, setOtpLoading] = useState(false);
 
+  const [hasPhoto, setHasPhoto] = useState<boolean | null>(null);
   const [photoLoading, setPhotoLoading] = useState(false);
   const [toast, setToast] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const phoneVerified = user?.phoneVerified ?? false;
   const isPhoneComplete = phone.replace(/\D/g, "").length === 10;
-  const photoUrl = user?.profilePhotoUrl;
   const displayName = user?.name || "Student";
   const initials = displayName.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
 
@@ -56,6 +57,9 @@ export default function AccountEditModal({ visible, onClose }: Props) {
       setOtpStep("idle");
       setOtp("");
       setToast(null);
+      if (token) {
+        api.profile.probePhoto(token).then(setHasPhoto).catch(() => setHasPhoto(false));
+      }
     }
   }, [visible]);
 
@@ -115,20 +119,12 @@ export default function AccountEditModal({ visible, onClose }: Props) {
     }
   };
 
-  const handlePickPhoto = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert("Permission needed", "Allow photo library access."); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets[0]) return;
+  const doUpload = async (uri: string) => {
     setPhotoLoading(true);
     try {
-      const res = await api.profile.uploadPhoto(token, result.assets[0].uri);
-      await updateUser({ profilePhotoUrl: res.profile_photo_url });
+      await api.profile.uploadPhoto(token, uri);
+      setHasPhoto(true);
+      onPhotoChanged?.(true);
       showToast("ok", "Photo updated.");
     } catch {
       showToast("err", "Failed to upload photo.");
@@ -137,17 +133,65 @@ export default function AccountEditModal({ visible, onClose }: Props) {
     }
   };
 
+  const handlePickFromLibrary = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert("Permission needed", "Allow photo library access in Settings to set a profile picture."); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    await doUpload(result.assets[0].uri);
+  };
+
+  const handlePickFromCamera = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { Alert.alert("Permission needed", "Allow camera access in Settings to take a profile picture."); return; }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    await doUpload(result.assets[0].uri);
+  };
+
+  const handlePickPhoto = () => {
+    Alert.alert(
+      "Profile Photo",
+      "Choose an option",
+      [
+        { text: "Take Photo", onPress: handlePickFromCamera },
+        { text: "Choose from Library", onPress: handlePickFromLibrary },
+        { text: "Cancel", style: "cancel" },
+      ],
+      { cancelable: true }
+    );
+  };
+
   const handleRemovePhoto = async () => {
-    setPhotoLoading(true);
-    try {
-      await api.profile.deletePhoto(token);
-      await updateUser({ profilePhotoUrl: undefined });
-      showToast("ok", "Photo removed.");
-    } catch {
-      showToast("err", "Failed to remove photo.");
-    } finally {
-      setPhotoLoading(false);
-    }
+    Alert.alert("Remove Photo", "Are you sure you want to remove your profile photo?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          setPhotoLoading(true);
+          try {
+            await api.profile.deletePhoto(token);
+            setHasPhoto(false);
+            onPhotoChanged?.(false);
+            showToast("ok", "Photo removed.");
+          } catch {
+            showToast("err", "Failed to remove photo.");
+          } finally {
+            setPhotoLoading(false);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -169,10 +213,15 @@ export default function AccountEditModal({ visible, onClose }: Props) {
             {/* Photo */}
             <View style={s.photoRow}>
               <Pressable onPress={handlePickPhoto} style={s.avatarWrap}>
-                {photoUrl ? (
-                  <Image source={{ uri: photoUrl }} style={s.avatarImg} />
+                {hasPhoto && token ? (
+                  <ExpoImage
+                    source={{ uri: PHOTO_ENDPOINT, headers: { Authorization: `Bearer ${token}` } }}
+                    style={s.avatarImg}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                  />
                 ) : (
-                  <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={s.avatarImg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                  <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={[s.avatarImg, { alignItems: "center", justifyContent: "center" }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                     <Text style={s.avatarInitials}>{initials || "U"}</Text>
                   </LinearGradient>
                 )}
@@ -185,9 +234,9 @@ export default function AccountEditModal({ visible, onClose }: Props) {
               </Pressable>
               <View style={{ gap: 4 }}>
                 <TouchableOpacity onPress={handlePickPhoto}>
-                  <Text style={s.photoLink}>Change Photo</Text>
+                  <Text style={s.photoLink}>{hasPhoto ? "Change Photo" : "Add Photo"}</Text>
                 </TouchableOpacity>
-                {!!photoUrl && (
+                {hasPhoto && (
                   <TouchableOpacity onPress={handleRemovePhoto}>
                     <Text style={s.removeLink}>Remove Photo</Text>
                   </TouchableOpacity>

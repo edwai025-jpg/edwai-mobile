@@ -23,7 +23,9 @@
       "bundleIdentifier": "com.edwai.app",
       "buildNumber": "1",
       "infoPlist": {
-        "CFBundleDevelopmentRegion": "en_IN"
+        "CFBundleDevelopmentRegion": "en_IN",
+        "NSPhotoLibraryUsageDescription": "EdwAI uses your photo library to set a profile picture.",
+        "NSCameraUsageDescription": "EdwAI uses the camera to take a profile picture."
       }
     },
     "android": {
@@ -32,7 +34,12 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#667eea"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/images/icon.png",
@@ -46,7 +53,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-image-picker"
     ],
     "experiments": {
       "typedRoutes": true,

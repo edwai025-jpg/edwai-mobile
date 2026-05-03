@@ -1,4 +1,5 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
@@ -6,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   DimensionValue,
-  Image,
   Linking,
   Platform,
   Pressable,
@@ -23,18 +23,35 @@ import SessionsModal from "@/components/SessionsModal";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import { useTheme } from "@/context/theme";
-import api, { UsageInfo } from "@/services/api";
+import api, { PHOTO_ENDPOINT, UsageInfo } from "@/services/api";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 type MaterialIconName = React.ComponentProps<typeof MaterialIcons>["name"];
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
 /* ─── Avatar ─────────────────────────────────────────────────────────────── */
-function Avatar({ name, photoUrl, size = 72 }: { name: string; photoUrl?: string; size?: number }) {
+function Avatar({
+  name,
+  token,
+  hasPhoto,
+  size = 72,
+}: {
+  name: string;
+  token?: string | null;
+  hasPhoto?: boolean | null;
+  size?: number;
+}) {
   const initials = name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
   const r = size / 2;
-  if (photoUrl) {
-    return <Image source={{ uri: photoUrl }} style={{ width: size, height: size, borderRadius: r, borderWidth: 2, borderColor: "rgba(255,255,255,0.25)" }} />;
+  if (hasPhoto && token) {
+    return (
+      <ExpoImage
+        source={{ uri: PHOTO_ENDPOINT, headers: { Authorization: `Bearer ${token}` } }}
+        style={{ width: size, height: size, borderRadius: r, borderWidth: 2, borderColor: "rgba(255,255,255,0.25)" }}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+      />
+    );
   }
   return (
     <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={{ width: size, height: size, borderRadius: r, alignItems: "center", justifyContent: "center" }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
@@ -98,6 +115,7 @@ export default function ProfileScreen() {
 
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [usageLoading, setUsageLoading] = useState(true);
+  const [hasPhoto, setHasPhoto] = useState<boolean | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [showEducation, setShowEducation] = useState(false);
@@ -117,15 +135,16 @@ export default function ProfileScreen() {
           .then(setUsage)
           .catch(() => setUsage(null))
           .finally(() => setUsageLoading(false));
+        api.profile.probePhoto(accessToken).then(setHasPhoto).catch(() => setHasPhoto(false));
       } else {
         setUsageLoading(false);
+        setHasPhoto(false);
       }
     }, [refreshUser, accessToken])
   );
 
   const displayName = user?.name || "Student";
   const identifier = user?.email || user?.phone || "";
-  const photoUrl = user?.profilePhotoUrl;
 
   /* Usage values: ONLY from live API, never from stale cached user object */
   const planName = usage?.tier_name ?? usage?.plan_name ?? null;
@@ -219,7 +238,7 @@ export default function ProfileScreen() {
         end={{ x: 1, y: 1 }}
       >
         <View style={st.avatarRow}>
-          <Avatar name={displayName} photoUrl={photoUrl ?? undefined} size={70} />
+          <Avatar name={displayName} token={accessToken} hasPhoto={hasPhoto} size={70} />
           <View style={st.nameBlock}>
             <Text style={st.userName} numberOfLines={1}>{displayName}</Text>
             {!!identifier && <Text style={st.userIdentifier} numberOfLines={1}>{identifier}</Text>}
@@ -401,7 +420,11 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      <AccountEditModal visible={showAccount} onClose={() => setShowAccount(false)} />
+      <AccountEditModal
+        visible={showAccount}
+        onClose={() => setShowAccount(false)}
+        onPhotoChanged={setHasPhoto}
+      />
       <EducationEditModal visible={showEducation} onClose={() => setShowEducation(false)} />
       <SessionsModal visible={showSessions} onClose={() => setShowSessions(false)} />
     </LinearGradient>

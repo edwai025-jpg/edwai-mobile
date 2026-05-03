@@ -1,0 +1,207 @@
+Yes — photos are fully shared across web and mobile. There is one central storage location per user (profiles/{user_id}/avatar.jpg). A photo uploaded on the website shows immediately on mobile, and vice versa. The same three endpoints handle everything.
+
+Production Base URL:
+
+https://edwai-api-953672603784.asia-south1.run.app
+
+The Three Endpoints
+1. Fetch Photo
+
+GET /api/student/profile/photo
+Authorization: Bearer <token>
+
+    Returns raw JPEG bytes directly (not JSON) with Content-Type: image/jpeg
+    Returns 404 if the user has no photo — handle this gracefully by showing initials avatar
+    Do not parse as JSON. Load as binary/blob
+
+// React Native example
+const response = await fetch(
+  'https://edwai-api-953672603784.asia-south1.run.app/api/student/profile/photo',
+  {
+    headers: { Authorization: `Bearer ${token}` },
+  }
+);
+if (response.status === 404) {
+  // No photo — show initials fallback
+} else {
+  // For Expo: save to file system, then use as Image uri
+  const blob = await response.blob();
+}
+
+On Expo/React Native the simplest approach is to embed the token in a custom fetch and write to a temp file, or use a signed URL strategy. The cleanest pattern is:
+
+// Use as Image source with headers (Expo Image supports headers)
+import { Image } from 'expo-image';
+<Image
+  source={{
+    uri: 'https://edwai-api-953672603784.asia-south1.run.app/api/student/profile/photo',
+    headers: { Authorization: `Bearer ${token}` },
+  }}
+  style={{ width: 80, height: 80, borderRadius: 40 }}
+/>
+
+expo-image (not the built-in React Native Image) natively supports auth headers and caching. Use this.
+2. Upload / Replace Photo
+
+POST /api/student/profile/photo
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+Field name: "file"
+
+Accepted formats: image/jpeg · image/png · image/webp
+Max raw size: 5 MB (the server auto-compresses to ≤300 KB JPEG, max 512×512 px)
+
+Success response:
+
+{ "success": true, "profile_photo_url": "profiles/42/avatar.jpg" }
+
+Error responses:
+
+{ "detail": "Unsupported file type. Upload a JPG, PNG, or WebP image." }  // 400
+{ "detail": "File too large. Maximum size is 5 MB." }                      // 400
+{ "detail": "Photo upload failed. Please try again." }                     // 500
+
+3. Delete Photo
+
+DELETE /api/student/profile/photo
+Authorization: Bearer <token>
+
+Response: { "success": true }
+How to Know if a User Has a Photo
+
+GET /api/auth/me (your user-profile endpoint) does not include profile_photo_url in its response. The correct approach on mobile is:
+
+    Always attempt GET /api/student/profile/photo on login and profile screen load. If it returns 404 → show initials avatar. If it returns 200 → display the photo.
+
+Cache the result locally so you do not re-fetch on every render.
+Implementing Photo Upload on iOS and Android (Expo / React Native)
+Step 1 — Install Dependencies
+
+npx expo install expo-image-picker expo-image
+
+expo-image-picker handles camera/gallery with built-in permission dialogs on both platforms.
+Step 2 — iOS Permissions (app.json / app.config.js)
+
+{
+  "expo": {
+    "ios": {
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "EdwAI uses your photo library to set a profile picture.",
+        "NSCameraUsageDescription": "EdwAI uses the camera to take a profile picture."
+      }
+    }
+  }
+}
+
+These strings appear in the iOS system permission dialogs. Required — App Store rejects apps without them.
+Step 3 — Android Permissions (app.json)
+
+{
+  "expo": {
+    "android": {
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ]
+    }
+  }
+}
+
+READ_MEDIA_IMAGES covers Android 13+. READ_EXTERNAL_STORAGE covers Android 12 and below. Include both.
+Step 4 — Complete Upload Flow (copy-paste ready)
+
+import * as ImagePicker from 'expo-image-picker';
+const API_BASE = 'https://edwai-api-953672603784.asia-south1.run.app';
+export async function pickAndUploadProfilePhoto(token) {
+  // 1. Request permission
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    alert('Photo library access is required to set a profile picture.');
+    return null;
+  }
+  // 2. Open picker (crop to square, max 512px)
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,   // shows crop UI on both platforms
+    aspect: [1, 1],        // square crop
+    quality: 0.85,         // JPEG quality (0–1)
+    base64: false,
+  });
+  if (result.canceled) return null;
+  const asset = result.assets[0];
+  // 3. Build multipart form — React Native FormData accepts { uri, name, type }
+  const formData = new FormData();
+  formData.append('file', {
+    uri: asset.uri,
+    name: 'photo.jpg',
+    type: 'image/jpeg',
+  });
+  // 4. POST to backend
+  const response = await fetch(`${API_BASE}/api/student/profile/photo`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      // Do NOT set Content-Type manually — fetch sets it with the correct boundary
+    },
+    body: formData,
+  });
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.detail || 'Upload failed');
+  }
+  return await response.json(); // { success: true, profile_photo_url: "profiles/42/avatar.jpg" }
+}
+
+Step 5 — Camera Option (Optional)
+
+// Use launchCameraAsync instead of launchImageLibraryAsync
+const { status } = await ImagePicker.requestCameraPermissionsAsync();
+const result = await ImagePicker.launchCameraAsync({
+  allowsEditing: true,
+  aspect: [1, 1],
+  quality: 0.85,
+});
+
+Show a bottom sheet with "Take Photo" / "Choose from Library" / "Remove Photo" — standard pattern for both platforms.
+Step 6 — Display the Photo (with auth header)
+
+import { Image } from 'expo-image';
+function ProfileAvatar({ token, userInitials }) {
+  const [hasPhoto, setHasPhoto] = useState(null); // null=unknown, true, false
+  useEffect(() => {
+    // Probe once on mount
+    fetch(`${API_BASE}/api/student/profile/photo`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => setHasPhoto(r.ok)).catch(() => setHasPhoto(false));
+  }, [token]);
+  if (hasPhoto === false) {
+    // Initials fallback
+    return (
+      <View style={styles.initialsCircle}>
+        <Text style={styles.initialsText}>{userInitials}</Text>
+      </View>
+    );
+  }
+  return (
+    <Image
+      source={{
+        uri: `${API_BASE}/api/student/profile/photo`,
+        headers: { Authorization: `Bearer ${token}` },
+      }}
+      style={{ width: 80, height: 80, borderRadius: 40 }}
+      contentFit="cover"
+      cachePolicy="memory-disk"    // expo-image built-in caching
+      onError={() => setHasPhoto(false)}
+    />
+  );
+}
+
+The cachePolicy="memory-disk" on expo-image means the photo is cached locally after the first fetch — subsequent renders are instant even offline.
+Summary
+Operation	Method	Endpoint	Notes
+Read photo	GET	/api/student/profile/photo	Returns raw JPEG bytes, 404 if none
+Upload / replace	POST	/api/student/profile/photo	multipart/form-data, field file, max 5 MB
+Delete photo	DELETE	/api/student/profile/photo	Clears from storage and DB
+
+Photos are stored once and shared — uploading from web or mobile both write to the same storage key, so they are always in sync.
