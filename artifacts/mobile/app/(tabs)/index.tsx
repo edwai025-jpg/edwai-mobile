@@ -30,10 +30,13 @@ import { useAuth } from "@/context/auth";
 import { useTheme } from "@/context/theme";
 import api, {
   ApiError,
+  BoardPageConfig,
   BoardStatus,
+  DisclaimerMessages,
   Phase1Document,
   QueryHistoryItem,
   QueryResponse,
+  TypographySettings,
   UsageInfo,
 } from "@/services/api";
 
@@ -539,10 +542,18 @@ const bp = StyleSheet.create({
 
 /* ─── Recent Questions ───────────────────────────────────────────────────── */
 function RecentQuestionsPanel({ history, onSelect }: { history: QueryHistoryItem[]; onSelect: (q: string) => void }) {
+  const { isDark } = useTheme();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   if (history.length === 0) return null;
   const filtered = search ? history.filter((h) => h.question.toLowerCase().includes(search.toLowerCase())) : history;
+
+  const rowTextColor = isDark ? "#d1d5db" : "#1f2937";
+  const rowBorderColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
+  const searchBg = isDark ? "#2a2a3e" : "#f3f4f6";
+  const searchBorder = isDark ? "rgba(255,255,255,0.10)" : "#d1d5db";
+  const searchColor = isDark ? "#f9fafb" : "#111827";
+
   return (
     <View style={rq.card}>
       <Pressable style={rq.header} onPress={() => setOpen((v) => !v)}>
@@ -552,13 +563,19 @@ function RecentQuestionsPanel({ history, onSelect }: { history: QueryHistoryItem
       {open && (
         <View>
           {history.length > 5 && (
-            <TextInput style={rq.search} placeholder="Search questions…" placeholderTextColor={MUTED} value={search} onChangeText={setSearch} />
+            <TextInput
+              style={[rq.search, { backgroundColor: searchBg, borderColor: searchBorder, color: searchColor }]}
+              placeholder="Search questions…"
+              placeholderTextColor={MUTED}
+              value={search}
+              onChangeText={setSearch}
+            />
           )}
           <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
             {filtered.map((h) => (
-              <Pressable key={h.id} style={rq.row} onPress={() => { onSelect(h.question); setOpen(false); }}>
+              <Pressable key={h.id} style={[rq.row, { borderTopColor: rowBorderColor }]} onPress={() => { onSelect(h.question); setOpen(false); }}>
                 <Text style={rq.modeIcon}>{h.mode === "retrieve" ? "📖" : "💡"}</Text>
-                <Text style={rq.rowText} numberOfLines={1}>{h.question}</Text>
+                <Text style={[rq.rowText, { color: rowTextColor }]} numberOfLines={1}>{h.question}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -571,10 +588,10 @@ const rq = StyleSheet.create({
   card: { backgroundColor: "rgba(99,71,234,0.08)", borderRadius: 10, borderWidth: 2, borderColor: "rgba(99,102,241,0.3)", marginBottom: 10 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 11 },
   headerText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#a5b4fc" },
-  search: { marginHorizontal: 12, marginBottom: 6, backgroundColor: "#2a2a3e", borderRadius: 8, borderWidth: 1, borderColor: BORDER, paddingHorizontal: 12, paddingVertical: 8, color: TEXT_COLOR, fontSize: 13 },
-  row: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: BORDER },
+  search: { marginHorizontal: 12, marginBottom: 6, borderRadius: 8, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13 },
+  row: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1 },
   modeIcon: { fontSize: 13 },
-  rowText: { flex: 1, fontSize: 13, color: "#d1d5db" },
+  rowText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular" },
 });
 
 /* ─── Main Screen ────────────────────────────────────────────────────────── */
@@ -603,6 +620,11 @@ export default function TextbooksScreen() {
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Phase1Document | null>(null);
 
+  /* session config */
+  const [typographySettings, setTypographySettings] = useState<TypographySettings | null>(null);
+  const [disclaimerMessages, setDisclaimerMessages] = useState<DisclaimerMessages | null>(null);
+  const [boardPageConfig, setBoardPageConfig] = useState<BoardPageConfig | null>(null);
+
   /* query */
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<"retrieve" | "explain">("retrieve");
@@ -612,6 +634,7 @@ export default function TextbooksScreen() {
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [response, setResponse] = useState<QueryResponse | null>(null);
+  const [imagesLoading, setImagesLoading] = useState(false);
 
   /* ocr */
   const [captureUri, setCaptureUri] = useState<string | null>(null);
@@ -664,6 +687,19 @@ export default function TextbooksScreen() {
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  /* ── Session setup: typography + disclaimer messages ── */
+  useEffect(() => {
+    if (!accessToken) return;
+    api.study.getTypographySettings(accessToken).then(setTypographySettings).catch(() => {});
+    api.study.getDisclaimerMessages(accessToken).then(setDisclaimerMessages).catch(() => {});
+  }, [accessToken]);
+
+  /* ── Board page config (fetched when board_id is known) ── */
+  useEffect(() => {
+    if (!accessToken || !boardId) return;
+    api.study.getBoardPageConfig(accessToken, boardId).then(setBoardPageConfig).catch(() => {});
+  }, [accessToken, boardId]);
 
   /* ── Fetch usage on mount ── */
   useEffect(() => {
@@ -829,6 +865,28 @@ export default function TextbooksScreen() {
       );
       const finalRes = res.answer ? res : { ...res, answer: accumulated };
       setResponse(finalRes); setStreaming(false); setQueryLoading(false);
+      /* Phase 1: fetch citation/diagram images asynchronously after stream */
+      if (finalRes.image_source_pages?.length && accessToken) {
+        setImagesLoading(true);
+        const docId = finalRes.document_id ?? selectedDoc!.id;
+        const pages = finalRes.image_source_pages!;
+        const includeDiagrams = finalRes.is_visual_question ?? false;
+        setTimeout(async () => {
+          try {
+            const imgRes = await api.study.fetchQueryImages(accessToken, {
+              document_id: docId,
+              pages,
+              include_diagrams: includeDiagrams,
+            });
+            setResponse((prev) => prev ? {
+              ...prev,
+              phase1_citations: imgRes.citation_images?.length ? imgRes.citation_images : prev.phase1_citations,
+              diagram_images: imgRes.diagram_images?.length ? imgRes.diagram_images : prev.diagram_images,
+            } : prev);
+          } catch {}
+          finally { setImagesLoading(false); }
+        }, 300);
+      }
       /* Add to local history immediately and persist to AsyncStorage */
       setHistory((prev) => {
         const newItem = { id: Date.now(), question: question.trim(), mode: qMode, created_at: new Date().toISOString() };
@@ -1097,7 +1155,17 @@ export default function TextbooksScreen() {
 
         {/* ─── ANSWER ─── */}
         {(queryLoading || streaming || response) && (
-          <AnswerCard loading={queryLoading && !streaming} streaming={streaming} streamText={streamText} response={response} mode={mode} />
+          <AnswerCard
+            loading={queryLoading && !streaming}
+            streaming={streaming}
+            streamText={streamText}
+            response={response}
+            mode={mode}
+            disclaimerMessages={disclaimerMessages}
+            boardPageConfig={boardPageConfig}
+            typographySettings={typographySettings}
+            imagesLoading={imagesLoading}
+          />
         )}
 
         {/* ─── FLASHCARDS ─── */}

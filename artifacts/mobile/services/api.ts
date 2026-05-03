@@ -184,6 +184,38 @@ export type CitationImage = {
   base64_image: string;
 };
 
+export type Phase1CitationImage = {
+  page: number;
+  pdf_page?: number;
+  data: string | null;
+  filename?: string;
+  ncert_url?: string;
+};
+
+export type QueryImagesResponse = {
+  diagram_images: DiagramImage[];
+  citation_images: Phase1CitationImage[];
+  page_display_mode?: string;
+};
+
+export type TypographySettings = {
+  font_size: string;
+  line_height: string;
+  font_family: string;
+};
+
+export type DisclaimerMessages = {
+  ai_warning_text: string;
+  page_context_text: string;
+  source_citation_text: string;
+};
+
+export type BoardPageConfig = {
+  board_id: number;
+  page_display_mode: "original" | "edwai_generated" | "embedded";
+  ncert_book_code: string | null;
+};
+
 export type ValidationResult = {
   is_reliable: boolean;
   confidence: number;
@@ -198,8 +230,12 @@ export type QueryResponse = {
   sources?: PageCitation[];
   diagram_images?: DiagramImage[];
   citation_images?: CitationImage[];
+  phase1_citations?: Phase1CitationImage[];
   validation?: ValidationResult;
   cached?: boolean;
+  image_source_pages?: number[];
+  is_visual_question?: boolean;
+  document_id?: number;
 };
 
 export type Flashcard = {
@@ -281,6 +317,9 @@ function parseSseText(
         citation_images?: CitationImage[];
         validation?: ValidationResult;
         cached?: boolean;
+        image_source_pages?: number[];
+        is_visual_question?: boolean;
+        document_id?: number;
       };
       if (parsed.chunk) {
         fullAnswer += parsed.chunk;
@@ -400,6 +439,9 @@ export async function streamQuery(
       citation_images: responseData.citation_images,
       validation: responseData.validation,
       cached: responseData.cached,
+      image_source_pages: responseData.image_source_pages,
+      is_visual_question: responseData.is_visual_question,
+      document_id: responseData.document_id,
     };
   }
 
@@ -692,6 +734,18 @@ const api = {
 
     transliterate: (token: string, lang: string, word: string) =>
       request<string[]>(`/api/transliterate/${lang}/${encodeURIComponent(word)}`, {}, token),
+
+    getTypographySettings: (token: string) =>
+      request<TypographySettings>("/api/typography-settings", {}, token),
+
+    getDisclaimerMessages: (token: string) =>
+      request<DisclaimerMessages>("/api/disclaimer-messages", {}, token),
+
+    getBoardPageConfig: (token: string, boardId: number) =>
+      request<BoardPageConfig>(`/api/boards/${boardId}/page-config`, {}, token),
+
+    fetchQueryImages: (token: string, body: { document_id: number; pages: number[]; include_diagrams: boolean }) =>
+      request<QueryImagesResponse>("/api/query/images", { method: "POST", body: JSON.stringify(body) }, token),
   },
 
   phase2: {
