@@ -608,6 +608,7 @@ export default function TextbooksScreen() {
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<"retrieve" | "explain">("retrieve");
   const [history, setHistory] = useState<QueryHistoryItem[]>([]);
+  const [selectionRestored, setSelectionRestored] = useState(false);
   const [queryLoading, setQueryLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
@@ -633,6 +634,33 @@ export default function TextbooksScreen() {
   const prevQuestion = useRef("");
   const boardId = user?.boardId;
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;
+
+  const P1_SELECTION_KEY = "@edwai/p1_selection";
+
+  /* ── Restore last selection from AsyncStorage on mount ── */
+  useEffect(() => {
+    if (!accessToken) return;
+    AsyncStorage.getItem(P1_SELECTION_KEY).then(async (raw) => {
+      if (!raw) return;
+      try {
+        const { cls, subject, doc } = JSON.parse(raw) as {
+          cls: { id: number; name: string };
+          subject: string;
+          doc: Phase1Document;
+        };
+        setSelectedClass(cls);
+        setSelectedSubject(subject);
+        setSelectedDoc(doc);
+        setSelectionRestored(true);
+        /* Fetch history for restored doc */
+        api.study.getQueryHistory(accessToken, doc.id).then(setHistory).catch(() => {});
+        /* Silently reload subjects + docs so the dropdowns are populated */
+        api.study.getAvailableSubjects(accessToken, cls.id).then(setSubjects).catch(() => {});
+        api.study.getDocuments(accessToken, cls.id, subject).then(setDocuments).catch(() => {});
+      } catch {}
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
 
   /* ── Fetch usage on mount ── */
   useEffect(() => {
@@ -741,7 +769,12 @@ export default function TextbooksScreen() {
     setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText(""); setFlashcards([]);
     if (!accessToken) return;
     try { setHistory(await api.study.getQueryHistory(accessToken, doc.id)); } catch {}
-  }, [accessToken]);
+    /* Persist selection so history survives app restarts */
+    AsyncStorage.setItem(
+      "@edwai/p1_selection",
+      JSON.stringify({ cls: selectedClass, subject: selectedSubject, doc })
+    ).catch(() => {});
+  }, [accessToken, selectedClass, selectedSubject]);
 
   /* ── transliterate ── */
   const handleQuestionChange = useCallback((text: string) => {
@@ -793,7 +826,8 @@ export default function TextbooksScreen() {
         api.study.generateFlashcards(accessToken, question.trim(), finalRes.answer)
           .then((r) => setFlashcards(r.flashcards ?? [])).catch(() => {}).finally(() => setFlashcardsLoading(false));
       }
-      setHistory((prev) => [{ id: Date.now(), question: question.trim(), mode: qMode, created_at: new Date().toISOString() }, ...prev.slice(0, 49)]);
+      /* Re-fetch history from server so it reflects the DB (survives restarts) */
+      api.study.getQueryHistory(accessToken, selectedDoc.id).then(setHistory).catch(() => {});
       /* Refresh usage after each query */
       api.study.getUsage(accessToken).then(setUsage).catch(() => {});
     } catch (e) {

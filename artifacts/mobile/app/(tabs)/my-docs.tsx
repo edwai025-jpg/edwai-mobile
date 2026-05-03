@@ -371,7 +371,7 @@ export default function OwnBooksScreen() {
         api.study.generateFlashcards(accessToken, q.trim(), finalRes.answer)
           .then((r) => setFlashcards(r.flashcards ?? [])).catch(() => {}).finally(() => setFlashcardsLoading(false));
       }
-      setHistory((prev) => [{ id: Date.now(), question: q.trim(), mode: qMode, created_at: new Date().toISOString() }, ...prev.slice(0, 49)]);
+      api.phase2.getQueryHistory(accessToken, selectedDoc.id).then(setHistory).catch(() => {});
     } catch (e) {
       if ((e as Error)?.name !== "AbortError") {
         const msg = e instanceof ApiError

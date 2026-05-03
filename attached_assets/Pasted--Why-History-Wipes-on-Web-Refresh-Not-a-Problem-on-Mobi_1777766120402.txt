@@ -1,0 +1,148 @@
+. Why History Wipes on Web Refresh (Not a Problem on Mobile)
+
+The web app stores queryHistory in React component state — pure memory, cleared on page refresh. The history data itself lives permanently in the production PostgreSQL database on GCP Cloud SQL. On mobile, just call the fetch endpoint every time a document is opened and the data will always be there.
+2. Two History Systems
+	Phase 1 — Admin Textbooks	Phase 2 — Own Books / YouTube
+DB table	user_query_history	phase2_query_history
+Cap per user per document	25 entries	20 entries
+Deduplication	Same question text → silently skipped	Same question text → bumps created_at to top
+Deleted when	Parent document deleted	Parent document deleted
+3. Database Schema
+Phase 1 — user_query_history
+
+id              INTEGER   Primary key
+user_id         INTEGER   FK → users.id  (CASCADE DELETE)
+document_id     INTEGER   FK → documents.id  (CASCADE DELETE)
+question_text   TEXT
+mode            VARCHAR(20)     "explain" | "retrieve" | "extract"
+answer_preview  VARCHAR(300)    First 250 chars of the answer
+sources         JSON            Array of page numbers e.g. [12, 13]
+created_at      DATETIME
+
+Phase 2 — phase2_query_history
+
+id              INTEGER   Primary key
+user_id         INTEGER   FK → users.id  (CASCADE DELETE)
+document_id     INTEGER   FK → phase2_documents.id  (CASCADE DELETE)
+question_text   TEXT
+mode            VARCHAR(20)     "explain" | "retrieve"
+answer_preview  VARCHAR(300)    First 297 chars + "..."
+created_at      DATETIME
+
+(No sources field in Phase 2 — Gemini handles sourcing internally.)
+4. API Endpoints
+
+All endpoints require:
+
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+4a. Fetch Phase 1 History (Admin Textbook)
+
+GET https://edwai-api-953672603784.asia-south1.run.app/api/query-history/{document_id}
+
+When to call: When user selects a textbook. Again after every successful answer.
+
+Response — array, newest first, max 25:
+
+[
+  {
+    "id": 42,
+    "question": "What is photosynthesis?",
+    "mode": "explain",
+    "answer_preview": "Photosynthesis is the process by which green plants...",
+    "sources": [34, 35],
+    "created_at": "2026-05-02T18:30:00"
+  }
+]
+
+4b. Fetch Phase 2 History (Own Book or YouTube Video)
+
+GET https://edwai-api-953672603784.asia-south1.run.app/api/phase2/documents/{document_id}/query-history
+
+When to call: When user selects a personal document or YouTube video. Again after every successful answer.
+
+Response — array, newest first, max 20:
+
+[
+  {
+    "id": 7,
+    "question": "Summarise chapter 3",
+    "mode": "explain",
+    "answer_preview": "Chapter 3 covers the fundamentals of...",
+    "created_at": "2026-05-02T18:31:00"
+  }
+]
+
+4c. Ask a Question — Phase 1 (Non-Stream)
+
+POST https://edwai-api-953672603784.asia-south1.run.app/api/query
+Body: { "document_id": 12, "question": "What is osmosis?", "mode": "explain" }
+
+History is saved automatically server-side on this call. No separate history POST needed.
+4d. Ask a Question — Phase 1 (SSE Stream)
+
+POST https://edwai-api-953672603784.asia-south1.run.app/api/query/stream
+Body: { "document_id": 12, "question": "What is osmosis?", "mode": "explain" }
+
+Receives Server-Sent Events. History saved server-side when the done event is emitted.
+4e. Ask a Question — Phase 2 (Non-Stream)
+
+POST https://edwai-api-953672603784.asia-south1.run.app/api/phase2/documents/{document_id}/query
+Body: { "question": "Summarise chapter 3", "mode": "explain" }
+
+History saved automatically server-side.
+4f. Ask a Question — Phase 2 (SSE Stream)
+
+POST https://edwai-api-953672603784.asia-south1.run.app/api/phase2/documents/{document_id}/query/stream
+Body: { "question": "Summarise chapter 3", "mode": "explain" }
+
+History saved server-side at stream completion.
+5. When to Fetch History — Trigger Table
+User Action	Call
+Selects a Phase 1 textbook	GET /api/query-history/{doc_id}
+Deselects textbook	Clear local list — no API call
+Selects a Phase 2 doc or YouTube	GET /api/phase2/documents/{doc_id}/query-history
+Deselects Phase 2 doc	Clear local list — no API call
+Switches Phase 2 document	Clear list + GET /api/phase2/documents/{new_doc_id}/query-history
+Any Phase 1 answer received (stream done or non-stream)	GET /api/query-history/{doc_id}
+Any Phase 2 answer received	GET /api/phase2/documents/{doc_id}/query-history
+6. No Write Endpoint — Server Writes History Automatically
+
+The mobile app never POSTs history directly. Both POST /api/query and POST /api/query/stream call _save_query_history() internally. Both Phase 2 query endpoints call _save_phase2_query_history() internally. The client only ever reads history via the GET endpoints above.
+7. UI Behaviour
+
+    Panel shows only when history.length > 0
+    Panel is collapsible — tapped to expand/collapse
+    Search input appears only when history.length > 5
+    Tapping a history row fills the question input with that text and closes the panel
+    Panel is scoped per document — switching documents clears and re-fetches
+
+Mode icons
+Mode	Phase 1 icon	Phase 2 icon
+"retrieve"	📖	📄 (PDF) or 🎬 (YouTube)
+"explain"	💡	📄 (PDF) or 🎬 (YouTube)
+8. Panel Color Tokens
+Element	Dark mode	Light mode
+Panel border	rgba(99,102,241,0.40)	#c7d2fe
+Panel background	rgba(26,26,78,0.50)	#eef2ff
+Header text	#a5b4fc	#4338ca
+Row text	#c7d2fe	#3730a3
+Row hover/pressed bg	rgba(99,102,241,0.25)	#e0e7ff
+Divider below header	rgba(99,102,241,0.20)	#c7d2fe
+Search input bg	rgba(49,46,129,0.40)	#ffffff
+Max list height	192px	192px
+9. Mobile Implementation Checklist
+
+    Set API_BASE_URL = 'https://edwai-api-953672603784.asia-south1.run.app' as a single constant
+    Persist last selected document_id in AsyncStorage so history loads on app resume
+    On document select → fetch history immediately
+    After every successful answer → re-fetch history for current document
+    Show panel only when history.length > 0
+    Show search field only when history.length > 5
+    Tap history row → populate question input + close panel
+    Switch document → clear list + fetch for new document
+    Never POST history — server handles all writes automatically
+
+
+Ask questions, plan your work…
