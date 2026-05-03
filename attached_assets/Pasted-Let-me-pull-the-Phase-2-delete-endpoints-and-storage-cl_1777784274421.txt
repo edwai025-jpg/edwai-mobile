@@ -1,0 +1,145 @@
+Let me pull the Phase 2 delete endpoints and storage cleanup logic at once:
+
+I have everything needed. Here is the complete delete spec:
+EdwAI — Phase 2 Delete Endpoints: Mobile Reference
+
+Production Base URL:
+
+https://edwai-api-953672603784.asia-south1.run.app
+
+Zero impact on admin textbooks. Phase 2 documents (own PDFs and YouTube videos) live in a completely separate database table and storage path from Phase 1 textbooks. Deleting a Phase 2 document cannot touch Phase 1 content under any circumstance.
+One Endpoint Handles Both PDFs and YouTube
+
+There is a single delete endpoint for both types. The backend detects the source_type internally and runs the correct cleanup.
+
+DELETE /api/phase2/documents/{document_id}
+Authorization: Bearer <token>
+
+No request body needed.
+What the Server Deletes Automatically
+
+When you call this endpoint the backend does all of the following in sequence:
+Step	For PDF	For YouTube
+1. Object storage files	Deletes entire folder: Individual Usage Phase Two/{user_id}/{document_id}/ from GCS bucket (edwai-storage)	Nothing — YouTube has no stored file
+2. Gemini File API	Deletes uploaded file from gemini_client.delete_file(gemini_file_id)	Deletes transcript file from Gemini
+3. Database record	Removed (cascades to query history)	Removed (cascades to query history)
+
+The mobile app fires one call. Everything — GCS files, Gemini index, query history — is gone.
+Responses
+Success
+
+{
+  "status": "deleted",
+  "message": "Document and all associated data deleted successfully"
+}
+
+Success with minor cleanup warnings (document IS deleted from DB)
+
+{
+  "status": "deleted_with_warnings",
+  "message": "Document deleted but some cleanup operations failed",
+  "warnings": [
+    "Gemini file deletion: File not found"
+  ]
+}
+
+Treat deleted_with_warnings the same as deleted on mobile — the document record and local storage files are gone. The warning is a background cleanup detail only.
+Error Cases
+HTTP	detail	When
+404	"Document not found"	ID doesn't exist, or belongs to a different user
+400	"Cannot delete a document that is currently being processed"	processing_status === "processing"
+401	Unauthorized	Missing or expired token
+Ownership is Enforced Server-Side
+
+The backend query is:
+
+WHERE id = {document_id} AND user_id = {current_user.id}
+
+A user cannot delete another user's document even if they know the ID. They will receive a 404.
+Before Deleting — Fetch the List
+
+To show a delete confirmation dialog you need the document title. Use this to get the user's document list:
+
+GET /api/phase2/documents
+Authorization: Bearer <token>
+
+Response — each item includes:
+
+{
+  "id": 17,
+  "title": "CBSE Chemistry Notes.pdf",
+  "source_type": "pdf",
+  "processing_status": "ready",
+  "youtube_url": null,
+  "created_at": "2026-05-01T10:30:00"
+}
+
+For YouTube documents, source_type is "youtube" and youtube_url contains the original URL.
+
+processing_status values:
+Value	Meaning	Can delete?
+"ready"	Fully processed, in use	✅ Yes
+"failed"	Processing failed	✅ Yes
+"pending"	Queued, not started	✅ Yes
+"processing"	Currently indexing	❌ No — show "Processing in progress" message
+Complete Mobile Delete Flow
+
+const API_BASE = 'https://edwai-api-953672603784.asia-south1.run.app';
+async function deleteDocument(documentId, token) {
+  const response = await fetch(
+    `${API_BASE}/api/phase2/documents/${documentId}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  if (response.status === 404) {
+    throw new Error('Document not found');
+  }
+  if (response.status === 400) {
+    const body = await response.json();
+    throw new Error(body.detail); // "Cannot delete a document that is currently being processed"
+  }
+  if (!response.ok) {
+    throw new Error('Delete failed. Please try again.');
+  }
+  const result = await response.json();
+  // result.status === "deleted" | "deleted_with_warnings"
+  // Both mean: remove from local state, update your list
+  return result;
+}
+
+Recommended UX Pattern
+
+User taps Delete on a PDF or video
+  ↓
+Show confirmation bottom sheet:
+  "Delete [title]?"
+  "This will permanently remove the document and all Q&A history."
+  [Cancel]  [Delete]
+  ↓
+User confirms
+  ↓
+Show loading spinner on the item
+  ↓
+DELETE /api/phase2/documents/{id}
+  ↓
+  ├─ status: "deleted" or "deleted_with_warnings"
+  │     → Remove item from list (optimistic or confirmed)
+  │     → Show toast: "Deleted successfully"
+  │
+  ├─ 400 processing
+  │     → Toast: "Can't delete while processing — try again shortly"
+  │
+  └─ 404
+        → Toast: "Document not found"
+        → Refresh list (it may have already been deleted)
+
+Storage Paths for Reference
+Platform	PDF storage path
+Production (GCP)	gs://edwai-storage/Individual Usage Phase Two/{user_id}/{document_id}/
+Development (Replit)	{env}/phase2/{user_id}/{document_id}/
+
+YouTube videos have no stored binary file — only a transcript file uploaded to Gemini, which is cleaned up via gemini_client.delete_file() automatically.

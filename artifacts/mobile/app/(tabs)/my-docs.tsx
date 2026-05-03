@@ -548,7 +548,19 @@ export default function OwnBooksScreen() {
           )}
 
           {displayDocs.map((doc) => (
-            <DocCard key={doc.id} doc={doc} selected={selectedDoc?.id === doc.id} onSelect={() => onDocSelect(doc)} onDelete={() => setDeleteTarget(doc)} />
+            <DocCard
+              key={doc.id}
+              doc={doc}
+              selected={selectedDoc?.id === doc.id}
+              onSelect={() => onDocSelect(doc)}
+              onDelete={() => {
+                if (doc.processing_status === "processing") {
+                  Alert.alert("Processing in Progress", "This document is still being indexed. Please wait until processing is complete before deleting.");
+                  return;
+                }
+                setDeleteTarget(doc);
+              }}
+            />
           ))}
         </View>
 
