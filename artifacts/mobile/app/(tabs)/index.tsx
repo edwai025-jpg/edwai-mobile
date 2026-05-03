@@ -633,6 +633,7 @@ export default function TextbooksScreen() {
   const abortCtrl = useRef<AbortController | null>(null);
   const prevQuestion = useRef("");
   const boardId = user?.boardId;
+  const prevBoardIdRef = useRef<number | undefined | "__init__">("__init__");
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;
 
   const P1_SELECTION_KEY = "@edwai/p1_selection";
@@ -711,8 +712,14 @@ export default function TextbooksScreen() {
     loadBoardStatus();
   }, [accessToken, boardId]);
 
-  /* Reset all book selections when the user changes board */
+  /* Reset all book selections when the user CHANGES board (skip initial mount) */
   useEffect(() => {
+    if (prevBoardIdRef.current === "__init__") {
+      prevBoardIdRef.current = boardId;
+      return;
+    }
+    if (prevBoardIdRef.current === boardId) return;
+    prevBoardIdRef.current = boardId;
     setSelectedClass(null);
     setSelectedSubject(null);
     setSelectedDoc(null);
