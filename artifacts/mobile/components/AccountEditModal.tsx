@@ -5,7 +5,9 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   Text,
   TextInput,
@@ -196,7 +198,7 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={s.backdrop}>
+      <KeyboardAvoidingView style={s.backdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={s.card}>
           <View style={s.titleRow}>
             <Text style={s.title}>Edit Account</Text>
@@ -356,7 +358,7 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
             </View>
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

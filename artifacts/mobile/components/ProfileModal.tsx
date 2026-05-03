@@ -13,7 +13,9 @@ import {
   Animated,
   DimensionValue,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -1196,7 +1198,7 @@ export default function ProfileModal({ visible, onClose }: Props) {
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={pm.backdrop}>
+      <KeyboardAvoidingView style={pm.backdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={pm.card}>
           <View style={pm.header}>
             <TouchableOpacity
@@ -1301,7 +1303,7 @@ export default function ProfileModal({ visible, onClose }: Props) {
 
           <ProfileToast toast={toast} onDone={() => setToast(null)} />
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

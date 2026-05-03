@@ -8,6 +8,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -102,14 +103,12 @@ function SearchSheet({
 
   return (
     /* Full-cover overlay inside the outer Modal */
-    <KeyboardAvoidingView
-      style={sh.overlay}
-      behavior="padding"
-    >
+    <View style={sh.overlay}>
       {/* Dim top area — tap to close */}
       <Pressable style={sh.dimArea} onPress={() => { Keyboard.dismiss(); onClose(); }} />
 
-      {/* Sheet panel */}
+      {/* Sheet panel — KAV wraps only the sheet so the flex dim-area doesn't absorb the padding */}
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={sh.sheet}>
         {/* Handle */}
         <View style={sh.handle} />
@@ -172,7 +171,8 @@ function SearchSheet({
           />
         )}
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -342,7 +342,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => { if (activeSheet) setActiveSheet(null); else onClose(); }}>
-      <View style={s.backdrop}>
+      <KeyboardAvoidingView style={s.backdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={s.card}>
           {/* Title bar */}
           <View style={s.titleRow}>
@@ -356,7 +356,11 @@ export default function EducationEditModal({ visible, onClose }: Props) {
           </View>
 
           {/* Fields */}
-          <View style={s.body}>
+          <ScrollView
+            contentContainerStyle={s.body}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             <SelectorRow
               label="State"
               value={stateName || undefined}
@@ -399,7 +403,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
                 : <Text style={s.saveBtnText}>Save Academic Details</Text>
               }
             </TouchableOpacity>
-          </View>
+          </ScrollView>
 
           {/* Toast */}
           {toast && !activeSheet && (
@@ -419,7 +423,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
             />
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
