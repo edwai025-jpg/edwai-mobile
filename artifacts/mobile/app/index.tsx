@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -95,6 +95,36 @@ export default function LoginScreen() {
     }
   };
 
+  // Ref to avoid processing the same callback URL twice (once via
+  // openAuthSessionAsync result and once via Linking listener).
+  const googleHandledRef = useRef(false);
+
+  const processGoogleCallback = async (url: string) => {
+    if (googleHandledRef.current) return;
+    googleHandledRef.current = true;
+    try {
+      const get = (key: string) => {
+        const m = url.match(new RegExp(`[?&#]${key}=([^&#]+)`));
+        return m ? decodeURIComponent(m[1]) : null;
+      };
+      const token = get("token");
+      const refreshToken = get("refresh_token") ?? "";
+      const profileComplete = get("profile_complete") === "true";
+      if (!token) throw new Error("No token received from Google sign-in");
+      await loginWithGoogleToken(token, refreshToken, profileComplete);
+      if (!profileComplete) {
+        router.replace("/complete-profile");
+      } else {
+        router.replace("/(tabs)");
+      }
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Google sign-in failed. Please try again.";
+      setErrorMsg(msg);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   const handleGoogle = async () => {
     if (Platform.OS === "web") {
       Linking.openURL(api.googleAuthUrl);
@@ -102,36 +132,39 @@ export default function LoginScreen() {
     }
     setGoogleLoading(true);
     setErrorMsg("");
-    try {
-      const redirectUrl = Linking.createURL("auth/google/callback");
-      const authUrl = `${api.googleAuthUrl}?mobile_redirect=${encodeURIComponent(redirectUrl)}`;
+    googleHandledRef.current = false;
 
+    const redirectUrl = Linking.createURL("auth/google/callback");
+    const authUrl = `${api.googleAuthUrl}?mobile_redirect=${encodeURIComponent(redirectUrl)}`;
+
+    // Fallback listener: on Android the OS may fire an intent that opens the
+    // app directly (bypassing openAuthSessionAsync's return value). We listen
+    // for the deep link here so we catch it either way.
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      if (url.includes("auth/google/callback")) {
+        subscription.remove();
+        WebBrowser.dismissBrowser();
+        processGoogleCallback(url);
+      }
+    });
+
+    try {
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+      subscription.remove(); // clean up if not already removed
 
       if (result.type === "success") {
-        const url = result.url;
-        const get = (key: string) => {
-          const m = url.match(new RegExp(`[?&#]${key}=([^&#]+)`));
-          return m ? decodeURIComponent(m[1]) : null;
-        };
-        const token = get("token");
-        const refreshToken = get("refresh_token") ?? "";
-        const profileComplete = get("profile_complete") === "true";
-        if (!token) throw new Error("No token received from Google sign-in");
-        await loginWithGoogleToken(token, refreshToken, profileComplete);
-        if (!profileComplete) {
-          router.replace("/complete-profile");
-        } else {
-          router.replace("/(tabs)");
-        }
-      } else if (result.type === "dismiss") {
+        await processGoogleCallback(result.url);
+      } else if (result.type === "dismiss" && !googleHandledRef.current) {
         setErrorMsg("Google sign-in was cancelled.");
+        setGoogleLoading(false);
       }
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "Google sign-in failed. Please try again.";
-      setErrorMsg(msg);
-    } finally {
-      setGoogleLoading(false);
+      subscription.remove();
+      if (!googleHandledRef.current) {
+        const msg = e instanceof ApiError ? e.message : "Google sign-in failed. Please try again.";
+        setErrorMsg(msg);
+        setGoogleLoading(false);
+      }
     }
   };
 
