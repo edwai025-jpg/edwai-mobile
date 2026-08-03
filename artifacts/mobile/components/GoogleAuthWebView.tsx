@@ -13,16 +13,36 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/colors";
 
-// All domains the backend may land on after Google OAuth
-// (edwai-prod-70474.web.app = Firebase hosting; eduwai.in = custom domain)
+// Exact hostnames the backend redirects to after Google OAuth
 const AUTH_DONE_HOSTS = ["edwai-prod-70474.web.app", "eduwai.in"];
 
-// Spoof a real mobile browser — Google blocks OAuth flows it detects as WebViews
-const SAFARI_UA =
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
-const CHROME_UA =
+// Spoof a real mobile Chrome browser — avoids Google's "unsupported browser" block
+const USER_AGENT =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
-const USER_AGENT = Platform.OS === "ios" ? SAFARI_UA : CHROME_UA;
+
+// Injected into every page after it loads. Uses window.location.hostname (exact
+// host match) so Google's own consent URL — which contains the redirect domain
+// as a query param — never triggers a false positive.
+const TOKEN_EXTRACTOR_JS = `
+(function() {
+  try {
+    var hostname = window.location.hostname;
+    var knownHosts = ${JSON.stringify(AUTH_DONE_HOSTS)};
+    var isAuthDone = knownHosts.some(function(h) { return hostname === h; });
+    if (!isAuthDone) return;
+    var url = window.location.href;
+    var m = url.match(/[?&#]token=([^&#\\s]+)/);
+    if (m) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: "auth_token",
+        url: url,
+        token: decodeURIComponent(m[1])
+      }));
+    }
+  } catch (e) {}
+})();
+true;
+`;
 
 export type GoogleAuthResult =
   | { type: "success"; token: string; profileComplete: boolean }
@@ -34,23 +54,6 @@ type Props = {
   authUrl: string;
   onResult: (result: GoogleAuthResult) => void;
 };
-
-/** Check if URL belongs to one of our known post-auth domains using simple string matching */
-function isAuthDoneUrl(url: string): boolean {
-  if (!url || typeof url !== "string") return false;
-  // Use simple string matching — avoids new URL() which can throw on unusual schemes
-  return AUTH_DONE_HOSTS.some((host) => url.includes(host));
-}
-
-/** Extract token from URL — handles both ?token= and #token= */
-function extractToken(url: string): string | null {
-  try {
-    const m = url.match(/[?&#]token=([^&#\s]+)/);
-    return m ? decodeURIComponent(m[1]) : null;
-  } catch {
-    return null;
-  }
-}
 
 export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
   const insets = useSafeAreaInsets();
@@ -64,25 +67,42 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
     onResult(result);
   };
 
-  // Called on every navigation state change inside the WebView
+  // Primary token extraction — runs after each page load via injectedJavaScript
+  const handleMessage = (event: { nativeEvent: { data: string } }) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type !== "auth_token" || !data.token) return;
+      const profileComplete = (data.url as string).includes("/student");
+      finish({ type: "success", token: data.token, profileComplete });
+    } catch {
+      // Ignore malformed messages
+    }
+  };
+
+  // Belt-and-suspenders fallback via navigation state (uses exact host check, not substring)
   const handleNavigationChange = (state: WebViewNavigation) => {
     try {
       const url = state.url;
       if (!url || handledRef.current) return;
-      if (!isAuthDoneUrl(url)) return;
-
-      const token = extractToken(url);
-      if (!token) return; // redirect URL hit but no token yet (e.g. landing page loading)
-
+      // Exact host match only — prevents false positives when host appears as a query param
+      const isAuthDone = AUTH_DONE_HOSTS.some(
+        (h) =>
+          url.startsWith(`https://${h}/`) ||
+          url.startsWith(`https://${h}?`) ||
+          url === `https://${h}`
+      );
+      if (!isAuthDone) return;
+      const m = url.match(/[?&#]token=([^&#\s]+)/);
+      if (!m) return;
+      const token = decodeURIComponent(m[1]);
       const profileComplete = url.includes("/student");
       finish({ type: "success", token, profileComplete });
     } catch {
-      // Never let errors here crash the component
+      // Never let this crash the component
     }
   };
 
   const handleClose = () => finish({ type: "cancel" });
-
   const handleError = () =>
     finish({ type: "error", message: "Failed to load Google sign-in. Please try again." });
 
@@ -111,11 +131,15 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
           <View style={s.closeBtn} />
         </View>
 
-        {/* WebView */}
+        {/* WebView — Chrome UA bypasses Google's "unsupported browser" block */}
         <WebView
           source={{ uri: authUrl }}
           style={s.webview}
           userAgent={USER_AGENT}
+          // Token extraction via injected JS (exact hostname match, no false positives)
+          injectedJavaScript={TOKEN_EXTRACTOR_JS}
+          onMessage={handleMessage}
+          // Fallback via navigation state
           onNavigationStateChange={handleNavigationChange}
           onLoadEnd={() => {
             if (!firstLoadRef.current) {
@@ -124,15 +148,16 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
             }
           }}
           onError={handleError}
-          sharedCookiesEnabled={Platform.OS === "ios"}
+          // Do NOT use sharedCookiesEnabled — on iOS it shares Safari's cookie store
+          // which can interfere with Expo Go's own browser-based development tooling
+          sharedCookiesEnabled={false}
           thirdPartyCookiesEnabled
           javaScriptEnabled
           domStorageEnabled
-          allowsInlineMediaPlayback
           startInLoadingState={false}
         />
 
-        {/* Show spinner only on the very first page load */}
+        {/* Spinner only during the very first page load */}
         {initialLoading && (
           <View style={s.loadingOverlay}>
             <ActivityIndicator size="large" color={Colors.primary} />
