@@ -8,20 +8,21 @@ import {
   Text,
   View,
 } from "react-native";
-import { WebView, type WebViewNavigation, type WebViewNavigation as WebViewRequest } from "react-native-webview";
+import { WebView, type WebViewNavigation } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/colors";
 
-// All domains the backend may redirect to after Google OAuth
-// (edwai-prod-70474.web.app is Firebase hosting; eduwai.in is the custom domain)
+// All domains the backend may land on after Google OAuth
+// (edwai-prod-70474.web.app = Firebase hosting; eduwai.in = custom domain)
 const AUTH_DONE_HOSTS = ["edwai-prod-70474.web.app", "eduwai.in"];
 
-// Spoof a real mobile browser so Google doesn't block the WebView OAuth flow
-const USER_AGENT =
-  Platform.OS === "ios"
-    ? "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
-    : "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
+// Spoof a real mobile browser — Google blocks OAuth flows it detects as WebViews
+const SAFARI_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
+const CHROME_UA =
+  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
+const USER_AGENT = Platform.OS === "ios" ? SAFARI_UA : CHROME_UA;
 
 export type GoogleAuthResult =
   | { type: "success"; token: string; profileComplete: boolean }
@@ -34,28 +35,28 @@ type Props = {
   onResult: (result: GoogleAuthResult) => void;
 };
 
-/** Extract token from URL (handles both ?token= and #token= patterns) */
-function extractToken(url: string): string | null {
-  const m = url.match(/[?&#]token=([^&#]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
+/** Check if URL belongs to one of our known post-auth domains using simple string matching */
+function isAuthDoneUrl(url: string): boolean {
+  if (!url || typeof url !== "string") return false;
+  // Use simple string matching — avoids new URL() which can throw on unusual schemes
+  return AUTH_DONE_HOSTS.some((host) => url.includes(host));
 }
 
-/** Return true if this URL is the post-OAuth landing page */
-function isAuthDoneUrl(url: string): boolean {
+/** Extract token from URL — handles both ?token= and #token= */
+function extractToken(url: string): string | null {
   try {
-    const host = new URL(url).hostname;
-    return AUTH_DONE_HOSTS.some((h) => host === h || host.endsWith("." + h));
+    const m = url.match(/[?&#]token=([^&#\s]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
   } catch {
-    return AUTH_DONE_HOSTS.some((h) => url.includes(h));
+    return null;
   }
 }
 
 export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
   const insets = useSafeAreaInsets();
-  // Only show spinner on the very first load, not during the OAuth flow
   const [initialLoading, setInitialLoading] = useState(true);
   const handledRef = useRef(false);
-  const firstLoadDoneRef = useRef(false);
+  const firstLoadRef = useRef(false);
 
   const finish = (result: GoogleAuthResult) => {
     if (handledRef.current) return;
@@ -63,38 +64,32 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
     onResult(result);
   };
 
-  const tryHandleUrl = (url: string) => {
-    if (!url || handledRef.current) return false;
-    if (!isAuthDoneUrl(url)) return false;
-
-    const token = extractToken(url);
-    if (!token) return false; // the landing page loaded but token isn't in URL yet
-
-    const profileComplete = url.includes("/student");
-    finish({ type: "success", token, profileComplete });
-    return true;
-  };
-
-  // onShouldStartLoadWithRequest fires BEFORE loading begins — most reliable intercept
-  const handleShouldStartLoad = (request: WebViewRequest): boolean => {
-    const intercepted = tryHandleUrl(request.url);
-    // returning false blocks the navigation (we don't need to load the page)
-    return !intercepted;
-  };
-
-  // onNavigationStateChange fires on every state update — belt-and-suspenders
+  // Called on every navigation state change inside the WebView
   const handleNavigationChange = (state: WebViewNavigation) => {
-    tryHandleUrl(state.url);
+    try {
+      const url = state.url;
+      if (!url || handledRef.current) return;
+      if (!isAuthDoneUrl(url)) return;
+
+      const token = extractToken(url);
+      if (!token) return; // redirect URL hit but no token yet (e.g. landing page loading)
+
+      const profileComplete = url.includes("/student");
+      finish({ type: "success", token, profileComplete });
+    } catch {
+      // Never let errors here crash the component
+    }
   };
 
   const handleClose = () => finish({ type: "cancel" });
+
   const handleError = () =>
     finish({ type: "error", message: "Failed to load Google sign-in. Please try again." });
 
   React.useEffect(() => {
     if (visible) {
       handledRef.current = false;
-      firstLoadDoneRef.current = false;
+      firstLoadRef.current = false;
       setInitialLoading(true);
     }
   }, [visible]);
@@ -116,35 +111,28 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
           <View style={s.closeBtn} />
         </View>
 
-        {/* WebView — spoof user-agent so Google allows OAuth in WebView */}
+        {/* WebView */}
         <WebView
           source={{ uri: authUrl }}
           style={s.webview}
           userAgent={USER_AGENT}
-          onShouldStartLoadWithRequest={handleShouldStartLoad}
           onNavigationStateChange={handleNavigationChange}
           onLoadEnd={() => {
-            if (!firstLoadDoneRef.current) {
-              firstLoadDoneRef.current = true;
+            if (!firstLoadRef.current) {
+              firstLoadRef.current = true;
               setInitialLoading(false);
             }
           }}
           onError={handleError}
-          onHttpError={(e) => {
-            // Ignore normal HTTP errors during the OAuth flow (redirects, etc.)
-            if (e.nativeEvent.statusCode >= 500) handleError();
-          }}
           sharedCookiesEnabled={Platform.OS === "ios"}
           thirdPartyCookiesEnabled
           javaScriptEnabled
           domStorageEnabled
-          // Allow Google's sign-in popup patterns
-          setSupportMultipleWindows={false}
           allowsInlineMediaPlayback
           startInLoadingState={false}
         />
 
-        {/* Spinner only on the very first page load */}
+        {/* Show spinner only on the very first page load */}
         {initialLoading && (
           <View style={s.loadingOverlay}>
             <ActivityIndicator size="large" color={Colors.primary} />
