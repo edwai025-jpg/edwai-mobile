@@ -10,23 +10,24 @@ import {
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useKeyboardController } from "react-native-keyboard-controller";
 
 import { Colors } from "@/constants/colors";
 
 // Exact hostnames the backend redirects to after Google OAuth
 const AUTH_DONE_HOSTS = ["edwai-prod-70474.web.app", "eduwai.in"];
 
-// Platform-appropriate Chrome UA.
-// iOS: CriOS (Chrome for iOS) — avoids Android-only deep link schemes that crash WKWebView.
-// Android: standard Chrome for Android.
+// CriOS = Chrome for iOS — serves the standard Google sign-in flow without
+// Android-specific deep-link redirects (googlegmail://, etc.) that crash WKWebView.
+// On Android, use the standard Chrome UA.
 const USER_AGENT =
   Platform.OS === "ios"
     ? "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/124.0.6367.111 Mobile/15E148 Safari/604.1"
     : "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
 
-// Injected into every page after it loads. Uses window.location.hostname (exact
-// host match) so Google's own consent URL — which contains the redirect domain
-// as a query param — never triggers a false positive.
+// Injected into every page after load. Uses window.location.hostname (exact match)
+// so Google's consent URL — which contains our redirect domain as a query param —
+// never triggers a false positive.
 const TOKEN_EXTRACTOR_JS = `
 (function() {
   try {
@@ -65,6 +66,13 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
   const handledRef = useRef(false);
   const firstLoadRef = useRef(false);
 
+  // useKeyboardController gives us setEnabled to pause react-native-keyboard-controller.
+  // On iOS, when a WKWebView text input gains focus the keyboard controller tries to
+  // animate a React Native view — but the focused element lives inside WKWebView (not
+  // the RN bridge). That mismatch causes a native crash and Expo restarts the app.
+  // Pausing the controller while the modal is open prevents this entirely.
+  const { setEnabled: setKeyboardEnabled } = useKeyboardController();
+
   const finish = (result: GoogleAuthResult) => {
     if (handledRef.current) return;
     handledRef.current = true;
@@ -92,6 +100,9 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
       handledRef.current = false;
       firstLoadRef.current = false;
       setInitialLoading(true);
+      setKeyboardEnabled(false);
+    } else {
+      setKeyboardEnabled(true);
     }
   }, [visible]);
 
@@ -112,12 +123,11 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
           <View style={s.closeBtn} />
         </View>
 
-        {/* WebView — Chrome UA bypasses Google's "unsupported browser" block */}
+        {/* WebView */}
         <WebView
           source={{ uri: authUrl }}
           style={s.webview}
           userAgent={USER_AGENT}
-          // Token extraction via injected JS (exact hostname match, no false positives)
           injectedJavaScript={TOKEN_EXTRACTOR_JS}
           onMessage={handleMessage}
           onLoadEnd={() => {
@@ -127,8 +137,6 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
             }
           }}
           onError={handleError}
-          // Do NOT use sharedCookiesEnabled — on iOS it shares Safari's cookie store
-          // which can interfere with Expo Go's own browser-based development tooling
           sharedCookiesEnabled={false}
           thirdPartyCookiesEnabled
           javaScriptEnabled
