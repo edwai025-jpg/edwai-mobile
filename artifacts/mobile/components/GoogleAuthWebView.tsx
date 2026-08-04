@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { WebView, type WebViewNavigation } from "react-native-webview";
+import { WebView } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/colors";
@@ -16,9 +16,13 @@ import { Colors } from "@/constants/colors";
 // Exact hostnames the backend redirects to after Google OAuth
 const AUTH_DONE_HOSTS = ["edwai-prod-70474.web.app", "eduwai.in"];
 
-// Spoof a real mobile Chrome browser — avoids Google's "unsupported browser" block
+// Platform-appropriate Chrome UA.
+// iOS: CriOS (Chrome for iOS) — avoids Android-only deep link schemes that crash WKWebView.
+// Android: standard Chrome for Android.
 const USER_AGENT =
-  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
+  Platform.OS === "ios"
+    ? "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/124.0.6367.111 Mobile/15E148 Safari/604.1"
+    : "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
 
 // Injected into every page after it loads. Uses window.location.hostname (exact
 // host match) so Google's own consent URL — which contains the redirect domain
@@ -79,29 +83,6 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
     }
   };
 
-  // Belt-and-suspenders fallback via navigation state (uses exact host check, not substring)
-  const handleNavigationChange = (state: WebViewNavigation) => {
-    try {
-      const url = state.url;
-      if (!url || handledRef.current) return;
-      // Exact host match only — prevents false positives when host appears as a query param
-      const isAuthDone = AUTH_DONE_HOSTS.some(
-        (h) =>
-          url.startsWith(`https://${h}/`) ||
-          url.startsWith(`https://${h}?`) ||
-          url === `https://${h}`
-      );
-      if (!isAuthDone) return;
-      const m = url.match(/[?&#]token=([^&#\s]+)/);
-      if (!m) return;
-      const token = decodeURIComponent(m[1]);
-      const profileComplete = url.includes("/student");
-      finish({ type: "success", token, profileComplete });
-    } catch {
-      // Never let this crash the component
-    }
-  };
-
   const handleClose = () => finish({ type: "cancel" });
   const handleError = () =>
     finish({ type: "error", message: "Failed to load Google sign-in. Please try again." });
@@ -139,8 +120,6 @@ export function GoogleAuthWebView({ visible, authUrl, onResult }: Props) {
           // Token extraction via injected JS (exact hostname match, no false positives)
           injectedJavaScript={TOKEN_EXTRACTOR_JS}
           onMessage={handleMessage}
-          // Fallback via navigation state
-          onNavigationStateChange={handleNavigationChange}
           onLoadEnd={() => {
             if (!firstLoadRef.current) {
               firstLoadRef.current = true;
