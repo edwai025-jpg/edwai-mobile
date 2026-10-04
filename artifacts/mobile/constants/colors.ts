@@ -96,6 +96,11 @@ export const Colors = {
   greenSuccessBorder: "#BBF7D0",
   greenSuccessDisabled: "#A7F3D0",
 
+  authBg: "#ffffff",
+  authInk: "#2a1a5e",
+  authAccent: "#7c3aed",
+  authDisabled: "#b3bff5",
+
   blueTint: "#EFF6FF",
   blueTintBorder: "#BFDBFE",
 };

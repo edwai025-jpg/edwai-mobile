@@ -1,5 +1,5 @@
 import { Feather, FontAwesome } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -17,11 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { EdwAILogo } from "@/components/EdwAILogo";
-import { FeatureCards } from "@/components/FeatureCards";
 import { GoogleAuthWebView } from "@/components/GoogleAuthWebView";
-import { HomeFooter } from "@/components/HomeFooter";
-import { MadeInIndia } from "@/components/MadeInIndia";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import api, { ApiError } from "@/services/api";
@@ -41,6 +37,8 @@ export default function LoginScreen() {
   const [errorMsg, setErrorMsg] = useState("");
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
+  const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
+  const canSend = activeTab === "phone" ? phone.length === 10 : email.trim().length > 0;
 
   const validatePhone = () => {
     const digits = phone.replace(/\D/g, "");
@@ -130,74 +128,69 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={[Colors.backgroundGradientStart, Colors.backgroundGradientMid, Colors.backgroundGradientEnd]}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
-      <View style={[styles.orb1, { top: topInset + 20 }]} />
-      <View style={styles.orb2} />
-
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: topInset + 40, paddingBottom: insets.bottom + 40 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: topInset + 28, paddingBottom: bottomInset + 28 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>AI-Powered Learning Platform</Text>
-            </View>
-            <View style={styles.heroRow}>
-              <Text style={styles.heroLine1}>Learn From Your</Text>
-              <Text style={styles.heroLine2}>Textbooks with AI</Text>
-            </View>
-            <Text style={styles.heroSub}>
-              Get precise answers from your textbooks with accurate page citations. Class 6 to PhD level.
+          <View style={styles.column}>
+            <Image
+              source={require("@/assets/images/eduwai-logo.png")}
+              style={styles.logo}
+              contentFit="contain"
+              accessibilityLabel="EDUwAI"
+              testID="login-logo"
+            />
+            <Text style={styles.subtitle}>
+              <Text style={styles.subtitleDark}>AI Assistant </Text>
+              <Text style={styles.subtitleMuted}>for </Text>
+              <Text style={styles.subtitleAccent}>Indian Exam Preparation</Text>
             </Text>
-          </View>
 
-          <View style={styles.card}>
-            <View style={styles.logoRow}>
-              <EdwAILogo size="lg" />
+            <Text style={styles.heading}>Login / Sign Up with</Text>
+            <View style={styles.tabRow} accessibilityRole="tablist">
+              {(["phone", "email"] as LoginTab[]).map((tab) => {
+                const selected = activeTab === tab;
+                return (
+                  <Pressable
+                    key={tab}
+                    testID={`login-tab-${tab}`}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={tab === "phone" ? "Phone" : "Email"}
+                    style={[styles.tab, selected && styles.tabActive]}
+                    onPress={() => { setActiveTab(tab); setErrorMsg(""); }}
+                  >
+                    <Feather name={tab === "phone" ? "phone" : "mail"} size={16} color={selected ? Colors.white : Colors.gray700} />
+                    <Text style={[styles.tabText, selected && styles.tabTextActive]}>
+                      {tab === "phone" ? "Phone" : "Email"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
-            <Text style={styles.cardSub}>AI Assistant for Exam Preparation</Text>
 
-            {/* Tab switcher */}
-            <View style={styles.tabRow}>
-              {(["phone", "email"] as LoginTab[]).map((tab) => (
-                <Pressable
-                  key={tab}
-                  style={[styles.tab, activeTab === tab && styles.tabActive]}
-                  onPress={() => { setActiveTab(tab); setErrorMsg(""); }}
-                >
-                  <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                    {tab === "phone" ? "Login with Phone" : "Login with Email"}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Error banner */}
             {!!errorMsg && (
-              <View style={styles.errorBanner}>
+              <View style={styles.errorBanner} accessibilityRole="alert" testID="login-error">
                 <Feather name="alert-circle" size={14} color="#B91C1C" />
                 <Text style={styles.errorText}>{errorMsg}</Text>
               </View>
             )}
 
-            {/* Input */}
             {activeTab === "phone" ? (
               <View style={styles.phoneRow}>
                 <View style={styles.phonePrefix}>
                   <Text style={styles.phonePrefixText}>+91</Text>
                 </View>
                 <TextInput
+                  testID="login-phone-input"
+                  accessibilityLabel="Phone number"
                   style={styles.phoneInput}
                   placeholder="10-digit phone number"
                   placeholderTextColor={Colors.placeholder}
                   keyboardType="phone-pad"
+                  textContentType="telephoneNumber"
                   value={phone}
                   onChangeText={(t) => { setPhone(t.replace(/\D/g, "").slice(0, 10)); setErrorMsg(""); }}
                   maxLength={10}
@@ -205,45 +198,52 @@ export default function LoginScreen() {
               </View>
             ) : (
               <TextInput
+                testID="login-email-input"
+                accessibilityLabel="Email address"
                 style={styles.emailInput}
                 placeholder="Enter your email address"
                 placeholderTextColor={Colors.placeholder}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="send"
+                onSubmitEditing={() => { if (canSend && !loading) handleSendOTP(); }}
                 value={email}
                 onChangeText={(t) => { setEmail(t); setErrorMsg(""); }}
               />
             )}
 
-            {/* Send OTP button */}
             <Pressable
-              style={({ pressed }) => [styles.sendBtn, (pressed || loading) && { opacity: 0.8 }]}
+              testID="login-send-otp"
+              accessibilityRole="button"
+              accessibilityLabel="Send OTP"
+              accessibilityState={{ disabled: !canSend || loading, busy: loading }}
+              style={({ pressed }) => [styles.sendBtn, !canSend && styles.sendBtnDisabled, pressed && canSend && { opacity: 0.85 }]}
               onPress={handleSendOTP}
-              disabled={loading}
+              disabled={!canSend || loading}
             >
-              <LinearGradient
-                colors={[Colors.primary, Colors.secondary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.sendBtnGradient}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color={Colors.white} />
-                ) : (
+              {loading ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <View style={styles.sendInner}>
                   <Text style={styles.sendBtnText}>Send OTP</Text>
-                )}
-              </LinearGradient>
+                  <Feather name="arrow-right" size={16} color={Colors.white} />
+                </View>
+              )}
             </Pressable>
 
-            {/* Divider */}
             <View style={styles.orRow}>
               <View style={styles.orLine} />
-              <Text style={styles.orText}>or</Text>
+              <Text style={styles.orText}>OR CONTINUE WITH</Text>
               <View style={styles.orLine} />
             </View>
 
-            {/* Google button */}
             <Pressable
+              testID="login-google"
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Google"
               style={({ pressed }) => [styles.googleBtn, (pressed || googleLoading) && { opacity: 0.8 }]}
               onPress={handleGoogle}
               disabled={googleLoading}
@@ -256,16 +256,11 @@ export default function LoginScreen() {
               <Text style={styles.googleBtnText}>Continue with Google</Text>
             </Pressable>
 
-            {/* Trust line */}
             <View style={styles.trustRow}>
               <Feather name="shield" size={14} color={Colors.success} />
-              <Text style={styles.trustText}>Trusted by 10,000+ students</Text>
+              <Text style={styles.trustText}>Evaluated by trusted teachers  {"\u00B7"}  Made in India</Text>
             </View>
           </View>
-
-          <MadeInIndia />
-          <FeatureCards />
-          <HomeFooter parentPadding={24} />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -280,85 +275,62 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.backgroundGradientStart },
-  orb1: {
-    position: "absolute", left: -60, width: 200, height: 200,
-    borderRadius: 100, backgroundColor: Colors.primary, opacity: 0.12,
+  root: { flex: 1, backgroundColor: Colors.authBg },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 24, justifyContent: "center" },
+  column: { width: "100%", maxWidth: 440, alignSelf: "center" },
+  logo: { width: 170, height: 124, alignSelf: "center", marginBottom: 10 },
+  subtitle: { textAlign: "center", fontSize: 14, marginBottom: 32 },
+  subtitleDark: { color: Colors.authInk, fontFamily: "Inter_500Medium" },
+  subtitleMuted: { color: Colors.gray400, fontFamily: "Inter_500Medium" },
+  subtitleAccent: { color: Colors.authAccent, fontFamily: "Inter_500Medium" },
+  heading: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.gray900, marginBottom: 12 },
+  tabRow: { flexDirection: "row", gap: 12, marginBottom: 18 },
+  tab: {
+    flex: 1, minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    borderRadius: 14, borderWidth: 1.5, borderColor: Colors.gray200, backgroundColor: Colors.gray50,
   },
-  orb2: {
-    position: "absolute", right: -80, bottom: 120, width: 280, height: 280,
-    borderRadius: 140, backgroundColor: Colors.secondary, opacity: 0.1,
-  },
-  scrollContent: { paddingHorizontal: 24 },
-  header: { marginBottom: 28 },
-  badge: {
-    alignSelf: "flex-start", backgroundColor: Colors.indigoBg, borderRadius: 20,
-    borderWidth: 1, borderColor: Colors.indigoBorder, paddingHorizontal: 12,
-    paddingVertical: 5, marginBottom: 16,
-  },
-  badgeText: { color: Colors.primary, fontSize: 12, fontFamily: "Inter_500Medium" },
-  heroRow: { marginBottom: 10 },
-  heroLine1: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.gray900, lineHeight: 38 },
-  heroLine2: { fontSize: 30, fontFamily: "Inter_700Bold", color: Colors.primary, lineHeight: 38 },
-  heroSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.gray600, lineHeight: 22 },
-  card: {
-    backgroundColor: Colors.white, borderRadius: 24, padding: 24,
-    shadowColor: Colors.navy, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12, shadowRadius: 24, elevation: 8,
-    borderWidth: 1, borderColor: Colors.gray200,
-  },
-  logoRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "center", marginBottom: 4 },
-  cardSub: { textAlign: "center", fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.gray500, marginBottom: 20 },
-  tabRow: {
-    flexDirection: "row", backgroundColor: Colors.gray100, borderRadius: 12,
-    padding: 4, marginBottom: 16,
-  },
-  tab: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: "center" },
   tabActive: {
-    backgroundColor: Colors.primary, shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 3,
+    backgroundColor: Colors.primary, borderColor: Colors.primary, shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 3,
   },
-  tabText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.gray600 },
+  tabText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.gray700 },
   tabTextActive: { color: Colors.white },
   errorBanner: {
     flexDirection: "row", alignItems: "flex-start", gap: 8,
     backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12,
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12,
   },
-  errorText: {
-    flex: 1, fontSize: 13, fontFamily: "Inter_400Regular",
-    color: "#B91C1C", lineHeight: 18,
-  },
+  errorText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#B91C1C", lineHeight: 18 },
   phoneRow: {
-    flexDirection: "row", borderWidth: 1, borderColor: Colors.inputBorder,
-    borderRadius: 12, backgroundColor: Colors.inputBg, marginBottom: 16, overflow: "hidden",
+    flexDirection: "row", borderWidth: 1, borderColor: Colors.gray200,
+    borderRadius: 14, backgroundColor: Colors.white, marginBottom: 16, overflow: "hidden",
   },
   phonePrefix: {
-    paddingHorizontal: 14, paddingVertical: 14, borderRightWidth: 1,
-    borderRightColor: Colors.inputBorder, justifyContent: "center",
+    paddingHorizontal: 16, justifyContent: "center", borderRightWidth: 1,
+    borderRightColor: Colors.gray200, backgroundColor: Colors.gray50,
   },
   phonePrefixText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.gray700 },
-  phoneInput: {
-    flex: 1, paddingHorizontal: 14, paddingVertical: 14,
-    fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.gray900,
-  },
+  phoneInput: { flex: 1, minHeight: 52, paddingHorizontal: 14, fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.gray900 },
   emailInput: {
-    borderWidth: 1, borderColor: Colors.inputBorder, borderRadius: 12,
-    backgroundColor: Colors.inputBg, paddingHorizontal: 14, paddingVertical: 14,
-    fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.gray900, marginBottom: 16,
+    minHeight: 52, borderWidth: 1, borderColor: Colors.gray200, borderRadius: 14,
+    backgroundColor: Colors.white, paddingHorizontal: 14, fontSize: 15,
+    fontFamily: "Inter_400Regular", color: Colors.gray900, marginBottom: 16,
   },
-  sendBtn: { borderRadius: 12, overflow: "hidden", marginBottom: 16 },
-  sendBtnGradient: { paddingVertical: 15, alignItems: "center", justifyContent: "center", flexDirection: "row" },
-  sendBtnText: { color: Colors.white, fontSize: 16, fontFamily: "Inter_600SemiBold" },
-  orRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
+  sendBtn: {
+    minHeight: 52, borderRadius: 14, backgroundColor: Colors.primary, alignItems: "center",
+    justifyContent: "center", marginBottom: 22,
+  },
+  sendBtnDisabled: { backgroundColor: Colors.authDisabled },
+  sendInner: { flexDirection: "row", alignItems: "center", gap: 6 },
+  sendBtnText: { color: Colors.white, fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  orRow: { flexDirection: "row", alignItems: "center", marginBottom: 22 },
   orLine: { flex: 1, height: 1, backgroundColor: Colors.gray200 },
-  orText: { marginHorizontal: 12, fontSize: 13, color: Colors.gray400, fontFamily: "Inter_400Regular" },
+  orText: { marginHorizontal: 12, fontSize: 11, letterSpacing: 1, color: Colors.gray400, fontFamily: "Inter_600SemiBold" },
   googleBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-    borderWidth: 1, borderColor: Colors.gray300, borderRadius: 12, paddingVertical: 14,
-    backgroundColor: Colors.white, marginBottom: 20,
+    minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    borderWidth: 1.5, borderColor: Colors.gray200, borderRadius: 14, backgroundColor: Colors.white, marginBottom: 28,
   },
-  googleBtnText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.gray700 },
-  trustRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  trustText: { fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.gray500 },
+  googleBtnText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.gray800 },
+  trustRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, flexWrap: "wrap" },
+  trustText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.gray400 },
 });
