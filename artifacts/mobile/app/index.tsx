@@ -40,6 +40,14 @@ export default function LoginScreen() {
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
   const canSend = activeTab === "phone" ? phone.length === 10 : email.trim().length > 0;
 
+  const handleHome = async () => {
+    try {
+      await Linking.openURL("https://eduwai.in/");
+    } catch {
+      Alert.alert("Unable to open website", "Please try opening https://eduwai.in/ in your browser.");
+    }
+  };
+
   const validatePhone = () => {
     const digits = phone.replace(/\D/g, "");
     if (digits.length !== 10) return "Please enter a valid 10-digit phone number";
@@ -128,9 +136,21 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.root}>
+      <View style={[styles.topBar, { paddingTop: topInset + 12 }]}>
+        <Pressable
+          testID="login-home"
+          accessibilityRole="link"
+          accessibilityLabel="Home — open EDUwAI website in browser"
+          onPress={handleHome}
+          style={({ pressed }) => [styles.homeButton, pressed && { opacity: 0.7 }]}
+        >
+          <Feather name="home" size={17} color={Colors.gray600} />
+          <Text style={styles.homeText}>Home</Text>
+        </Pressable>
+      </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: topInset + 28, paddingBottom: bottomInset + 28 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: 28, paddingBottom: bottomInset + 28 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -276,6 +296,13 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.authBg },
+  topBar: { paddingHorizontal: 20, paddingBottom: 8 },
+  homeButton: {
+    alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 8,
+    minHeight: 44, paddingHorizontal: 14, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50,
+  },
+  homeText: { fontSize: 15, fontFamily: "Inter_500Medium", color: Colors.gray600 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, justifyContent: "center" },
   column: { width: "100%", maxWidth: 440, alignSelf: "center" },
   logo: { width: 170, height: 124, alignSelf: "center", marginBottom: 10 },
