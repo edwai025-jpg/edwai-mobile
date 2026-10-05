@@ -4,10 +4,12 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
 import api, { ApiUser } from "@/services/api";
+import { credentialStorage } from "@/services/credentialStorage";
 
 
 export type UserProfile = {
@@ -62,6 +64,7 @@ type AuthState = {
   isProfileComplete: boolean;
   user: UserProfile | null;
   accessToken: string | null;
+  refreshAccessToken: () => Promise<string>;
   hasPhoto: boolean | null;
 
   sendPhoneOtp: (phone: string) => Promise<void>;
@@ -98,13 +101,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [hasPhoto, setHasPhoto] = useState<boolean | null>(null);
+  const sessionEpoch = useRef(0);
+  const refreshInFlight = useRef<Promise<string> | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         const [userData, tokenData, profileData] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.user),
-          AsyncStorage.getItem(STORAGE_KEYS.accessToken),
+          credentialStorage.getItem(STORAGE_KEYS.accessToken),
           AsyncStorage.getItem(STORAGE_KEYS.profileComplete),
         ]);
 
@@ -132,13 +137,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ) => {
       await Promise.all([
         AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(userProfile)),
-        AsyncStorage.setItem(STORAGE_KEYS.accessToken, aToken),
-        AsyncStorage.setItem(STORAGE_KEYS.refreshToken, rToken),
+        credentialStorage.setItem(STORAGE_KEYS.accessToken, aToken),
+        credentialStorage.setItem(STORAGE_KEYS.refreshToken, rToken),
         AsyncStorage.setItem(
           STORAGE_KEYS.profileComplete,
           profileComplete ? "true" : "false"
         ),
       ]);
+      sessionEpoch.current += 1;
       setUser(userProfile);
       setAccessToken(aToken);
       setIsLoggedIn(true);
@@ -192,7 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       classId?: number;
       phone?: string;
     }) => {
-      const token = accessToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.accessToken));
+      const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
       if (!token) throw new Error("Not authenticated");
 
       const res = await api.auth.saveProfile(token, {
@@ -223,7 +229,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const token = accessToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.accessToken));
+      const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
       if (!token) return;
       const apiUser = await api.auth.getMe(token);
       const fresh = apiUserToProfile(apiUser);
@@ -241,7 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const probeHasPhoto = useCallback(async () => {
     try {
-      const token = accessToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.accessToken));
+      const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
       if (!token) { setHasPhoto(false); return; }
       const result = await api.profile.probePhoto(token);
       setHasPhoto(result);
@@ -251,9 +257,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [accessToken]);
 
   const logout = useCallback(async () => {
+    sessionEpoch.current += 1;
     try {
-      const token = accessToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.accessToken));
-      const rToken = await AsyncStorage.getItem(STORAGE_KEYS.refreshToken);
+      const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
+      const rToken = await credentialStorage.getItem(STORAGE_KEYS.refreshToken);
       if (token && rToken) {
         await api.auth.logout(token, rToken);
       }
@@ -261,12 +268,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ignore errors during logout API call
     }
     await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+    await Promise.all([
+      credentialStorage.removeItem(STORAGE_KEYS.accessToken),
+      credentialStorage.removeItem(STORAGE_KEYS.refreshToken),
+    ]);
     setUser(null);
     setAccessToken(null);
     setIsLoggedIn(false);
     setIsProfileComplete(false);
     setHasPhoto(null);
   }, [accessToken]);
+
+  const refreshAccessToken = useCallback((): Promise<string> => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+    const epoch = sessionEpoch.current;
+    const promise = (async () => {
+      const refresh = await credentialStorage.getItem(STORAGE_KEYS.refreshToken);
+      if (!refresh) throw new Error("Please sign in again.");
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20_000);
+      let result: Awaited<ReturnType<typeof api.auth.refreshToken>>;
+      try {
+        result = await api.auth.refreshToken(refresh, controller.signal);
+      } finally {
+        clearTimeout(timer);
+      }
+      if (sessionEpoch.current !== epoch) throw new Error("Session changed.");
+      await credentialStorage.setItem(STORAGE_KEYS.accessToken, result.access_token);
+      if (sessionEpoch.current !== epoch) {
+        await credentialStorage.removeItem(STORAGE_KEYS.accessToken);
+        throw new Error("Session changed.");
+      }
+      setAccessToken(result.access_token);
+      return result.access_token;
+    })();
+    refreshInFlight.current = promise;
+    promise.finally(() => {
+      if (refreshInFlight.current === promise) refreshInFlight.current = null;
+    }).catch(() => {});
+    return promise;
+  }, []);
 
   return (
     <AuthContext.Provider
@@ -275,6 +316,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isProfileComplete,
         user,
         accessToken,
+        refreshAccessToken,
         hasPhoto,
         sendPhoneOtp,
         sendEmailOtp,

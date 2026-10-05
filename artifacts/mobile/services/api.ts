@@ -515,12 +515,13 @@ const api = {
         body: JSON.stringify({ email, otp }),
       }),
 
-    refreshToken: (refresh_token: string) =>
+    refreshToken: (refresh_token: string, signal?: AbortSignal) =>
       request<{ access_token: string; token_type: string; user: ApiUser }>(
         "/api/auth/token/refresh",
         {
           method: "POST",
           body: JSON.stringify({ refresh_token }),
+          signal,
         }
       ),
 

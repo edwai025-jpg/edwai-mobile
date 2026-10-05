@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, usePathname, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -16,6 +16,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/auth";
 import { ThemeProvider } from "@/context/theme";
+import { SupportChatHost } from "@/components/support/SupportChatHost";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -25,10 +26,11 @@ function RootLayoutNav() {
   const { isLoggedIn, isProfileComplete } = useAuth();
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
 
   useEffect(() => {
     const inAuthGroup = segments[0] === "(tabs)";
-    const inLogin = segments[0] === undefined || segments[0] === "index";
+    const inLogin = pathname === "/";
     const inOtp = segments[0] === "otp";
     const inProfile = segments[0] === "complete-profile";
 
@@ -39,7 +41,7 @@ function RootLayoutNav() {
     } else if (isLoggedIn && isProfileComplete && (inLogin || inOtp)) {
       router.replace("/(tabs)");
     }
-  }, [isLoggedIn, isProfileComplete, segments]);
+  }, [isLoggedIn, isProfileComplete, segments, pathname]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -77,6 +79,7 @@ export default function RootLayout() {
               <GestureHandlerRootView style={{ flex: 1 }}>
                 <KeyboardProvider>
                   <RootLayoutNav />
+                  <SupportChatHost />
                 </KeyboardProvider>
               </GestureHandlerRootView>
             </ThemeProvider>
