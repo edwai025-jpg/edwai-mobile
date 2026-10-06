@@ -14,3 +14,17 @@ mtime_ms = 1791329579373
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:c44adf14-2da1-420b-bb8a-b3807a10524e/a032449d-04c0-4c0f-a52f-a7373ec8c8bc/d54b4988-ee66-4cd8-8374-73b157a0729f"
 storage_version_token = "1791329636175406"
 content_type = "text/html"
+
+[[outputs]]
+id = "k6gKj1pgUv3kyI5P1sq-8"
+uri = "file://exports/eduwai-push-notifications-remaining-tasks.md"
+type = "text"
+title = "EDUwAI — Remaining Push Notification Tasks"
+description = "Downloadable checklist covering native SDK setup, permissions, registration, notification taps, logout privacy, Android/iOS device tests, and a prompt to resume after registration."
+logical_id = "f7de2c35-8ccb-4bef-8999-f3ed390f718a"
+content_hash = "sha256:ef0649c432c2d828fd1ca517992fe139f017d41e34d0188510ca1c2b240a54c6"
+size = 14367
+mtime_ms = 1791330152260
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:c44adf14-2da1-420b-bb8a-b3807a10524e/f7de2c35-8ccb-4bef-8999-f3ed390f718a/62b746b3-e774-4294-bbec-cc37cfd151d1"
+storage_version_token = "1791330159054756"
+content_type = "text/markdown"
