@@ -14,3 +14,9 @@ Use REST as the initial foreground transport. Background push is a separate nati
 **Why:** The supplied contract allows REST-only operation while chat is open. Native FCM, APNs, and logout token privacy require configuration and verification before claiming background notifications work.
 
 **How to apply:** Clearly distinguish foreground chat delivery from optional background notifications. Do not promise unread counts or exactly-once delivery beyond the external API's contract.
+
+The user permits native support notifications to be deferred while testing foreground chat with Expo Go, and wants saveable instructions for completing native setup later.
+
+**Why:** The user said physical devices and APNs configuration are not ready and asked to continue the remaining preparation now.
+
+**How to apply:** Preserve Expo Go compatibility during preparation. Clearly label native SDK integration, APNs configuration, delivery/tap testing, and shared-device logout privacy as incomplete until verified on installed Android/iOS builds.

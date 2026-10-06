@@ -95,6 +95,39 @@ async function request<T>(
 }
 
 export const supportApi = {
+  // Preparation for a native messaging SDK. No Expo Go caller registers tokens.
+  async registerFcmToken(
+    owner: SupportOwner, pointer: SupportPointer, fcmToken: string,
+    platform: "android" | "ios", signal?: AbortSignal,
+  ): Promise<void> {
+    if (!Number.isSafeInteger(pointer.conversationId) || pointer.conversationId <= 0
+      || (owner.kind === "guest" && !pointer.anonymousToken?.trim())
+      || (owner.kind === "authenticated" && pointer.anonymousToken !== undefined)) {
+      throw new SupportError("Notification registration requires the current identity's saved conversation.");
+    }
+    // FCM tokens are opaque. Only a native Firebase SDK may supply this value.
+    // This rejects known wrong token types; it is not proof of token provenance.
+    if (typeof fcmToken !== "string" || !fcmToken || /\s/.test(fcmToken)
+      || /^(ExponentPushToken|ExpoPushToken)\[/.test(fcmToken)
+      || (platform !== "android" && platform !== "ios")) {
+      throw new SupportError("Notifications require a native Firebase messaging token and Android or iOS.");
+    }
+    const result = await request<{ success: boolean }>(
+      owner.kind === "authenticated" ? "/support/fcm-token/auth" : "/support/fcm-token",
+      owner,
+      {
+        fcm_token: fcmToken, platform, conversation_id: pointer.conversationId,
+        ...(owner.kind === "guest" ? { anonymous_token: pointer.anonymousToken } : {}),
+      },
+      signal,
+    ).catch((error: unknown) => {
+      throw new SupportError("Could not confirm notification registration. Foreground chat still works.",
+        error instanceof SupportError ? error.status : 0);
+    });
+    if (result?.success !== true) {
+      throw new SupportError("Notification registration was not confirmed. Foreground chat still works.");
+    }
+  },
   async create(owner: SupportOwner, text: string, guest?: { name: string; email: string; phone: string }): Promise<SupportPointer> {
     const result = await request<Creation>(
       owner.kind === "authenticated" ? "/support/conversation/auth" : "/support/conversation",

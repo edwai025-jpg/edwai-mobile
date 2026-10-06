@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "966057624830",
+    "project_id": "edwai-prod-70474",
+    "storage_bucket": "edwai-prod-70474.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:966057624830:android:f4a1fab4d2d85ad04211af",
+        "android_client_info": {
+          "package_name": "com.edwai.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARngzWY3VXxMpRzVUSYDubzF4v8TVVWi0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

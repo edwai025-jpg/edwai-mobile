@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "zvu1Yb8x0DUJMqdJ0UC2t"
+uri = "file://exports/eduwai-support-notifications-setup.html"
+type = "html"
+title = "EDUwAI Support Notifications — Setup Guide"
+description = "Save this guide for later. Includes Expo Go limits, APNs setup, native SDK integration, safe notification taps, logout privacy and Android/iOS acceptance checks. Native push is not enabled."
+logical_id = "a032449d-04c0-4c0f-a52f-a7373ec8c8bc"
+content_hash = "sha256:300866f4d9b6e2e4db4403ea6cfaf2eb2f795f0ba16e4fbbb5784a2913c13333"
+size = 14577
+mtime_ms = 1791329579373
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:c44adf14-2da1-420b-bb8a-b3807a10524e/a032449d-04c0-4c0f-a52f-a7373ec8c8bc/d54b4988-ee66-4cd8-8374-73b157a0729f"
+storage_version_token = "1791329636175406"
+content_type = "text/html"

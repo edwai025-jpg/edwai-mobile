@@ -21,6 +21,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.edwai.app",
+      "googleServicesFile": "./firebase/GoogleService-Info.plist",
       "buildNumber": "1",
       "infoPlist": {
         "CFBundleDevelopmentRegion": "en_IN",
@@ -30,6 +31,7 @@
     },
     "android": {
       "package": "com.edwai.app",
+      "googleServicesFile": "./firebase/google-services.json",
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
