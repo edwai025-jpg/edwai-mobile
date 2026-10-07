@@ -1,0 +1,64 @@
+16 actions
+
+Updated task #189
+
+Updated mobile study banner documentation
+
+Surfaced 1 task
+
+Export study banner styles and connected APIs for mobile
+#189
+They weren’t all included initially. I’ve now expanded the same handoff draft to cover them. No backend APIs or application code have been changed—we’re still in Plan mode.
+
+Task #189 — Export study banner styles and connected APIs for mobile now covers both the appearance and the existing functionality behind the banner/Profile button.
+
+APIs now included
+Paths below are relative to https://api.eduwai.in/api.
+
+Feature	Existing API
+Current profile and banner identity	GET /auth/me
+Display profile photo	GET /student/profile/photo
+Upload or replace photo	POST /student/profile/photo
+Remove photo	DELETE /student/profile/photo
+Update name, email, phone or password	PUT /student/profile/account
+Update Board, Class and Medium	PUT /student/profile/education
+Education dropdown options	/states, /boards/{stateId}, /classes?board_id=…, /mediums?class_id=…
+Send phone verification OTP	POST /auth/phone/send-otp
+Verify phone for the current account	POST /auth/phone/verify-for-profile
+Plan details and question usage	GET /billing/usage/me
+Available upgrade plans	GET /billing/tiers or /billing/tiers/me, depending on account type
+Renewal setting	PATCH /billing/autopay
+Profile Security tab	List/revoke sessions and logout-all APIs
+Delete account	DELETE /student/profile
+Logout	POST /auth/logout
+The draft also maps the existing upgrade/subscribe call, without treating the web checkout as a drop-in native payment implementation.
+
+Important details for the mobile team
+Profile photo
+
+Upload is multipart, with the field named file.
+Accepted formats: JPEG, PNG and WebP; maximum upload size: 5 MiB.
+profile_photo_url is a storage key, not a public image URL.
+Display it through the authenticated photo endpoint.
+After replacing/removing it, refresh the profile and invalidate the image cache. Replacements reuse the same storage key.
+Plan and questions remaining
+
+The backend provides tier_name, tier_slug, questions_used, question_limit, percent_used, renewal dates and other subscription fields.
+For a valid finite limit:
+questions_remaining = max(0, question_limit - questions_used)
+The banner currently displays used / limit, not remaining.
+Refresh usage after completed answers and confirmed plan changes; don’t maintain a separate client-side quota counter.
+Profile changes
+
+Refresh shared user state after saving so the banner updates its name, initial, Board/Class and photo.
+Institute students cannot edit institution-managed education details.
+Phone verification must use the profile verification endpoint, not the login verification flow.
+The current Profile Settings tab is a placeholder—there is no separate settings API to invent.
+The draft now includes these contracts and refresh behaviours. The downloadable handoff has not yet been generated; that is the work proposed in Task #189.
+
+
+Worked for 3 minutes
+
+Scroll to latest
+
+
