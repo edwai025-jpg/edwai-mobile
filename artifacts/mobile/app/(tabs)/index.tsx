@@ -1,6 +1,5 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -31,6 +30,7 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import { useBannerUsage } from "@/hooks/useBannerUsage";
 import { useTheme } from "@/context/theme";
+import { pickStudyImage } from "@/services/studyImageCapture";
 import api, {
   ApiError,
   BoardPageConfig,
@@ -567,17 +567,20 @@ export default function TextbooksScreen() {
   /* ── image / OCR ── */
   const handleImageCapture = useCallback(async (fromCamera: boolean) => {
     try {
-      const result = fromCamera
-        ? await ImagePicker.launchCameraAsync({ quality: 0.8 })
-        : await ImagePicker.launchImageLibraryAsync({ quality: 0.8, mediaTypes: ["images"] });
-      if (result.canceled || !result.assets?.[0]) return;
+      const result = await pickStudyImage(fromCamera, {
+        retryCamera: () => { void handleImageCapture(true); },
+        choosePhoto: () => { void handleImageCapture(false); },
+      });
+      if (!result || result.canceled || !result.assets?.[0]) return;
       const uri = result.assets[0].uri;
       setCaptureUri(uri);
       if (!accessToken) return;
       setOcrLoading(true);
       try { const { text } = await api.study.extractQuestionFromImage(accessToken, uri); if (text) setQuestion(text); }
       catch {} finally { setOcrLoading(false); }
-    } catch {}
+    } catch {
+      Alert.alert("Could not open photo capture", "Please try again, choose a photo from your library, or type your question.");
+    }
   }, [accessToken]);
 
   const handleStartProcessing = useCallback(async () => {
