@@ -3,6 +3,15 @@ import { Platform } from "react-native";
 const PROD_URL = "https://edwai-api-953672603784.asia-south1.run.app";
 export const PHOTO_ENDPOINT = `${PROD_URL}/api/student/profile/photo`;
 
+/** The storage key in /auth/me is not an image URL. Keep credentials in headers. */
+export function getProfilePhotoSource(token: string, userId?: number, revision = 0) {
+  return {
+    uri: resolveUrl("/api/student/profile/photo"),
+    headers: { Authorization: `Bearer ${token}` },
+    cacheKey: `student-photo:${userId ?? "current"}:${revision}`,
+  };
+}
+
 const PROXY_BASE = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api-server/api/edwai`
   : null;
@@ -614,8 +623,9 @@ const api = {
       ),
 
     probePhoto: (token: string): Promise<boolean> =>
-      fetch(PHOTO_ENDPOINT, {
+      fetch(resolveUrl("/api/student/profile/photo"), {
         headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       })
         .then((r) => r.status === 200)
         .catch(() => false),

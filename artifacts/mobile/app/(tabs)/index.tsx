@@ -29,6 +29,7 @@ import IndianLanguageKeyboard from "@/components/study/IndianLanguageKeyboard";
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
+import { useBannerUsage } from "@/hooks/useBannerUsage";
 import { useTheme } from "@/context/theme";
 import api, {
   ApiError,
@@ -39,7 +40,6 @@ import api, {
   QueryHistoryItem,
   QueryResponse,
   TypographySettings,
-  UsageInfo,
 } from "@/services/api";
 
 const PRIMARY = "#667eea";
@@ -259,8 +259,7 @@ export default function TextbooksScreen() {
   const { accessToken, user, logout } = useAuth();
 
   /* usage */
-  const [usage, setUsage] = useState<UsageInfo | null>(null);
-  const [usageLoading, setUsageLoading] = useState(true);
+  const { usage, usageLoading, refreshUsage } = useBannerUsage();
   const [showUpgrade, setShowUpgrade] = useState(false);
 
   /* board status */
@@ -359,15 +358,6 @@ export default function TextbooksScreen() {
     if (!accessToken || !boardId) return;
     api.study.getBoardPageConfig(accessToken, boardId).then(setBoardPageConfig).catch(() => {});
   }, [accessToken, boardId]);
-
-  /* ── Fetch usage on mount ── */
-  useEffect(() => {
-    if (!accessToken) { setUsageLoading(false); return; }
-    api.study.getUsage(accessToken)
-      .then(setUsage)
-      .catch(() => {})
-      .finally(() => setUsageLoading(false));
-  }, [accessToken]);
 
   const handleLogout = useCallback(() => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -562,7 +552,7 @@ export default function TextbooksScreen() {
         return updated;
       });
       /* Refresh usage after each query */
-      api.study.getUsage(accessToken).then(setUsage).catch(() => {});
+      void refreshUsage();
     } catch (e) {
       if ((e as Error)?.name !== "AbortError") {
         const msg = e instanceof ApiError
@@ -572,7 +562,7 @@ export default function TextbooksScreen() {
       }
       setStreaming(false); setQueryLoading(false);
     }
-  }, [question, selectedDoc, accessToken]);
+  }, [question, selectedDoc, accessToken, refreshUsage]);
 
   /* ── image / OCR ── */
   const handleImageCapture = useCallback(async (fromCamera: boolean) => {

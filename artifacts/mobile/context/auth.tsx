@@ -68,6 +68,7 @@ type AuthState = {
   accessToken: string | null;
   refreshAccessToken: () => Promise<string>;
   hasPhoto: boolean | null;
+  photoRevision: number;
 
   sendPhoneOtp: (phone: string) => Promise<void>;
   sendEmailOtp: (email: string) => Promise<void>;
@@ -103,7 +104,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isProfileComplete, setIsProfileComplete] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [hasPhoto, setHasPhoto] = useState<boolean | null>(null);
+  const [hasPhoto, setHasPhotoState] = useState<boolean | null>(null);
+  const [photoRevision, setPhotoRevision] = useState(0);
+  const setHasPhoto = useCallback((value: boolean | null) => {
+    setHasPhotoState(value);
+    // Replacements reuse the server's storage key; even true -> true must reload.
+    setPhotoRevision(revision => revision + 1);
+  }, []);
   const sessionEpoch = useRef(0);
   const refreshInFlight = useRef<Promise<string> | null>(null);
 
@@ -123,7 +130,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setAccessToken(tokenData);
           setIsLoggedIn(true);
           setIsProfileComplete(isComplete);
-          api.profile.probePhoto(tokenData).then(setHasPhoto).catch(() => setHasPhoto(false));
+          const epoch = sessionEpoch.current;
+          api.profile.probePhoto(tokenData).then(value => {
+            if (epoch === sessionEpoch.current) setHasPhoto(value);
+          }).catch(() => {
+            if (epoch === sessionEpoch.current) setHasPhoto(false);
+          });
         }
       } catch {
         // ignore storage errors
@@ -153,6 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ]);
       sessionEpoch.current += 1;
       setUser(userProfile);
+      setHasPhoto(null);
       setAccessToken(aToken);
       setIsLoggedIn(true);
       setIsProfileComplete(profileComplete);
@@ -235,10 +248,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const refreshUser = useCallback(async () => {
+    const epoch = sessionEpoch.current;
     try {
       const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
       if (!token) return;
       const apiUser = await api.auth.getMe(token);
+      if (epoch !== sessionEpoch.current) return;
       const fresh = apiUserToProfile(apiUser);
       /* Merge fresh server data on top of current state (preserves locally-cached
          fields like plan/questionsUsed that getMe does not return) */
@@ -253,13 +268,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [accessToken]);
 
   const probeHasPhoto = useCallback(async () => {
+    const epoch = sessionEpoch.current;
     try {
       const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
       if (!token) { setHasPhoto(false); return; }
       const result = await api.profile.probePhoto(token);
-      setHasPhoto(result);
+      if (epoch === sessionEpoch.current) setHasPhoto(result);
     } catch {
-      setHasPhoto(false);
+      if (epoch === sessionEpoch.current) setHasPhoto(false);
     }
   }, [accessToken]);
 
@@ -327,6 +343,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         accessToken,
         refreshAccessToken,
         hasPhoto,
+        photoRevision,
         sendPhoneOtp,
         sendEmailOtp,
         verifyPhoneOtp,

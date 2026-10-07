@@ -159,12 +159,13 @@ export default function ProfileScreen() {
     try {
       await api.profile.uploadPhoto(accessToken, uri);
       setHasPhoto(true);
+      await refreshUser();
     } catch {
       Alert.alert("Upload Failed", "Could not upload photo. Please try again.");
     } finally {
       setPhotoUploading(false);
     }
-  }, [accessToken, setHasPhoto]);
+  }, [accessToken, setHasPhoto, refreshUser]);
 
   const handlePickFromLibrary = useCallback(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -191,13 +192,14 @@ export default function ProfileScreen() {
           try {
             await api.profile.deletePhoto(accessToken);
             setHasPhoto(false);
+            await refreshUser();
           } catch {
             Alert.alert("Error", "Could not remove photo. Please try again.");
           }
         },
       },
     ]);
-  }, [accessToken, setHasPhoto]);
+  }, [accessToken, setHasPhoto, refreshUser]);
 
   const handleAvatarPress = useCallback(() => {
     const options: { text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive" }[] = [

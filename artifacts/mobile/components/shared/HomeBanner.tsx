@@ -21,7 +21,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/auth";
 import { Colors } from "@/constants/colors";
-import { PHOTO_ENDPOINT, UsageInfo } from "@/services/api";
+import { getProfilePhotoSource, UsageInfo } from "@/services/api";
+import { getBannerUsage } from "@/services/bannerUsage";
+import { BannerBackground } from "@/components/shared/BannerBackground";
 
 const PRIMARY = "#667eea";
 
@@ -85,7 +87,10 @@ export function HomeBanner({
   isDark: boolean;
   onToggleTheme: () => void;
 }) {
-  const { user, hasPhoto, accessToken } = useAuth();
+  const { user, hasPhoto, accessToken, photoRevision } = useAuth();
+  const photoKey = `${user?.id}:${photoRevision}`;
+  const [photoFailedKey, setPhotoFailedKey] = useState<string | null>(null);
+  const showPhoto = !!(hasPhoto && accessToken) && photoFailedKey !== photoKey;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const topPad = Platform.OS === "web" ? 0 : insets.top;
@@ -95,7 +100,7 @@ export function HomeBanner({
 
   const displayName = user?.name ?? "Student";
   const nameShort = displayName.split(" ")[0] ?? "Student";
-  const initials = displayName.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+  const initial = (displayName.trim()[0] ?? "S").toUpperCase();
 
   /* phone nudge */
   useEffect(() => {
@@ -116,10 +121,10 @@ export function HomeBanner({
     if (usage && (usage.percent_used ?? 0) >= 100) setPayhallVisible(true);
   }, [usage?.percent_used]);
 
-  const usedQ = usage?.questions_used ?? 0;
-  const limitQ = usage?.question_limit ?? usage?.questions_limit ?? 0;
-  const usagePct = usage?.percent_used ?? (limitQ > 0 ? Math.min((usedQ / limitQ) * 100, 100) : 0);
-  const barColor = usagePct >= 90 ? "#ef4444" : usagePct >= 70 ? "#f59e0b" : "#818cf8";
+  const bu = getBannerUsage(usage);
+  const pct = Math.max(0, Math.min(100, Number.isFinite(bu.percent) ? bu.percent : 0));
+  const barColors = pct >= 90 ? Colors.bannerBarHigh : pct >= 70 ? Colors.bannerBarMid : Colors.bannerBarLow;
+  const planLabel = usage?.tier_name ?? usage?.plan_name ?? "Plan";
   const statusBanner = usage?.status;
 
   /* reset date — "↺ 2 Jun" format */
@@ -196,23 +201,19 @@ export function HomeBanner({
 
       {/* ── Layer 1: Main Nav ── */}
       <LinearGradient
-        colors={isDark
-          ? ["#1a1040", "#251662", "#2e1875", "#1d0e5c"]
-          : ["#3730a3", "#4f46e5", "#6d28d9", "#4338ca"]}
+        colors={[...Colors.bannerGradient]}
+        locations={[...Colors.bannerGradientLocations]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
+        style={nb.shell}
+      >
+        <BannerBackground />
+      <View
         style={[
           nb.nav,
           { paddingTop: statusBanner || !phoneNudgeDismissed ? 12 : topPad + 12 },
         ]}
       >
-        {/* Decorative dot-grid (28×28 repeat, 1.5px dots) */}
-        <View style={nb.dotGrid} pointerEvents="none">
-          {Array.from({ length: 45 }).map((_, i) => (
-            <View key={i} style={nb.dot} />
-          ))}
-        </View>
-
         <View style={nb.navRow}>
           {/* Logo */}
           <View style={nb.logoWrap}>
@@ -225,22 +226,31 @@ export function HomeBanner({
 
           {/* Avatar + Name */}
           <View style={nb.userBlock}>
-            <View style={nb.avatarWrap}>
-              {hasPhoto && accessToken
-                ? (
-                  <ExpoImage
-                    source={{ uri: PHOTO_ENDPOINT, headers: { Authorization: `Bearer ${accessToken}` } }}
-                    style={nb.avatarImg}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                  />
-                )
-                : (
-                  <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={[nb.avatarImg, { alignItems: "center", justifyContent: "center" }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                    <Text style={nb.avatarInitials}>{initials || "S"}</Text>
-                  </LinearGradient>
-                )
-              }
+            <View>
+              <LinearGradient
+                colors={[...Colors.bannerAvatarHaloGradient]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={nb.avatarHalo} pointerEvents="none"
+              />
+              <View style={nb.avatarWrap}>
+                {showPhoto
+                  ? (
+                    <ExpoImage
+                      source={getProfilePhotoSource(accessToken as string, user?.id, photoRevision)}
+                      style={nb.avatarImg}
+                      contentFit="cover"
+                      cachePolicy="none"
+                      recyclingKey={`${user?.id}:${photoRevision}`}
+                      onError={() => setPhotoFailedKey(photoKey)}
+                    />
+                  )
+                  : (
+                    <LinearGradient colors={[Colors.bannerAvatarFrom, Colors.bannerAvatarTo]} style={[nb.avatarImg, { alignItems: "center", justifyContent: "center" }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                      <Text style={nb.avatarInitials}>{initial}</Text>
+                    </LinearGradient>
+                  )
+                }
+              </View>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={nb.userName} numberOfLines={1}>{nameShort}</Text>
@@ -252,26 +262,23 @@ export function HomeBanner({
 
           {/* Action buttons */}
           <View style={nb.actions}>
-            <Pressable style={nb.themeBtn} onPress={onToggleTheme} hitSlop={6}>
+            <Pressable style={nb.themeBtn} onPress={onToggleTheme} hitSlop={8} accessibilityRole="button" accessibilityLabel={isDark ? "Switch to light theme" : "Switch to dark theme"}>
               <Text style={nb.themeBtnIcon}>{isDark ? "☀️" : "🌙"}</Text>
             </Pressable>
-            <Pressable style={nb.logoutBtn} onPress={onLogout} hitSlop={6}>
+            <Pressable style={nb.logoutBtn} onPress={onLogout} hitSlop={8} accessibilityRole="button" accessibilityLabel="Log out">
               <Ionicons name="log-out-outline" size={17} color="#fff" />
             </Pressable>
           </View>
         </View>
-      </LinearGradient>
+      </View>
 
       {/* ── Layer 2: Sub-Row ── */}
-      <LinearGradient
-        colors={["#1d0e5c", "#251662"]}
-        style={nb.subRow}
-      >
+      <View style={nb.subRow}>
         {/* Board + Class chips */}
         <View style={nb.chipsGroup}>
           {user?.board ? (
             <View style={nb.chip}>
-              <Feather name="grid" size={10} color="rgba(255,255,255,0.5)" />
+              <Ionicons name="business-outline" size={10} color="rgba(255,255,255,0.5)" />
               <Text style={nb.chipLabel}>Board: </Text>
               <Text style={nb.chipValue} numberOfLines={1}>{user.board}</Text>
             </View>
@@ -287,25 +294,39 @@ export function HomeBanner({
         <View style={nb.planGroup}>
           {usageLoading ? (
             <ActivityIndicator size="small" color="rgba(255,255,255,0.5)" />
-          ) : (
-            <Pressable style={nb.planWidget} onPress={onUpgrade}>
-              <Text style={nb.planEmoji}>{planEmoji(usage?.tier_slug)}</Text>
-              <View style={{ gap: 2 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                  <Text style={nb.planName} numberOfLines={1}>{usage?.tier_name ?? usage?.plan_name ?? "Free"}</Text>
-                  <Text style={nb.planCount}>{usedQ}/{limitQ} Q</Text>
+          ) : usage ? (
+            <>
+              <Pressable
+                style={nb.planWidget}
+                onPress={onUpgrade}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`${planLabel}, ${bu.countLabel} questions used${bu.remaining != null && isFinite(bu.remaining) ? `, ${bu.remaining} remaining` : ""}`}
+              >
+                <Text style={nb.planEmoji}>{planEmoji(usage.tier_slug)}</Text>
+                <View style={{ gap: 2 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                    <Text style={nb.planName} numberOfLines={1}>{planLabel}</Text>
+                    <Text style={nb.planCount}>{bu.countLabel}</Text>
+                  </View>
+                  <View style={nb.planBarBg}>
+                    <LinearGradient
+                      colors={[...barColors]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[nb.planBarFill, { width: `${pct}%` as DimensionValue }]}
+                    />
+                  </View>
+                  {resetLabel ? <Text style={nb.planReset}>{resetLabel}</Text> : null}
                 </View>
-                <View style={nb.planBarBg}>
-                  <View style={[nb.planBarFill, { width: `${Math.min(usagePct, 100)}%` as DimensionValue, backgroundColor: barColor }]} />
-                </View>
-                {resetLabel ? <Text style={nb.planReset}>{resetLabel}</Text> : null}
-              </View>
-            </Pressable>
-          )}
-          <Pressable style={nb.upgradeBtn} onPress={onUpgrade}>
-            <Text style={nb.upgradeBtnText}>Upgrade</Text>
-          </Pressable>
+              </Pressable>
+              <Pressable style={nb.upgradeBtn} onPress={onUpgrade} hitSlop={6} accessibilityRole="button" accessibilityLabel="Upgrade plan">
+                <Text style={nb.upgradeBtnText}>Upgrade</Text>
+              </Pressable>
+            </>
+          ) : null}
         </View>
+      </View>
       </LinearGradient>
 
       {/* ── Payhall Banner ── */}
@@ -352,16 +373,16 @@ const bn = StyleSheet.create({
 
 /* Nav styles */
 const nb = StyleSheet.create({
-  nav: { paddingHorizontal: 14, paddingBottom: 12, overflow: "hidden" },
-  dotGrid: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, flexDirection: "row", flexWrap: "wrap", gap: 26, padding: 8, opacity: 0.07 },
-  dot: { width: 2, height: 2, borderRadius: 1, backgroundColor: "#fff" },
+  shell: { overflow: "hidden", shadowColor: Colors.bannerShadow, shadowOpacity: 1, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+  nav: { paddingHorizontal: 14, paddingBottom: 12 },
+  avatarHalo: { position: "absolute", top: -2, left: -2, right: -2, bottom: -2, borderRadius: 18, opacity: 0.65 },
   navRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   logoWrap: { flexDirection: "row", alignItems: "baseline" },
   logoEdw: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.navLogoEdw, letterSpacing: -0.5 },
   logoAI: { fontSize: 20, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.5 },
   divider: { width: 1, height: 22, backgroundColor: "rgba(255,255,255,0.2)", marginHorizontal: 4 },
   userBlock: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-  avatarWrap: { width: 32, height: 32, borderRadius: 16, overflow: "hidden", borderWidth: 1.5, borderColor: "rgba(167,139,250,0.6)" },
+  avatarWrap: { width: 32, height: 32, borderRadius: 16, overflow: "hidden", borderWidth: 1.5, borderColor: Colors.bannerAvatarBorder },
   avatarImg: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   avatarInitials: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#fff" },
   userName: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#fff", maxWidth: 110 },
@@ -371,8 +392,8 @@ const nb = StyleSheet.create({
   themeBtnIcon: { fontSize: 14 },
   logoutBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(239,68,68,0.70)", borderWidth: 1, borderColor: "rgba(252,165,165,0.40)", alignItems: "center", justifyContent: "center" },
   subRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
-  chipsGroup: { flexDirection: "row", gap: 6, flex: 1, flexWrap: "wrap" },
-  chip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: Colors.navChipBg, borderWidth: 1, borderColor: Colors.navChipBorder, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4, maxWidth: 140 },
+  chipsGroup: { flexDirection: "row", gap: 6, flex: 1, minWidth: 0, maxWidth: 140, flexWrap: "wrap" },
+  chip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: Colors.navChipBg, borderWidth: 1, borderColor: Colors.navChipBorder, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4, maxWidth: "100%" },
   chipLabel: { fontSize: 10, color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular" },
   chipValue: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#fff", flexShrink: 1 },
   planGroup: { flexDirection: "row", alignItems: "center", gap: 6 },

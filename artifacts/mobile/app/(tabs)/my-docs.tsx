@@ -21,13 +21,13 @@ import AnswerCard from "@/components/study/AnswerCard";
 import FlashcardsSection from "@/components/study/FlashcardsSection";
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { useAuth } from "@/context/auth";
+import { useBannerUsage } from "@/hooks/useBannerUsage";
 import { useTheme } from "@/context/theme";
 import api, {
   ApiError,
   DocumentItem,
   QueryHistoryItem,
   QueryResponse,
-  UsageInfo,
 } from "@/services/api";
 
 const PRIMARY = "#667eea";
@@ -203,14 +203,8 @@ export default function OwnBooksScreen() {
   const { isDark, toggleTheme } = useTheme();
 
   /* usage / upgrade */
-  const [usage, setUsage] = useState<UsageInfo | null>(null);
-  const [usageLoading, setUsageLoading] = useState(true);
+  const { usage, usageLoading, refreshUsage } = useBannerUsage();
   const [showUpgrade, setShowUpgrade] = useState(false);
-
-  useEffect(() => {
-    if (!accessToken) return;
-    api.study.getUsage(accessToken).then(setUsage).catch(() => {}).finally(() => setUsageLoading(false));
-  }, [accessToken]);
 
   const handleLogout = useCallback(async () => {
     try { await logout(); } catch {}
@@ -377,6 +371,7 @@ export default function OwnBooksScreen() {
       );
       const finalRes = res.answer ? res : { ...res, answer: accumulated };
       setResponse(finalRes); setStreaming(false); setQueryLoading(false);
+      void refreshUsage();
       /* Add to local history immediately — server already saves it automatically */
       setHistory((prev) => {
         const newItem = { id: Date.now(), question: q.trim(), mode: qMode, created_at: new Date().toISOString() };
@@ -392,7 +387,7 @@ export default function OwnBooksScreen() {
       }
       setStreaming(false); setQueryLoading(false);
     }
-  }, [question, selectedDoc, accessToken]);
+  }, [question, selectedDoc, accessToken, refreshUsage]);
 
   /* ── youtube: generate notes ── */
   const handleGenerateNotes = useCallback(() => {

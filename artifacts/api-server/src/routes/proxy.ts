@@ -61,6 +61,13 @@ async function proxyHandler(req: any, res: any) {
       return;
     }
 
+    // Authenticated profile images must stay binary and must not be shared-cached.
+    if (contentType.startsWith("image/")) {
+      res.set("content-type", contentType);
+      res.set("cache-control", "private, no-store");
+      res.send(Buffer.from(await upstream.arrayBuffer()));
+      return;
+    }
     const text = await upstream.text();
     res.set("content-type", contentType);
     res.send(text);
