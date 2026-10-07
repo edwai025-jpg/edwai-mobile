@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "EdwAI",
-    "slug": "mobile",
+    "name": "EDUwAI",
+    "slug": "eduwai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "edwai",
+    "scheme": "eduwai",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "locales": {
@@ -19,18 +19,20 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.edwai.app",
+      "bundleIdentifier": "com.eduwai.app",
       "googleServicesFile": "./firebase/GoogleService-Info.plist",
       "buildNumber": "1",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "CFBundleDevelopmentRegion": "en_IN",
         "NSPhotoLibraryUsageDescription": "EdwAI uses your photo library to set a profile picture.",
         "NSCameraUsageDescription": "EdwAI uses the camera to take a profile picture."
       }
     },
     "android": {
-      "package": "com.edwai.app",
+      "package": "com.eduwai.app",
       "googleServicesFile": "./firebase/google-services.json",
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "pan",
@@ -53,7 +55,10 @@
               "scheme": "edwai"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -71,8 +76,20 @@
       "expo-font",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
-      ["expo-build-properties", { "ios": { "useFrameworks": "dynamic" } }],
-      ["expo-notifications", { "defaultChannel": "eduwai-support" }],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "dynamic"
+          }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "eduwai-support"
+        }
+      ],
       "expo-web-browser",
       "expo-image-picker"
     ],
