@@ -1,6 +1,6 @@
 import { SupportOwner, SupportPointer, supportApi } from "./supportApi";
 
-// SDK-independent preparation only: native listeners are not installed/enabled.
+// SDK-independent payload validation shared by the native listener and tests.
 // Notification text is never inserted into history.
 export function parseSupportReply(data: unknown): number | null {
   if (!data || typeof data !== "object") return null;

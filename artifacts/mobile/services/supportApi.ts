@@ -95,7 +95,7 @@ async function request<T>(
 }
 
 export const supportApi = {
-  // Preparation for a native messaging SDK. No Expo Go caller registers tokens.
+  // Native Firebase callers only. Web and Expo Go never register tokens.
   async registerFcmToken(
     owner: SupportOwner, pointer: SupportPointer, fcmToken: string,
     platform: "android" | "ios", signal?: AbortSignal,

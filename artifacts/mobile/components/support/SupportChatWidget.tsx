@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,9 @@ import Svg, { Path } from "react-native-svg";
 import { Colors } from "@/constants/colors";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useSupportChat } from "@/hooks/useSupportChat";
+import { Ionicons } from "@expo/vector-icons";
+import { supportPush } from "@/services/supportPush";
+import { SupportNotificationControls } from "./SupportNotificationControls";
 
 const BUBBLE_PATH =
   "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z";
@@ -53,6 +56,23 @@ function formatTime(iso: string) {
 export function SupportChatWidget({ aboveTabs = false }: { aboveTabs?: boolean }) {
   const [visible, setVisible] = useState(false);
   const chat = useSupportChat(visible);
+  const notifications = useSyncExternalStore(supportPush.subscribe, supportPush.getSnapshot, supportPush.getSnapshot);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const lastOpen = useRef(notifications.openVersion);
+  const lastReply = useRef(notifications.replyVersion);
+  useEffect(() => {
+    supportPush.setChatVisible(chat.identity, visible);
+    return () => supportPush.setChatVisible(chat.identity, false);
+  }, [visible, chat.identity]);
+  useEffect(() => {
+    if (notifications.openVersion !== lastOpen.current
+      && supportPush.canOpen(chat.identity, notifications.openVersion)) setVisible(true);
+    lastOpen.current = notifications.openVersion;
+  }, [notifications.openVersion, notifications.identity, chat.identity]);
+  useEffect(() => {
+    if (notifications.replyVersion !== lastReply.current && visible && notifications.identity === chat.identity) void chat.refresh();
+    lastReply.current = notifications.replyVersion;
+  }, [notifications.replyVersion, notifications.identity, chat.identity, chat.refresh, visible]);
   const insets = useSafeAreaInsets();
   const [kb, setKb] = useState(false);
   const [name, setName] = useState("");
@@ -154,12 +174,20 @@ export function SupportChatWidget({ aboveTabs = false }: { aboveTabs?: boolean }
           ? "Loading messages"
           : null;
 
-  const renderHeaderRight = () =>
-    conversation ? (
+  const renderHeaderRight = () => (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+      <Pressable testID="support-notifications-toggle" onPress={() => setShowNotifications(value => !value)}
+        hitSlop={10} accessibilityRole="button" accessibilityLabel="Support notification settings"
+        accessibilityState={{ expanded: showNotifications }}>
+        <Ionicons name={notifications.optedIn ? "notifications" : "notifications-outline"} size={20} color={Colors.primary} />
+      </Pressable>
+      {conversation ? (
       <Pressable testID="support-new" disabled={chat.busy} onPress={confirmNew} hitSlop={8} style={styles.textBtn} accessibilityRole="button">
         <Text style={styles.textBtnLabel}>New</Text>
       </Pressable>
-    ) : null;
+      ) : null}
+    </View>
+  );
 
   const pendingBlock = chat.pending ? (
     <View style={[styles.row, styles.rowMe]}>
@@ -453,6 +481,18 @@ export function SupportChatWidget({ aboveTabs = false }: { aboveTabs?: boolean }
               <CloseIcon />
             </Pressable>
           </View>
+          {notifications.notice && notifications.identity === chat.identity ? (
+            <View style={styles.warnBox} accessibilityRole="alert">
+              <Text style={styles.warnText}>{notifications.notice}</Text>
+              <Pressable onPress={() => supportPush.clearNotice()} accessibilityRole="button" style={styles.textBtn}>
+                <Text style={styles.textBtnLabel}>Dismiss</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {showNotifications ? (
+            <SupportNotificationControls state={notifications}
+              canEnable={!!conversation && !chat.restoring && !chat.blocked && !chat.busy} />
+          ) : null}
           {renderBody()}
           {confirmation ? (
             <View style={styles.confirmBackdrop}>

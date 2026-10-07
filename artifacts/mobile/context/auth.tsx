@@ -10,6 +10,7 @@ import React, {
 
 import api, { ApiUser } from "@/services/api";
 import { credentialStorage } from "@/services/credentialStorage";
+import { supportPush } from "@/services/supportPush";
 
 
 export type UserProfile = {
@@ -60,6 +61,7 @@ export function apiUserToProfile(u: ApiUser): UserProfile {
 }
 
 type AuthState = {
+  isRestored: boolean;
   isLoggedIn: boolean;
   isProfileComplete: boolean;
   user: UserProfile | null;
@@ -96,6 +98,7 @@ const STORAGE_KEYS = {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [isRestored, setIsRestored] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isProfileComplete, setIsProfileComplete] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -124,6 +127,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {
         // ignore storage errors
+      } finally {
+        setIsRestored(true);
       }
     })();
   }, []);
@@ -135,6 +140,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       rToken: string,
       profileComplete: boolean
     ) => {
+      // Invalidate old push work BEFORE any account credentials are replaced.
+      supportPush.suspendIdentity();
       await Promise.all([
         AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(userProfile)),
         credentialStorage.setItem(STORAGE_KEYS.accessToken, aToken),
@@ -257,6 +264,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [accessToken]);
 
   const logout = useCallback(async () => {
+    supportPush.suspendIdentity();
     sessionEpoch.current += 1;
     try {
       const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
@@ -312,6 +320,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
+        isRestored,
         isLoggedIn,
         isProfileComplete,
         user,

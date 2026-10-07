@@ -24,6 +24,7 @@
       "googleServicesFile": "./firebase/GoogleService-Info.plist",
       "buildNumber": "1",
       "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"],
         "CFBundleDevelopmentRegion": "en_IN",
         "NSPhotoLibraryUsageDescription": "EdwAI uses your photo library to set a profile picture.",
         "NSCameraUsageDescription": "EdwAI uses the camera to take a profile picture."
@@ -40,6 +41,7 @@
       },
       "permissions": [
         "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_EXTERNAL_STORAGE"
       ],
@@ -68,6 +70,10 @@
         }
       ],
       "expo-font",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
+      ["expo-build-properties", { "ios": { "useFrameworks": "dynamic" } }],
+      ["expo-notifications", { "defaultChannel": "eduwai-support" }],
       "expo-web-browser",
       "expo-image-picker"
     ],

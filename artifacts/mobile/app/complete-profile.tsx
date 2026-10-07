@@ -145,8 +145,10 @@ export default function CompleteProfileScreen() {
     }
   };
 
-  const handleBoardSelect = async (item: BoardItem) => {
-    setSelectedBoard(item);
+  const handleBoardSelect = async (item: PickerItem) => {
+    const board = boards.find(b => b.id === item.id);
+    if (!board) return;
+    setSelectedBoard(board);
     setSelectedClass(null);
     setClasses([]);
     setClassesLoading(true);

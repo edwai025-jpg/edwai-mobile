@@ -15,8 +15,8 @@ Use REST as the initial foreground transport. Background push is a separate nati
 
 **How to apply:** Clearly distinguish foreground chat delivery from optional background notifications. Do not promise unread counts or exactly-once delivery beyond the external API's contract.
 
-The user permits native support notifications to be deferred while testing foreground chat with Expo Go, and wants saveable instructions for completing native setup later.
+The user wants app-side native support-push code completed now and provider/build/physical-device testing deferred until later, potentially after publishing. Keep saveable instructions for resuming.
 
-**Why:** The user said physical devices and APNs configuration are not ready and asked to continue the remaining preparation now.
+**Why:** The user asked to complete code-related changes now and test after publishing, fixing issues then.
 
-**How to apply:** Preserve Expo Go compatibility during preparation. Clearly label native SDK integration, APNs configuration, delivery/tap testing, and shared-device logout privacy as incomplete until verified on installed Android/iOS builds.
+**How to apply:** Preserve Expo Go foreground chat. Distinguish implemented code from native compilation and provider/device verification. A foreground-chat release may keep push off; do not enable public push or claim verified delivery/privacy before installed Android/iOS acceptance passes.

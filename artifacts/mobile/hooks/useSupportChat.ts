@@ -3,8 +3,11 @@ import { AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { useAuth } from "@/context/auth";
 import { credentialStorage } from "@/services/credentialStorage";
+import { supportPush } from "@/services/supportPush";
+import { parseSavedSupportPointer, supportStorageKey } from "@/services/supportSession";
+export { supportStorageKey } from "@/services/supportSession";
 import {
-  SUPPORT_API_BASE, SupportConversation, SupportError, SupportMessage,
+  SupportConversation, SupportError, SupportMessage,
   SupportOwner, SupportPointer, supportApi,
 } from "@/services/supportApi";
 
@@ -12,9 +15,6 @@ export type GuestIntroduction = { name: string; email: string; phone: string; in
 type Pending = { text: string; status: "sending" | "sent" | "uncertain"; afterId: number };
 const drafts = new Map<string, string>();
 
-export function supportStorageKey(identity: string): string {
-  return `support.${encodeURIComponent(SUPPORT_API_BASE).replace(/[^a-zA-Z0-9._-]/g, "_")}.${identity}`;
-}
 export async function clearSupportSession(identity: string) {
   const key = supportStorageKey(identity);
   drafts.delete(key);
@@ -89,15 +89,12 @@ export function useSupportChat(visible: boolean) {
   }, []);
 
   useEffect(() => {
+    if (!auth.isRestored) return;
     let cancelled = false;
     credentialStorage.getItem(key).then((stored) => {
       if (cancelled) return;
       if (stored) {
-        const data = JSON.parse(stored) as SupportPointer;
-        if (!Number.isInteger(data.conversationId) || data.conversationId <= 0
-          || (!isAuthenticated && typeof data.anonymousToken !== "string")) {
-          throw new Error("Invalid saved conversation.");
-        }
+        const data = parseSavedSupportPointer(stored, !isAuthenticated)!;
         pointer.current = data;
         setValidatingSaved(true);
       }
@@ -120,7 +117,7 @@ export function useSupportChat(visible: boolean) {
       }
     });
     return () => { cancelled = true; };
-  }, [key, isAuthenticated]);
+  }, [key, isAuthenticated, auth.isRestored]);
 
   const synchronize = useCallback((): Promise<boolean> => {
     if (syncPromise.current) return syncPromise.current;
@@ -169,6 +166,7 @@ export function useSupportChat(visible: boolean) {
           setValidatingSaved(false);
           setNeedsSignIn(failure.status === 401);
           if (failure.status !== 401) {
+            supportPush.setConversation(identity, null);
             pointer.current = null;
             await credentialStorage.removeItem(key).catch(() => {});
           }
@@ -183,7 +181,7 @@ export function useSupportChat(visible: boolean) {
       if (syncPromise.current === promise) syncPromise.current = null;
     }).catch(() => {});
     return promise;
-  }, [key, owner, putPending, setDraft]);
+  }, [key, identity, owner, putPending, setDraft]);
 
   useEffect(() => {
     let wasConnected: boolean | null = null;
@@ -247,7 +245,10 @@ export function useSupportChat(visible: boolean) {
         if (!alive.current || runGeneration !== generation.current) return;
         pointer.current = created;
         setConversation({ id: created.conversationId, status: "open" });
-        try { await credentialStorage.setItem(key, JSON.stringify(created)); } catch {
+        try {
+          await credentialStorage.setItem(key, JSON.stringify(created));
+          supportPush.setConversation(identity, created);
+        } catch {
           setError("Chat is open, but this device could not save it for later.");
         }
       } else {
@@ -274,6 +275,7 @@ export function useSupportChat(visible: boolean) {
           setBlocked(true);
           setNeedsSignIn(failure.status === 401);
           if (failure.status !== 401) {
+            supportPush.setConversation(identity, null);
             pointer.current = null;
             await credentialStorage.removeItem(key).catch(() => {});
           }
@@ -283,7 +285,7 @@ export function useSupportChat(visible: boolean) {
       busyRef.current = false;
       if (alive.current && runGeneration === generation.current) setBusy(false);
     }
-  }, [key, owner, putPending, setDraft, synchronize]);
+  }, [key, identity, owner, putPending, setDraft, synchronize]);
 
   const send = useCallback(() => submit(drafts.get(key) || ""), [key, submit]);
   const startGuest = useCallback(async (intro: GuestIntroduction) => {
@@ -312,6 +314,7 @@ export function useSupportChat(visible: boolean) {
     generation.current += 1;
     try {
       await credentialStorage.removeItem(key);
+      supportPush.setConversation(identity, null);
       pointer.current = null;
       cursor.current = 0;
       resolved.current = false;
@@ -330,7 +333,7 @@ export function useSupportChat(visible: boolean) {
     } catch {
       setError("Could not reset the saved conversation. Please try again.");
     }
-  }, [key, needsSignIn, putPending, setDraft]);
+  }, [key, identity, needsSignIn, putPending, setDraft]);
 
   const refresh = useCallback(async () => { await synchronize(); }, [synchronize]);
   const allowRetry = useCallback(async () => {
@@ -351,7 +354,7 @@ export function useSupportChat(visible: boolean) {
   }, []);
 
   return {
-    isAuthenticated, restoring: restoring || validatingSaved, conversation, messages, pending, draft, setDraft, busy, error,
+    identity, isAuthenticated, restoring: !auth.isRestored || restoring || validatingSaved, conversation, messages, pending, draft, setDraft, busy, error,
     syncState, blocked, uncertain: pending?.status === "uncertain",
     send, startGuest, newConversation, refresh, allowRetry,
     needsSignIn, signInAgain,

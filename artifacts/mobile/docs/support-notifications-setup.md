@@ -2,18 +2,28 @@
 
 ## Current status
 
-This is preparation, not an enabled notification feature. Foreground support chat continues to use the existing EDUwAI web API. No replacement backend, support database, or sender has been added.
+The app-side notification code is implemented, but native delivery is NOT enabled or verified. The user chose to defer provider/build/device testing. Foreground support chat continues to use the existing EDUwAI web API. No replacement backend, support database, or sender has been added.
 
 The supplied Android and iOS client files match Firebase project `edwai-prod-70474` and package/bundle identifier `com.edwai.app`. They are saved under `artifacts/mobile/firebase/` and referenced by the static `app.json`. Do not change the app identifiers.
 
-Prepared code:
+Implemented code:
 
 - `services/supportApi.ts`: `registerFcmToken` uses the existing guest/account registration endpoints, rejects Expo push tokens, and requires a saved thread with matching owner kind.
-- `services/supportNotification.ts`: strict `support_reply` payload parsing and REST authorization of a matching saved pointer. These helpers are NOT connected to notification listeners or UI.
-- `firebase.json`: future Firebase Messaging auto-initialization and iOS automatic remote-message registration default to off. This file only takes effect once a compatible native Firebase SDK is installed.
-- Contract tests verify request shapes, rejected payloads/credentials, and REST authorization using controlled responses. They do not prove native token validity, delivery, or account isolation on devices.
+- `services/supportNotification.ts`: strict `support_reply` payload parsing and REST authorization of a matching saved pointer, now connected to the native lifecycle and existing support widget.
+- `services/nativeSupportPush.ts` and `index.ts`: guarded React Native Firebase 26.4.0 messaging, Expo permissions/channel, foreground/warm/cold callbacks, and a lightweight background handler that never polls REST.
+- `services/supportPushManager.ts`: serialized registration, identity changes, token refresh, generation-checked navigation, explicit opt-in, permission-revocation handling, and secure pending-cleanup/retired-token state.
+- `components/support/SupportNotificationControls.tsx`: the chat header's bell opens optional enable/off, retry-cleanup/registration, and native-only Settings controls. Errors never block foreground chat.
+- `context/auth.tsx` and the support host/hook: wait for auth restoration, suspend old push work before credentials change, discard prior-identity thread/draft state, and require opt-in for a new selected conversation.
+- `firebase.json`: messaging auto-initialization and automatic iOS remote-message registration default to off; foreground system presentation is suppressed in favor of identity-checked generic local alerts.
+- Contract/lifecycle tests verify code with controlled responses and SDK adapters. They do not prove native token validity, delivery, or shared-device isolation.
 
-Still required: native SDK integration, optional notification UI/permissions, token refresh registration, notification tap/resume wiring, logout token invalidation, APNs setup, native build verification, and physical Android/iOS acceptance testing.
+Still required: APNs/provider configuration, correctly signed native build compilation/installation, and physical Android/iOS acceptance testing, especially delayed replies/offline logout. Expo config introspection succeeds; that is not native compilation.
+
+### Release gate
+
+`EXPO_PUBLIC_SUPPORT_PUSH_ENABLED` is deliberately unset/off by default. No permission requests, token acquisition, new FCM registration, or native listeners run in an ordinary gated-off build. Existing pending device cleanup, if any, must still be processed.
+
+To test later, set the public build flag to the literal `true` only for a signed private test build using the approved environment-variable flow, then rebuild. Never send an Expo/APNs token to the FCM endpoints. Do not enable public push until the privacy matrix below passes. A release with push kept OFF can continue offering foreground support chat; it does not constitute a release of verified notifications.
 
 ## 1. What you can test now in Expo Go
 
@@ -44,15 +54,15 @@ Do this later in your own provider consoles. Never paste private keys into chat 
 
 No Firebase Admin service-account key belongs in the mobile application. Notification sending remains the existing web service's responsibility.
 
-## 3. Complete the native SDK integration
+## 3. Native SDK code: implemented; native build verification deferred
 
-This step needs an implementation pass, not just a Firebase console change.
+The implementation pass is complete. Both Firebase modules are installed at 26.4.0; Expo notification/device/build-properties packages use the Expo 54-compatible versions.
 
-The current project deliberately remains Expo Go compatible. Adding a native-only library changes that development requirement; confirm a supported native-build route and review the current Expo/Replit restrictions before installing it.
+Guarded imports keep web and Expo Go usable for foreground chat. Only a custom installed native build can exercise the Firebase messaging code.
 
-An FCM-capable option is React Native Firebase's app and messaging modules. Follow their current Expo instructions and choose versions compatible with this project's Expo/React Native versions. Do not use Firebase's JavaScript web SDK as a native FCM replacement.
+The app uses React Native Firebase, not its JavaScript web SDK or Expo push tokens. This SDK version uses the New Architecture/TurboModules and iOS Swift Package Manager with dynamic frameworks. Review its current Xcode/Swift requirements and the native builder image before building. Do not replace these with older static-framework instructions without a deliberate SDK migration.
 
-The future integration must:
+Implemented in code (verify the resulting installed builds later):
 
 - Keep `app.json` static and retain its existing client configuration paths.
 - Add the modules' required Expo config plugins and any compatible iOS build-properties configuration. Follow documentation for the chosen SDK version; do not copy outdated static-framework settings into a version using Swift Package Manager by default.
@@ -69,7 +79,7 @@ For iOS distribution, use Replit's supported Publish/TestFlight flow after revie
 
 ## 4. Optional permissions and identity-bound registration
 
-Add an explicit Enable support notifications action, initially off. Denial must never stop foreground chat. If the OS will no longer ask, offer Open Settings with a safe native-only handler.
+The explicit Enable support notifications action is initially off. Denial never stops foreground chat. Native Settings is offered alongside the permission controls. With the release gate off or in web/Expo Go, the panel explains why notifications are unavailable instead of pretending to register.
 
 Guest registration: `POST /support/fcm-token` with `fcm_token`, `platform`, `conversation_id`, and that guest conversation's `anonymous_token`.
 
@@ -99,7 +109,7 @@ No background JavaScript polling timer substitutes for native delivery.
 
 The existing API has NO FCM unregister endpoint. Local logout does not remove the server's token binding.
 
-Before enabling push, implement and test a serialized shutdown sequence for logout, account changes, guest-to-account transitions, permission revocation, and turning notifications off:
+The serialized shutdown sequence is implemented. Before enabling public push, verify it on devices for logout, account changes, guest-to-account transitions, permission revocation, and turning notifications off:
 
 1. Block new token registration; detach listeners and invalidate the current session generation.
 2. Disable messaging auto-initialization to avoid immediately recreating a token.
@@ -107,6 +117,8 @@ Before enabling push, implement and test a serialized shutdown sequence for logo
 4. Clear delivered notifications and badges where supported. Clearing a tray notification alone does not stop future delivery.
 5. Clear prior-account thread state and credentials; retain a secure pending-invalidation marker if cleanup failed.
 6. Do not register for another identity until invalidation succeeds and a new token is verified not to reuse the old binding. Require new identity-scoped opt-in.
+
+Token deletion and tray cleanup are attempted independently: an offline token-deletion failure still attempts to dismiss delivered notifications and reset badges, while retaining the secure cleanup blocker. Registration does not resume automatically for the next identity. Native deletion may depend on connectivity; this is precisely why physical privacy checks remain a release gate.
 
 Do not promise that an SDK success response alone proves all queued notifications are suppressed. Test delayed/in-flight replies and offline logout on a shared physical device. If the old account's preview can still appear, keep push off and report the unresolved privacy issue. A local tap-authorization check cannot hide a leaked OS notification preview.
 
@@ -133,7 +145,7 @@ Only enable native push after all privacy-critical checks pass. Delivery is stil
 
 ## 8. Resume later
 
-Ask: "Continue native support notifications using the saved setup guide. Keep the existing web API only. Complete the native Firebase SDK, optional permissions UI, token lifecycle/logout privacy, and authorized tap handling. Verify Android/iOS devices before enabling push."
+Ask: "Continue support-notification provider and device verification using the saved setup guide. The app-side SDK, controls, lifecycle and tap code are implemented, but push is off. Finish APNs/signing and native build checks, then test privately on Android/iOS. Keep the existing web API only and enable public push only after shared-device privacy passes."
 
 Guide in the project: `artifacts/mobile/docs/support-notifications-setup.md`.
 
@@ -141,11 +153,13 @@ Preparation checks:
 
 ```sh
 cd artifacts/mobile
-node --test scripts/support-api.test.cjs scripts/support-push.test.cjs scripts/firebase-config.test.cjs
+node --test scripts/support-api.test.cjs scripts/support-push.test.cjs scripts/support-push-lifecycle.test.cjs scripts/firebase-config.test.cjs
 pnpm run typecheck
 ```
 
 These checks use controlled responses; successful results are not a claim of production API access or native delivery.
+
+Expo config introspection also resolves the messaging plugins, `remote-notification` background mode, Android permission/channel settings, and an iOS development push entitlement. Check the final signed distribution build's entitlement separately. The current preview runs; its existing Expo package-compatibility warnings must be reviewed in the native-build preflight.
 
 Sources:
 
