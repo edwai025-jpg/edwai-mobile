@@ -1,3 +1,4 @@
 - [Mobile visual direction](mobile-visual-direction.md) — EDUwAI mobile entry page follows the supplied website login reference.
 - [Support chat scope](support-chat-scope.md) — Human support must use the existing web API; REST foreground chat and native push are separate integrations.
 - [Expo browser confirmations](mobile-platform-quirks.md) — Native alerts can be inert on web; provide actionable in-app confirmations in the preview.
+- [Package installation verification](package-installation.md) — A successful lockfile update may leave workspace symlinks unchanged; verify actual installed versions before testing.
