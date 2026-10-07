@@ -44,8 +44,10 @@ test("progress clamps server percent and calculates only a valid fallback", () =
 test("photo source uses authenticated endpoint, not a storage key, with identity/revision cache separation", async () => {
   const calls = [];
   const client = load("../services/api.ts", {
+    FormData,
     process: { env: { EXPO_PUBLIC_DOMAIN: "fixture.replit.dev" } },
     require: name => {
+      if (name === "./profilePhotoUpload") return {};
       assert.equal(name, "react-native");
       return { Platform: { OS: "web" } };
     },
@@ -56,7 +58,7 @@ test("photo source uses authenticated endpoint, not a storage key, with identity
   });
   const first = client.getProfilePhotoSource("fixture-token", 42, 1);
   const next = client.getProfilePhotoSource("fixture-token", 42, 2);
-  assert.equal(first.uri, "https://fixture.replit.dev/api-server/api/edwai/student/profile/photo");
+  assert.equal(first.uri, "https://fixture.replit.dev/api/edwai/student/profile/photo");
   assert.equal(first.headers.Authorization, "Bearer fixture-token");
   assert.ok(!first.uri.includes("fixture-token"));
   assert.notEqual(first.cacheKey, next.cacheKey);
@@ -74,7 +76,7 @@ test("preview proxy preserves authenticated image bytes and prevents shared cach
   const bytes = Buffer.from([137, 80, 78, 71, 255, 0, 128, 254]);
   load("../../api-server/src/routes/proxy.ts", {
     Buffer,
-    require: () => ({ Router: () => ({ all: (_path, fn) => { handler = fn; } }) }),
+    require: () => ({ default: { raw: () => () => {} }, Router: () => ({ all: (_path, ...fns) => { handler = fns.at(-1); } }) }),
     fetch: async (_url, opts) => {
       assert.equal(opts.headers.authorization, "Bearer fixture-token");
       return { status: 200, headers: new Headers({ "content-type": "image/png" }), arrayBuffer: async () => bytes };
@@ -82,7 +84,7 @@ test("preview proxy preserves authenticated image bytes and prevents shared cach
   });
   const headers = {};
   let sent;
-  await handler({ params: { 0: "student/profile/photo" }, method: "GET", headers: { authorization: "Bearer fixture-token" } }, {
+  await handler({ originalUrl: "/api/edwai/student/profile/photo", params: { 0: "student/profile/photo" }, method: "GET", headers: { authorization: "Bearer fixture-token" } }, {
     status: status => assert.equal(status, 200),
     set: (name, value) => { headers[name] = value; },
     send: value => { sent = value; },

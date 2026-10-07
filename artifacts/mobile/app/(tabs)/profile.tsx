@@ -6,7 +6,6 @@ import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   DimensionValue,
   Linking,
   Platform,
@@ -24,7 +23,8 @@ import SessionsModal from "@/components/SessionsModal";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import { useTheme } from "@/context/theme";
-import api, { PHOTO_ENDPOINT, UsageInfo } from "@/services/api";
+import api, { getProfilePhotoSource, UsageInfo } from "@/services/api";
+import { useProfileAlert } from "@/hooks/useProfileAlert";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 type MaterialIconName = React.ComponentProps<typeof MaterialIcons>["name"];
@@ -44,15 +44,17 @@ function Avatar({
   size?: number;
   onPress?: () => void;
 }) {
+  const { user, photoRevision } = useAuth();
   const initials = name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
   const r = size / 2;
   const inner = hasPhoto && token
     ? (
       <ExpoImage
-        source={{ uri: PHOTO_ENDPOINT, headers: { Authorization: `Bearer ${token}` } }}
+        key={`${user?.id}:${photoRevision}`}
+        source={getProfilePhotoSource(token, user?.id, photoRevision)}
         style={{ width: size, height: size, borderRadius: r, borderWidth: 2, borderColor: "rgba(255,255,255,0.25)" }}
         contentFit="cover"
-        cachePolicy="memory-disk"
+        cachePolicy="none"
       />
     )
     : (
@@ -121,7 +123,8 @@ const RowDivider = () => {
 /* ─── Main Screen ────────────────────────────────────────────────────────── */
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, logout, refreshUser, accessToken, hasPhoto, setHasPhoto } = useAuth();
+  const { user, logout, refreshUser, accessToken, hasPhoto, setHasPhoto, probeHasPhoto } = useAuth();
+  const { showAlert, alertDialog } = useProfileAlert();
   const { isDark } = useTheme();
 
   const [usage, setUsage] = useState<UsageInfo | null>(null);
@@ -139,6 +142,7 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshUser();
+      probeHasPhoto();
       if (accessToken) {
         setUsageLoading(true);
         api.study
@@ -149,19 +153,19 @@ export default function ProfileScreen() {
       } else {
         setUsageLoading(false);
       }
-    }, [refreshUser, accessToken])
+    }, [refreshUser, probeHasPhoto, accessToken])
   );
 
   /* ── Photo actions (also accessible from tappable avatar) ── */
-  const doUploadPhoto = useCallback(async (uri: string) => {
+  const doUploadPhoto = useCallback(async (asset: ImagePicker.ImagePickerAsset) => {
     if (!accessToken) return;
     setPhotoUploading(true);
     try {
-      await api.profile.uploadPhoto(accessToken, uri);
+      await api.profile.uploadPhoto(accessToken, asset);
       setHasPhoto(true);
       await refreshUser();
-    } catch {
-      Alert.alert("Upload Failed", "Could not upload photo. Please try again.");
+    } catch (e) {
+      showAlert("Upload Failed", e instanceof Error ? e.message : "Could not upload photo. Please try again.");
     } finally {
       setPhotoUploading(false);
     }
@@ -169,22 +173,22 @@ export default function ProfileScreen() {
 
   const handlePickFromLibrary = useCallback(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert("Permission needed", "Allow photo library access in Settings."); return; }
+    if (!perm.granted) { showAlert("Permission needed", "Allow photo library access in Settings."); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.85 });
     if (result.canceled || !result.assets[0]) return;
-    await doUploadPhoto(result.assets[0].uri);
+    await doUploadPhoto(result.assets[0]);
   }, [doUploadPhoto]);
 
   const handlePickFromCamera = useCallback(async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { Alert.alert("Permission needed", "Allow camera access in Settings."); return; }
+    if (!perm.granted) { showAlert("Permission needed", "Allow camera access in Settings."); return; }
     const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.85 });
     if (result.canceled || !result.assets[0]) return;
-    await doUploadPhoto(result.assets[0].uri);
+    await doUploadPhoto(result.assets[0]);
   }, [doUploadPhoto]);
 
   const handleRemovePhoto = useCallback(() => {
-    Alert.alert("Remove Photo", "Are you sure you want to remove your profile photo?", [
+    showAlert("Remove Photo", "Are you sure you want to remove your profile photo?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove", style: "destructive", onPress: async () => {
@@ -194,7 +198,7 @@ export default function ProfileScreen() {
             setHasPhoto(false);
             await refreshUser();
           } catch {
-            Alert.alert("Error", "Could not remove photo. Please try again.");
+            showAlert("Error", "Could not remove photo. Please try again.");
           }
         },
       },
@@ -202,13 +206,14 @@ export default function ProfileScreen() {
   }, [accessToken, setHasPhoto, refreshUser]);
 
   const handleAvatarPress = useCallback(() => {
+    if (photoUploading) return;
     const options: { text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive" }[] = [
       { text: "Take Photo", onPress: handlePickFromCamera },
       { text: "Choose from Library", onPress: handlePickFromLibrary },
       ...(hasPhoto ? [{ text: "Remove Photo", style: "destructive" as const, onPress: handleRemovePhoto }] : []),
       { text: "Cancel", style: "cancel" as const },
     ];
-    Alert.alert("Profile Photo", photoUploading ? "Uploading…" : "Choose an option", options, { cancelable: true });
+    showAlert("Profile Photo", "Choose an option", options);
   }, [hasPhoto, photoUploading, handlePickFromCamera, handlePickFromLibrary, handleRemovePhoto]);
 
   const displayName = user?.name || "Student";
@@ -249,7 +254,7 @@ export default function ProfileScreen() {
   })();
 
   const handleLogout = () =>
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+    showAlert("Sign Out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Sign Out",
@@ -263,7 +268,7 @@ export default function ProfileScreen() {
     ]);
 
   const handleDeleteAccount = () =>
-    Alert.alert(
+    showAlert(
       "Delete Account",
       "This will permanently delete your account and all your data. This action cannot be undone.",
       [
@@ -273,9 +278,17 @@ export default function ProfileScreen() {
           style: "destructive",
           onPress: async () => {
             if (accessToken) {
-              try { await api.profile.deleteAccount(accessToken); } catch {}
+              try {
+                await api.profile.deleteAccount(accessToken);
+              } catch (e) {
+                showAlert("Delete Failed", e instanceof Error ? e.message : "Your account could not be deleted. Please try again.");
+                return;
+              }
+            } else {
+              showAlert("Delete Failed", "Please sign in again.");
+              return;
             }
-            await logout();
+            await logout({ localOnly: true });
           },
         },
       ]
@@ -440,19 +453,19 @@ export default function ProfileScreen() {
               icon={<Feather name={"bell" as FeatherName} size={17} color={Colors.primary} />}
               title="Notifications"
               subtitle="Manage notification preferences"
-              onPress={() => Alert.alert("Coming Soon", "Notification settings will be available soon.")}
+              onPress={() => showAlert("Coming Soon", "Notification settings will be available soon.")}
             />
             <RowDivider />
             <MenuRow
               icon={<Feather name={"shield" as FeatherName} size={17} color={Colors.primary} />}
               title="Privacy Policy"
-              onPress={() => Linking.openURL("https://edwai.com/privacy").catch(() => Alert.alert("Privacy Policy", "Visit edwai.com/privacy for our full privacy policy."))}
+              onPress={() => Linking.openURL("https://edwai.com/privacy").catch(() => showAlert("Privacy Policy", "Visit edwai.com/privacy for our full privacy policy."))}
             />
             <RowDivider />
             <MenuRow
               icon={<Feather name={"file-text" as FeatherName} size={17} color={Colors.primary} />}
               title="Terms of Service"
-              onPress={() => Linking.openURL("https://edwai.com/terms").catch(() => Alert.alert("Terms of Service", "Visit edwai.com/terms for our terms of service."))}
+              onPress={() => Linking.openURL("https://edwai.com/terms").catch(() => showAlert("Terms of Service", "Visit edwai.com/terms for our terms of service."))}
             />
           </View>
         </View>
@@ -491,10 +504,10 @@ export default function ProfileScreen() {
       <AccountEditModal
         visible={showAccount}
         onClose={() => setShowAccount(false)}
-        onPhotoChanged={setHasPhoto}
       />
       <EducationEditModal visible={showEducation} onClose={() => setShowEducation(false)} />
       <SessionsModal visible={showSessions} onClose={() => setShowSessions(false)} />
+      {alertDialog}
     </LinearGradient>
   );
 }

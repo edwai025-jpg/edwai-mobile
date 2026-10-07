@@ -2,3 +2,6 @@
 - [Support chat scope](support-chat-scope.md) — Human support must use the existing web API; REST foreground chat and native push are separate integrations.
 - [Expo browser confirmations](mobile-platform-quirks.md) — Native alerts can be inert on web; provide actionable in-app confirmations in the preview.
 - [Package installation verification](package-installation.md) — A successful lockfile update may leave workspace symlinks unchanged; verify actual installed versions before testing.
+- [Mobile Profile scope](mobile-profile-scope.md) — Approved API/behavior fixes preserve the separate tab and mobile layout; no copied web navigation or invented settings/payments.
+- [Profile session contract](profile-session-contract.md) — Bearer-only native sessions cannot identify the current device; external timezone-less session times are UTC.
+- [External API browser tests](external-api-browser-tests.md) — Fixture interception must fail closed; seed auth once so logout checks cannot silently re-authenticate.

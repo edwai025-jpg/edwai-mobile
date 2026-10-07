@@ -9,6 +9,7 @@ import { Platform, StyleSheet, View } from "react-native";
 
 import { Colors } from "@/constants/colors";
 import { useTheme } from "@/context/theme";
+import { useAuth } from "@/context/auth";
 
 const DARK_TAB_BG = "#16213e";
 const DARK_ACTIVE = "#a78bfa";
@@ -119,6 +120,8 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
+  const { isRestored, isLoggedIn } = useAuth();
+  if (!isRestored || !isLoggedIn) return null;
   if (isLiquidGlassAvailable()) {
     return <NativeTabLayout />;
   }

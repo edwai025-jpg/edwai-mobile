@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, usePathname, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -17,35 +17,28 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/auth";
 import { ThemeProvider } from "@/context/theme";
 import { SupportChatHost } from "@/components/support/SupportChatHost";
+import { getAuthRedirect } from "@/services/authRouting";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
-  const { isLoggedIn, isProfileComplete } = useAuth();
+  const { isRestored, isLoggedIn, isProfileComplete } = useAuth();
   const router = useRouter();
   const segments = useSegments();
-  const pathname = usePathname();
 
   useEffect(() => {
-    const inAuthGroup = segments[0] === "(tabs)";
-    const inLogin = pathname === "/";
-    const inOtp = segments[0] === "otp";
-    const inProfile = segments[0] === "complete-profile";
+    const target = getAuthRedirect({ isRestored, isLoggedIn, isProfileComplete }, segments);
+    if (target) router.replace(target);
+  }, [isRestored, isLoggedIn, isProfileComplete, segments, router]);
 
-    if (!isLoggedIn && inAuthGroup) {
-      router.replace("/");
-    } else if (isLoggedIn && !isProfileComplete && !inProfile) {
-      router.replace("/complete-profile");
-    } else if (isLoggedIn && isProfileComplete && (inLogin || inOtp)) {
-      router.replace("/(tabs)");
-    }
-  }, [isLoggedIn, isProfileComplete, segments, pathname]);
+  if (!isRestored) return null;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="login" />
       <Stack.Screen name="otp" />
       <Stack.Screen name="complete-profile" />
       <Stack.Screen name="(tabs)" />

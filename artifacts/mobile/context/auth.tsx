@@ -11,6 +11,8 @@ import React, {
 import api, { ApiUser } from "@/services/api";
 import { credentialStorage } from "@/services/credentialStorage";
 import { supportPush } from "@/services/supportPush";
+import { supportStorageKey } from "@/services/supportSession";
+import { useQueryClient } from "@tanstack/react-query";
 
 
 export type UserProfile = {
@@ -31,6 +33,9 @@ export type UserProfile = {
   questionsLimit?: number;
   profilePhotoUrl?: string;
   role?: string;
+  orgRole?: string | null;
+  orgId?: number | null;
+  orgName?: string | null;
   authProvider?: string;
   phoneVerified?: boolean;
   emailVerified?: boolean;
@@ -53,6 +58,9 @@ export function apiUserToProfile(u: ApiUser): UserProfile {
     mediumId: u.medium_id,
     profilePhotoUrl: u.profile_photo_url,
     role: u.role,
+    orgRole: u.org_role,
+    orgId: u.org_id,
+    orgName: u.org_name,
     authProvider: u.auth_provider,
     phoneVerified: u.phone_verified,
     emailVerified: u.email_verified,
@@ -82,9 +90,9 @@ type AuthState = {
     classId?: number;
     phone?: string;
   }) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (options?: { localOnly?: boolean }) => Promise<void>;
   updateUser: (updates: Partial<UserProfile>) => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: (options?: { throwOnError?: boolean }) => Promise<void>;
   setHasPhoto: (v: boolean | null) => void;
   probeHasPhoto: () => Promise<void>;
 };
@@ -99,6 +107,7 @@ const STORAGE_KEYS = {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [isRestored, setIsRestored] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isProfileComplete, setIsProfileComplete] = useState(false);
@@ -247,11 +256,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user]
   );
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (options?: { throwOnError?: boolean }) => {
     const epoch = sessionEpoch.current;
     try {
       const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
-      if (!token) return;
+      if (!token) {
+        if (options?.throwOnError) throw new Error("Please sign in again.");
+        return;
+      }
       const apiUser = await api.auth.getMe(token);
       if (epoch !== sessionEpoch.current) return;
       const fresh = apiUserToProfile(apiUser);
@@ -262,7 +274,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(merged)).catch(() => {});
         return merged;
       });
-    } catch {
+    } catch (e) {
+      if (options?.throwOnError) throw e;
       /* silently ignore — stale data stays */
     }
   }, [accessToken]);
@@ -275,33 +288,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await api.profile.probePhoto(token);
       if (epoch === sessionEpoch.current) setHasPhoto(result);
     } catch {
-      if (epoch === sessionEpoch.current) setHasPhoto(false);
+      // A network/auth failure does not mean the server has removed the photo.
     }
   }, [accessToken]);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (options?: { localOnly?: boolean }) => {
     supportPush.suspendIdentity();
     sessionEpoch.current += 1;
     try {
       const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
       const rToken = await credentialStorage.getItem(STORAGE_KEYS.refreshToken);
-      if (token && rToken) {
+      if (!options?.localOnly && token && rToken) {
         await api.auth.logout(token, rToken);
       }
     } catch {
       // ignore errors during logout API call
     }
-    await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await AsyncStorage.multiRemove([...Object.values(STORAGE_KEYS), "@edwai/p1_selection"]);
     await Promise.all([
       credentialStorage.removeItem(STORAGE_KEYS.accessToken),
       credentialStorage.removeItem(STORAGE_KEYS.refreshToken),
+      ...(user?.id !== undefined ? [credentialStorage.removeItem(supportStorageKey(`user.${user.id}`))] : []),
     ]);
     setUser(null);
     setAccessToken(null);
     setIsLoggedIn(false);
     setIsProfileComplete(false);
     setHasPhoto(null);
-  }, [accessToken]);
+  }, [accessToken, queryClient, user?.id]);
 
   const refreshAccessToken = useCallback((): Promise<string> => {
     if (refreshInFlight.current) return refreshInFlight.current;

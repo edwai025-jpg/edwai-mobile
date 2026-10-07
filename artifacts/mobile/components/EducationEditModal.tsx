@@ -19,6 +19,8 @@ import {
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import api, { ApiError } from "@/services/api";
+import ManagedEducationDetails from "@/components/ManagedEducationDetails";
+import { isEducationManaged } from "@/services/profileContracts";
 
 type PickerItem = { id: number; name: string };
 type ActiveSheet = "state" | "board" | "class" | "medium" | null;
@@ -198,6 +200,7 @@ type Props = { visible: boolean; onClose: () => void };
 
 export default function EducationEditModal({ visible, onClose }: Props) {
   const { user, updateUser, refreshUser, accessToken } = useAuth();
+  const educationManaged = isEducationManaged(user);
   const token = accessToken ?? "";
 
   const [states, setStates] = useState<PickerItem[]>([]);
@@ -244,33 +247,34 @@ export default function EducationEditModal({ visible, onClose }: Props) {
     setActiveSheet(null);
     setToast(null);
 
+    if (educationManaged) return;
     setStatesLoading(true);
     api.data.getStates()
       .then((d) => setStates(d.sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => {})
       .finally(() => setStatesLoading(false));
-  }, [visible]);
+  }, [visible, educationManaged]);
 
   useEffect(() => {
-    if (!visible || !stateId) { setBoards([]); return; }
+    if (!visible || educationManaged || !stateId) { setBoards([]); return; }
     setBoardsLoading(true);
     api.data.getBoards(stateId)
       .then((d) => setBoards(d.sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => {})
       .finally(() => setBoardsLoading(false));
-  }, [visible, stateId]);
+  }, [visible, educationManaged, stateId]);
 
   useEffect(() => {
-    if (!visible || !boardId) { setClasses([]); return; }
+    if (!visible || educationManaged || !boardId) { setClasses([]); return; }
     setClassesLoading(true);
     api.data.getClasses(boardId)
       .then((d) => setClasses(d.sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => {})
       .finally(() => setClassesLoading(false));
-  }, [visible, boardId]);
+  }, [visible, educationManaged, boardId]);
 
   useEffect(() => {
-    if (!visible || !boardId || !classId) { setMediums([]); return; }
+    if (!visible || educationManaged || !boardId || !classId) { setMediums([]); return; }
     setMediumsLoading(true);
     api.data.getMediums(boardId, classId)
       .then((list) => {
@@ -285,7 +289,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
       })
       .catch(() => showToast("err", "Could not load mediums. Check your connection."))
       .finally(() => setMediumsLoading(false));
-  }, [visible, boardId, classId]);
+  }, [visible, educationManaged, boardId, classId]);
 
   const handleStateSelect = (item: PickerItem) => {
     setStateId(item.id); setStateName(item.name);
@@ -304,6 +308,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
   };
 
   const handleSave = async () => {
+    if (educationManaged) return;
     if (!boardId) { showToast("err", "Please select a board."); return; }
     if (classId && !mediumId) { showToast("err", "Please select a medium of instruction."); return; }
     setSaving(true);
@@ -348,7 +353,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
           <View style={s.titleRow}>
             <View>
               <Text style={s.title}>Academic Details</Text>
-              <Text style={s.subtitle}>Tap a field to search and select</Text>
+              <Text style={s.subtitle}>{educationManaged ? "Managed by your institution" : "Tap a field to search and select"}</Text>
             </View>
             <Pressable style={s.closeBtn} onPress={onClose} hitSlop={10}>
               <Feather name="x" size={18} color={Colors.darkTextMuted} />
@@ -361,6 +366,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            {educationManaged ? <ManagedEducationDetails user={user} /> : <>
             <SelectorRow
               label="State"
               value={stateName || undefined}
@@ -403,6 +409,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
                 : <Text style={s.saveBtnText}>Save Academic Details</Text>
               }
             </TouchableOpacity>
+            </>}
           </ScrollView>
 
           {/* Toast */}
@@ -413,7 +420,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
           )}
 
           {/* Inline search sheet — rendered INSIDE the card's Modal so it stacks correctly */}
-          {activeSheet && (
+          {activeSheet && !educationManaged && (
             <SearchSheet
               title={sheetTitle}
               items={sheetItems}

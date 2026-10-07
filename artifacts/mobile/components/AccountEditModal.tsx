@@ -4,7 +4,6 @@ import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -19,17 +18,18 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors } from "@/constants/colors";
-import { useAuth } from "@/context/auth";
-import api, { ApiError, PHOTO_ENDPOINT } from "@/services/api";
+import { apiUserToProfile, useAuth } from "@/context/auth";
+import api, { ApiError, getProfilePhotoSource } from "@/services/api";
+import { useProfileAlert } from "@/hooks/useProfileAlert";
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onPhotoChanged?: (hasPhoto: boolean) => void;
 };
 
-export default function AccountEditModal({ visible, onClose, onPhotoChanged }: Props) {
-  const { user, updateUser, refreshUser, accessToken } = useAuth();
+export default function AccountEditModal({ visible, onClose }: Props) {
+  const { user, refreshUser, updateUser, accessToken, photoRevision, hasPhoto, setHasPhoto, probeHasPhoto } = useAuth();
+  const { showAlert, alertDialog } = useProfileAlert();
   const token = accessToken ?? "";
 
   const [name, setName] = useState(user?.name ?? "");
@@ -41,12 +41,11 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
   const [otp, setOtp] = useState("");
   const [otpLoading, setOtpLoading] = useState(false);
 
-  const [hasPhoto, setHasPhoto] = useState<boolean | null>(null);
   const [photoLoading, setPhotoLoading] = useState(false);
   const [toast, setToast] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const phoneVerified = user?.phoneVerified ?? false;
+  const phoneVerified = !!user?.phoneVerified && `+91${phone.replace(/\D/g, "")}` === user.phone;
   const isPhoneComplete = phone.replace(/\D/g, "").length === 10;
   const displayName = user?.name || "Student";
   const initials = displayName.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
@@ -60,7 +59,7 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
       setOtp("");
       setToast(null);
       if (token) {
-        api.profile.probePhoto(token).then(setHasPhoto).catch(() => setHasPhoto(false));
+        void probeHasPhoto();
       }
     }
   }, [visible]);
@@ -75,15 +74,11 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
     if (!name.trim()) { showToast("err", "Name cannot be empty."); return; }
     setSaving(true);
     try {
-      const res = await api.profile.updateStudentProfile(token, {
+      const res = await api.profile.updateAccount(token, {
         full_name: name.trim(),
         email: email.trim() || undefined,
       });
-      await updateUser({
-        name: res.user.full_name ?? name.trim(),
-        email: res.user.email,
-      });
-      await refreshUser();
+      await updateUser(apiUserToProfile(res.user));
       showToast("ok", "Account details saved.");
     } catch (e) {
       showToast("err", e instanceof ApiError ? e.message : "Failed to save.");
@@ -110,7 +105,7 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
     setOtpLoading(true);
     try {
       await api.profile.verifyPhoneOtp(token, `+91${phone.replace(/\D/g, "")}`, otp);
-      await updateUser({ phone: `+91${phone.replace(/\D/g, "")}`, phoneVerified: true });
+      await refreshUser({ throwOnError: true });
       setOtpStep("idle");
       setOtp("");
       showToast("ok", "Phone number verified!");
@@ -121,15 +116,16 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
     }
   };
 
-  const doUpload = async (uri: string) => {
+  const doUpload = async (asset: ImagePicker.ImagePickerAsset) => {
+    if (photoLoading) return;
     setPhotoLoading(true);
     try {
-      await api.profile.uploadPhoto(token, uri);
+      await api.profile.uploadPhoto(token, asset);
       setHasPhoto(true);
-      onPhotoChanged?.(true);
+      await refreshUser();
       showToast("ok", "Photo updated.");
-    } catch {
-      showToast("err", "Failed to upload photo.");
+    } catch (e) {
+      showToast("err", e instanceof Error ? e.message : "Failed to upload photo.");
     } finally {
       setPhotoLoading(false);
     }
@@ -137,7 +133,7 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
 
   const handlePickFromLibrary = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert("Permission needed", "Allow photo library access in Settings to set a profile picture."); return; }
+    if (!perm.granted) { showAlert("Permission needed", "Allow photo library access in Settings to set a profile picture."); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -145,36 +141,37 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
       quality: 0.85,
     });
     if (result.canceled || !result.assets[0]) return;
-    await doUpload(result.assets[0].uri);
+    await doUpload(result.assets[0]);
   };
 
   const handlePickFromCamera = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { Alert.alert("Permission needed", "Allow camera access in Settings to take a profile picture."); return; }
+    if (!perm.granted) { showAlert("Permission needed", "Allow camera access in Settings to take a profile picture."); return; }
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.85,
     });
     if (result.canceled || !result.assets[0]) return;
-    await doUpload(result.assets[0].uri);
+    await doUpload(result.assets[0]);
   };
 
   const handlePickPhoto = () => {
-    Alert.alert(
+    if (photoLoading) return;
+    showAlert(
       "Profile Photo",
       "Choose an option",
       [
         { text: "Take Photo", onPress: handlePickFromCamera },
         { text: "Choose from Library", onPress: handlePickFromLibrary },
         { text: "Cancel", style: "cancel" },
-      ],
-      { cancelable: true }
+      ]
     );
   };
 
   const handleRemovePhoto = async () => {
-    Alert.alert("Remove Photo", "Are you sure you want to remove your profile photo?", [
+    if (photoLoading) return;
+    showAlert("Remove Photo", "Are you sure you want to remove your profile photo?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
@@ -184,7 +181,7 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
           try {
             await api.profile.deletePhoto(token);
             setHasPhoto(false);
-            onPhotoChanged?.(false);
+            await refreshUser();
             showToast("ok", "Photo removed.");
           } catch {
             showToast("err", "Failed to remove photo.");
@@ -217,10 +214,11 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
               <Pressable onPress={handlePickPhoto} style={s.avatarWrap}>
                 {hasPhoto && token ? (
                   <ExpoImage
-                    source={{ uri: PHOTO_ENDPOINT, headers: { Authorization: `Bearer ${token}` } }}
+                    key={`${user?.id}:${photoRevision}`}
+                    source={getProfilePhotoSource(token, user?.id, photoRevision)}
                     style={s.avatarImg}
                     contentFit="cover"
-                    cachePolicy="memory-disk"
+                    cachePolicy="none"
                   />
                 ) : (
                   <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={[s.avatarImg, { alignItems: "center", justifyContent: "center" }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
@@ -359,6 +357,7 @@ export default function AccountEditModal({ visible, onClose, onPhotoChanged }: P
           )}
         </View>
       </KeyboardAvoidingView>
+      {alertDialog}
     </Modal>
   );
 }

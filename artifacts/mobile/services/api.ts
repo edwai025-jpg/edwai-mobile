@@ -1,4 +1,6 @@
 import { Platform } from "react-native";
+import type { ImagePickerAsset } from "expo-image-picker";
+import { prepareProfilePhotoUpload } from "./profilePhotoUpload";
 
 const PROD_URL = "https://edwai-api-953672603784.asia-south1.run.app";
 export const PHOTO_ENDPOINT = `${PROD_URL}/api/student/profile/photo`;
@@ -13,7 +15,7 @@ export function getProfilePhotoSource(token: string, userId?: number, revision =
 }
 
 const PROXY_BASE = process.env.EXPO_PUBLIC_DOMAIN
-  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api-server/api/edwai`
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api/edwai`
   : null;
 
 function resolveUrl(path: string): string {
@@ -32,11 +34,11 @@ function resolveUrl(path: string): string {
       const h = window.location.hostname;
       const proxyHost = h.replace(/\.expo\.janeway\.replit\.dev$/, ".janeway.replit.dev");
       if (proxyHost !== h) {
-        return `https://${proxyHost}/api-server/api/edwai${apiPath}`;
+        return `https://${proxyHost}/api/edwai${apiPath}`;
       }
       /* Generic Replit preview — same origin proxy path */
       if (h.endsWith(".replit.dev") || h.endsWith(".janeway.replit.dev")) {
-        return `https://${h}/api-server/api/edwai${apiPath}`;
+        return `https://${h}/api/edwai${apiPath}`;
       }
     }
   }
@@ -59,6 +61,9 @@ export type ApiUser = {
   medium_name?: string;
   is_admin: boolean;
   role: string;
+  org_role?: string | null;
+  org_id?: number | null;
+  org_name?: string | null;
   auth_provider: "phone" | "email" | "google";
   phone_verified: boolean;
   email_verified: boolean;
@@ -109,13 +114,13 @@ export type ClassItem = { id: number; name: string };
 export type MediumItem = { id: number; name: string };
 
 export type SessionInfo = {
-  id: string;
-  device_info?: string;
-  ip_address?: string;
-  user_agent?: string;
-  created_at: string;
-  last_used_at?: string;
-  is_current?: boolean;
+  id: number;
+  device_hint: string;
+  auth_method: string;
+  ip_address: string | null;
+  created_at: string | null;
+  last_used_at: string | null;
+  is_current: boolean;
 };
 
 export type UsageInfo = {
@@ -270,7 +275,7 @@ async function request<T>(
   accessToken?: string
 ): Promise<T> {
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     ...(options.headers as Record<string, string> | undefined),
   };
   if (accessToken) {
@@ -283,10 +288,14 @@ async function request<T>(
   });
 
   const text = await res.text();
+  if (res.status === 204) return undefined as T;
   let data: unknown;
   try {
     data = JSON.parse(text);
   } catch {
+    if (res.ok) {
+      throw new ApiError("The API returned an unexpected response. Please try again.", res.status, null);
+    }
     data = { detail: text };
   }
 
@@ -594,22 +603,22 @@ const api = {
   },
 
   profile: {
-    updateStudentProfile: (
+    updateAccount: async (
       token: string,
       data: {
-        state_id?: number;
-        board_id?: number;
-        class_id?: number;
-        medium_id?: number;
         full_name?: string;
         email?: string;
       }
-    ) =>
-      request<{ success: boolean; profile_complete: boolean; user: ApiUser }>(
-        "/api/auth/me/profile",
-        { method: "PATCH", body: JSON.stringify(data) },
+    ): Promise<{ user: ApiUser }> => {
+      // The live OpenAPI specifies the input but not the write response.
+      // Read the canonical user instead of assuming that response has a user.
+      await request<unknown>(
+        "/api/student/profile/account",
+        { method: "PUT", body: JSON.stringify(data) },
         token
-      ),
+      );
+      return { user: await request<ApiUser>("/api/auth/me", {}, token) };
+    },
 
     /* Correct endpoint for saving education details (board + class + medium) */
     saveEducation: (
@@ -622,21 +631,18 @@ const api = {
         token
       ),
 
-    probePhoto: (token: string): Promise<boolean> =>
-      fetch(resolveUrl("/api/student/profile/photo"), {
+    probePhoto: async (token: string): Promise<boolean> => {
+      const response = await fetch(resolveUrl("/api/student/profile/photo"), {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
-      })
-        .then((r) => r.status === 200)
-        .catch(() => false),
+      });
+      if (response.status === 404) return false;
+      if (!response.ok) throw new Error(`Could not load photo (HTTP ${response.status}).`);
+      return true;
+    },
 
-    uploadPhoto: (token: string, imageUri: string) => {
-      const formData = new FormData();
-      formData.append("file", {
-        uri: imageUri,
-        type: "image/jpeg",
-        name: "photo.jpg",
-      } as unknown as Blob);
+    uploadPhoto: async (token: string, asset: ImagePickerAsset) => {
+      const formData = await prepareProfilePhotoUpload(asset);
       return request<{ success: boolean; profile_photo_url: string }>(
         "/api/student/profile/photo",
         { method: "POST", body: formData, headers: {} },
@@ -651,11 +657,25 @@ const api = {
         token
       ),
 
-    getSessions: (token: string) =>
-      request<SessionInfo[]>("/api/auth/sessions", {}, token),
+    getSessions: async (token: string): Promise<SessionInfo[]> => {
+      const result = await request<unknown>("/api/auth/sessions", {}, token);
+      if (!Array.isArray(result) || !result.every((row) =>
+        row !== null && typeof row === "object"
+        && Number.isInteger(row.id)
+        && typeof row.device_hint === "string"
+        && typeof row.auth_method === "string"
+        && typeof row.is_current === "boolean"
+        && (row.ip_address === null || typeof row.ip_address === "string")
+        && (row.created_at === null || typeof row.created_at === "string")
+        && (row.last_used_at === null || typeof row.last_used_at === "string")
+      )) {
+        throw new Error("The sessions response could not be read. Please try again.");
+      }
+      return result as SessionInfo[];
+    },
 
-    deleteSession: (token: string, sessionId: string) =>
-      request<{ message: string }>(
+    deleteSession: (token: string, sessionId: number) =>
+      request<{ success: boolean }>(
         `/api/auth/sessions/${sessionId}`,
         { method: "DELETE" },
         token
@@ -663,21 +683,24 @@ const api = {
 
     deleteAccount: (token: string) =>
       request<{ message: string }>(
-        "/api/student/account",
+        "/api/student/profile",
         { method: "DELETE" },
         token
       ),
 
-    toggleAutopay: (token: string, enabled: boolean) =>
-      request<{ message: string; autopay_enabled: boolean }>(
-        "/api/billing/autopay/toggle",
-        { method: "POST", body: JSON.stringify({ enabled }) },
+    toggleAutopay: (token: string) =>
+      request<{ success: boolean; autopay_enabled: boolean }>(
+        "/api/billing/autopay",
+        { method: "PATCH" },
         token
       ),
 
+    logoutAll: (token: string) =>
+      request<{ success: boolean; sessions_revoked: number }>("/api/auth/logout-all", { method: "POST" }, token),
+
     sendPhoneOtp: (token: string, phone: string) =>
       request<{ message: string }>(
-        "/api/auth/phone/send-otp-profile",
+        "/api/auth/phone/send-otp",
         { method: "POST", body: JSON.stringify({ phone }) },
         token
       ),

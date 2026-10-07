@@ -1,14 +1,16 @@
-import { Router, type IRouter } from "express";
+import express, { Router, type IRouter } from "express";
 
 const router: IRouter = Router();
 const UPSTREAM = "https://edwai-api-953672603784.asia-south1.run.app";
 
 async function proxyHandler(req: any, res: any) {
   const sub = req.params[0] ?? "";
-  const upstreamUrl = `${UPSTREAM}/api/${sub}`;
+  const query = req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?")) : "";
+  const upstreamUrl = `${UPSTREAM}/api/${sub}${query}`;
+  const multipart = req.headers["content-type"]?.startsWith("multipart/form-data");
 
   const forwardHeaders: Record<string, string> = {
-    "content-type": "application/json",
+    "content-type": multipart ? req.headers["content-type"] : "application/json",
   };
 
   if (req.headers.accept) {
@@ -24,7 +26,7 @@ async function proxyHandler(req: any, res: any) {
       headers: forwardHeaders,
     };
     if (req.method !== "GET" && req.method !== "HEAD") {
-      init.body = JSON.stringify(req.body);
+      init.body = multipart ? req.body : req.body === undefined ? undefined : JSON.stringify(req.body);
     }
 
     const upstream = await fetch(upstreamUrl, init);
@@ -76,6 +78,7 @@ async function proxyHandler(req: any, res: any) {
   }
 }
 
-router.all(/^\/edwai\/(.*)$/, proxyHandler);
+// Preserve the multipart boundary and bytes; JSON middleware intentionally skips it.
+router.all(/^\/edwai\/(.*)$/, express.raw({ type: "multipart/form-data", limit: "6mb" }), proxyHandler);
 
 export default router;

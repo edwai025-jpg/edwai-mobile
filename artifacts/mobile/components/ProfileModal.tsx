@@ -1,5 +1,6 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import React, {
   useCallback,
@@ -9,10 +10,8 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   DimensionValue,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -37,7 +36,12 @@ import api, {
   SessionInfo,
   StateItem,
   UsageInfo,
+  getProfilePhotoSource,
 } from "@/services/api";
+import { apiUserToProfile } from "@/context/auth";
+import ManagedEducationDetails from "@/components/ManagedEducationDetails";
+import { currentSessionsFirst, isEducationManaged, sessionDevice, sessionLastUsed } from "@/services/profileContracts";
+import { useProfileAlert } from "@/hooks/useProfileAlert";
 
 type TabKey = "education" | "account" | "payment" | "settings" | "security";
 
@@ -56,21 +60,7 @@ type ToastState = {
 } | null;
 
 function apiUserToPartial(u: ApiUser): Partial<UserProfile> {
-  return {
-    name: u.full_name ?? "",
-    phone: u.phone,
-    email: u.email,
-    state: u.state,
-    stateId: u.state_id,
-    board: u.board,
-    boardId: u.board_id,
-    className: u.class_name,
-    classId: u.class_id,
-    profilePhotoUrl: u.profile_photo_url,
-    phoneVerified: u.phone_verified,
-    emailVerified: u.email_verified,
-    profileComplete: u.profile_complete,
-  };
+  return apiUserToProfile(u);
 }
 
 function ProfileToast({
@@ -221,7 +211,8 @@ function EducationTab({
   token: string;
   showToast: (t: ToastState) => void;
 }) {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, refreshUser } = useAuth();
+  const educationManaged = isEducationManaged(user);
 
   const [states, setStates] = useState<StateItem[]>([]);
   const [boards, setBoards] = useState<BoardItem[]>([]);
@@ -231,7 +222,7 @@ function EducationTab({
   const [stateId, setStateId] = useState<number | null>(user?.stateId ?? null);
   const [boardId, setBoardId] = useState<number | null>(user?.boardId ?? null);
   const [classId, setClassId] = useState<number | null>(user?.classId ?? null);
-  const [mediumId, setMediumId] = useState<number | null>(null);
+  const [mediumId, setMediumId] = useState<number | null>(user?.mediumId ?? null);
 
   const [statesLoading, setStatesLoading] = useState(true);
   const [boardsLoading, setBoardsLoading] = useState(false);
@@ -240,15 +231,16 @@ function EducationTab({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (educationManaged) { setStatesLoading(false); return; }
     api.data
       .getStates()
       .then((d) => setStates(d.sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => {})
       .finally(() => setStatesLoading(false));
-  }, []);
+  }, [educationManaged]);
 
   useEffect(() => {
-    if (stateId && boards.length === 0) {
+    if (!educationManaged && stateId && boards.length === 0) {
       setBoardsLoading(true);
       api.data
         .getBoards(stateId)
@@ -258,9 +250,25 @@ function EducationTab({
         .catch(() => {})
         .finally(() => setBoardsLoading(false));
     }
-  }, [stateId]);
+  }, [stateId, educationManaged]);
 
-  const handleStateSelect = async (item: StateItem) => {
+  useEffect(() => {
+    if (educationManaged || !boardId) return;
+    setClassesLoading(true);
+    api.data.getClasses(boardId).then(setClasses)
+      .catch(() => showToast({ type: "error", message: "Could not load classes." }))
+      .finally(() => setClassesLoading(false));
+  }, [boardId, educationManaged]);
+
+  useEffect(() => {
+    if (educationManaged || !boardId || !classId) return;
+    setMediumsLoading(true);
+    api.data.getMediums(boardId, classId).then(setMediums)
+      .catch(() => showToast({ type: "error", message: "Could not load mediums." }))
+      .finally(() => setMediumsLoading(false));
+  }, [boardId, classId, educationManaged]);
+
+  const handleStateSelect = (item: StateItem) => {
     setStateId(item.id);
     setBoardId(null);
     setClassId(null);
@@ -268,62 +276,41 @@ function EducationTab({
     setBoards([]);
     setClasses([]);
     setMediums([]);
-    setBoardsLoading(true);
-    try {
-      const d = await api.data.getBoards(item.id);
-      setBoards(d.sort((a, b) => a.name.localeCompare(b.name)));
-    } catch {
-    } finally {
-      setBoardsLoading(false);
-    }
   };
 
-  const handleBoardSelect = async (item: BoardItem) => {
+  const handleBoardSelect = (item: BoardItem) => {
     setBoardId(item.id);
     setClassId(null);
     setMediumId(null);
     setClasses([]);
     setMediums([]);
-    setClassesLoading(true);
-    try {
-      const d = await api.data.getClasses(item.id);
-      setClasses(d.sort((a, b) => a.name.localeCompare(b.name)));
-    } catch {
-    } finally {
-      setClassesLoading(false);
-    }
   };
 
-  const handleClassSelect = async (item: ClassItem) => {
+  const handleClassSelect = (item: ClassItem) => {
     setClassId(item.id);
     setMediumId(null);
     setMediums([]);
-    if (boardId) {
-      setMediumsLoading(true);
-      try {
-        const d = await api.data.getMediums(boardId, item.id);
-        setMediums(d);
-      } catch {
-      } finally {
-        setMediumsLoading(false);
-      }
-    }
   };
 
   const handleSave = async () => {
+    if (educationManaged) return;
     if (!boardId) {
       showToast({ type: "error", message: "Please select a board." });
       return;
     }
+    if (classId && !mediumId) {
+      showToast({ type: "error", message: "Please select a medium of instruction." });
+      return;
+    }
     setSaving(true);
     try {
-      const res = await api.profile.updateStudentProfile(token, {
-        state_id: stateId ?? undefined,
+      const res = await api.profile.saveEducation(token, {
         board_id: boardId,
-        class_id: classId ?? undefined,
-        medium_id: mediumId ?? undefined,
+        class_id: classId ?? null,
+        medium_id: mediumId ?? null,
       });
       await updateUser(apiUserToPartial(res.user));
+      await refreshUser();
       showToast({
         type: "success",
         message: "Education details saved successfully.",
@@ -348,6 +335,7 @@ function EducationTab({
       showsVerticalScrollIndicator={false}
     >
       <Text style={tab.sectionTitle}>Academic Details</Text>
+      {educationManaged ? <ManagedEducationDetails user={user} /> : <>
       <View style={{ gap: 14 }}>
         <DropdownPicker
           label="State"
@@ -396,6 +384,7 @@ function EducationTab({
           <Text style={tab.saveBtnText}>Save Education Details</Text>
         )}
       </TouchableOpacity>
+      </>}
     </ScrollView>
   );
 }
@@ -409,7 +398,7 @@ function AccountTab({
   showToast: (t: ToastState) => void;
   onAccountDeleted: () => void;
 }) {
-  const { user, updateUser, logout } = useAuth();
+  const { user, updateUser, refreshUser, logout } = useAuth();
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState(
@@ -427,12 +416,12 @@ function AccountTab({
 
   const isPhoneComplete =
     phone.replace(/\D/g, "").length === 10;
-  const phoneVerified = user?.phoneVerified ?? false;
+  const phoneVerified = !!user?.phoneVerified && `+91${phone.replace(/\D/g, "")}` === user.phone;
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await api.profile.updateStudentProfile(token, {
+      const res = await api.profile.updateAccount(token, {
         full_name: name.trim() || undefined,
         email: email.trim() || undefined,
       });
@@ -478,10 +467,7 @@ function AccountTab({
       );
       setOtpStep("idle");
       setOtp("");
-      await updateUser({
-        phone: `+91${phone.replace(/\D/g, "")}`,
-        phoneVerified: true,
-      });
+      await refreshUser({ throwOnError: true });
       showToast({ type: "success", message: "Phone number verified!" });
     } catch (e) {
       showToast({
@@ -499,7 +485,7 @@ function AccountTab({
     try {
       await api.profile.deleteAccount(token);
       onAccountDeleted();
-      await logout();
+      await logout({ localOnly: true });
     } catch (e) {
       showToast({
         type: "error",
@@ -557,7 +543,7 @@ function AccountTab({
             <TextInput
               style={[tab.input, { flex: 1 }]}
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={(value) => { setPhone(value); setOtpStep("idle"); setOtp(""); }}
               placeholder="10-digit number"
               placeholderTextColor={Colors.darkTextMuted}
               keyboardType="phone-pad"
@@ -723,12 +709,12 @@ function PaymentTab({
   useEffect(() => {
     api.study
       .getUsage(token)
-      .then((d) => setUsage(d))
+      .then((d) => { setUsage(d); setAutopayOn(d.autopay_enabled ?? false); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [token]);
 
-  const isFree = !usage || usage.status === "free";
+  const isFree = !usage?.tier_slug || usage.tier_slug === "free";
   const used = usage?.questions_used ?? 0;
   const limit = usage?.questions_limit ?? 1;
   const pct = Math.min((used / limit) * 100, 100);
@@ -736,11 +722,12 @@ function PaymentTab({
     pct >= 90 ? Colors.danger : pct >= 70 ? Colors.warning : Colors.primary;
 
   const handleToggle = async (val: boolean) => {
-    if (isFree) return;
+    if (isFree || toggling || val === autopayOn) return;
     setToggling(true);
     try {
-      const res = await api.profile.toggleAutopay(token, val);
+      const res = await api.profile.toggleAutopay(token);
       setAutopayOn(res.autopay_enabled);
+      setUsage((previous) => previous ? { ...previous, autopay_enabled: res.autopay_enabled } : previous);
       showToast({
         type: "success",
         message: `Auto-renew ${res.autopay_enabled ? "enabled" : "disabled"}.`,
@@ -981,19 +968,23 @@ function SecurityTab({
   token: string;
   showToast: (t: ToastState) => void;
 }) {
+  const { logout } = useAuth();
+  const { showAlert, alertDialog } = useProfileAlert();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<number | null>(null);
+  const [signingOutAll, setSigningOutAll] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     api.profile
       .getSessions(token)
-      .then(setSessions)
-      .catch(() => {})
+      .then((rows) => setSessions(currentSessionsFirst(rows)))
+      .catch((e) => setLoadError(e instanceof Error ? e.message : "Could not load sessions."))
       .finally(() => setLoading(false));
   }, [token]);
 
-  const handleRevoke = async (id: string) => {
+  const handleRevoke = async (id: number) => {
     setRevokingId(id);
     try {
       await api.profile.deleteSession(token, id);
@@ -1008,6 +999,24 @@ function SecurityTab({
     } finally {
       setRevokingId(null);
     }
+  };
+
+  const handleLogoutAll = () => {
+    if (signingOutAll) return;
+    showAlert("Sign Out Everywhere", "This will sign you out on every device, including this one.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign Out Everywhere", style: "destructive", onPress: async () => {
+        setSigningOutAll(true);
+        try {
+          await api.profile.logoutAll(token);
+          await logout({ localOnly: true });
+        } catch (e) {
+          showToast({ type: "error", message: e instanceof Error ? e.message : "Could not sign out everywhere." });
+        } finally {
+          setSigningOutAll(false);
+        }
+      } },
+    ]);
   };
 
   if (loading) {
@@ -1032,7 +1041,7 @@ function SecurityTab({
       showsVerticalScrollIndicator={false}
     >
       <Text style={tab.sectionTitle}>Active Sessions</Text>
-      {sessions.length === 0 ? (
+      {loadError ? <Text style={{ color: Colors.danger }}>{loadError}</Text> : sessions.length === 0 ? (
         <Text
           style={{
             fontSize: 13,
@@ -1049,7 +1058,7 @@ function SecurityTab({
           {sessions.map((s) => (
             <View key={s.id} style={tab.sessionCard}>
               <View style={tab.sessionIconBox}>
-                <Feather name="smartphone" size={18} color={Colors.primary} />
+                <Feather name={sessionDevice(s.device_hint).mobile ? "smartphone" : "monitor"} size={18} color={Colors.primary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text
@@ -1060,9 +1069,9 @@ function SecurityTab({
                   }}
                   numberOfLines={1}
                 >
-                  {s.device_info ?? s.user_agent ?? "Unknown Device"}
+                  {sessionDevice(s.device_hint).label}
                 </Text>
-                {!!s.ip_address && (
+                {(
                   <Text
                     style={{
                       fontSize: 11,
@@ -1070,10 +1079,10 @@ function SecurityTab({
                       fontFamily: "Inter_400Regular",
                     }}
                   >
-                    IP: {s.ip_address}
+                    {s.auth_method} · Location: Unknown
                   </Text>
                 )}
-                {!!s.last_used_at && (
+                {(
                   <Text
                     style={{
                       fontSize: 11,
@@ -1081,8 +1090,7 @@ function SecurityTab({
                       fontFamily: "Inter_400Regular",
                     }}
                   >
-                    Last used:{" "}
-                    {new Date(s.last_used_at).toLocaleString("en-IN")}
+                    {sessionLastUsed(s.last_used_at)}
                   </Text>
                 )}
                 {s.is_current && (
@@ -1115,6 +1123,13 @@ function SecurityTab({
           ))}
         </View>
       )}
+      <TouchableOpacity style={tab.revokeBtn} onPress={handleLogoutAll} disabled={signingOutAll}>
+        <Text style={tab.revokeBtnText}>{signingOutAll ? "Signing out…" : "Sign out everywhere"}</Text>
+      </TouchableOpacity>
+      <Text style={{ color: Colors.darkTextMuted, marginTop: 10 }}>
+        This device may not be marked as current. Signing out its session can require you to sign in again.
+      </Text>
+      {alertDialog}
     </ScrollView>
   );
 }
@@ -1125,7 +1140,8 @@ type Props = {
 };
 
 export default function ProfileModal({ visible, onClose }: Props) {
-  const { user, accessToken, updateUser } = useAuth();
+  const { user, accessToken, updateUser, setHasPhoto, refreshUser, hasPhoto, photoRevision, probeHasPhoto } = useAuth();
+  const { showAlert, alertDialog } = useProfileAlert();
   const [activeTab, setActiveTab] = useState<TabKey>("education");
   const [toast, setToast] = useState<ToastState>(null);
   const [photoLoading, setPhotoLoading] = useState(false);
@@ -1140,12 +1156,13 @@ export default function ProfileModal({ visible, onClose }: Props) {
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join("");
-  const photoUrl = user?.profilePhotoUrl;
+  useEffect(() => { if (visible) void probeHasPhoto(); }, [visible, probeHasPhoto]);
+  useEffect(() => { if (visible && !accessToken) onClose(); }, [visible, accessToken, onClose]);
 
   const handlePickPhoto = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert(
+      showAlert(
         "Permission needed",
         "Allow photo library access to upload a profile photo."
       );
@@ -1160,14 +1177,16 @@ export default function ProfileModal({ visible, onClose }: Props) {
     if (result.canceled || !result.assets[0]) return;
     setPhotoLoading(true);
     try {
-      const res = await api.profile.uploadPhoto(token, result.assets[0].uri);
+      const res = await api.profile.uploadPhoto(token, result.assets[0]);
       await updateUser({ profilePhotoUrl: res.profile_photo_url });
+      setHasPhoto(true);
+      await refreshUser();
       showToast({ type: "success", message: "Profile photo updated." });
     } catch (e) {
       showToast({
         type: "error",
         message:
-          e instanceof ApiError ? e.message : "Failed to upload photo.",
+          e instanceof Error ? e.message : "Failed to upload photo.",
       });
     } finally {
       setPhotoLoading(false);
@@ -1178,6 +1197,8 @@ export default function ProfileModal({ visible, onClose }: Props) {
     setPhotoLoading(true);
     try {
       await api.profile.deletePhoto(token);
+      setHasPhoto(false);
+      await refreshUser();
       await updateUser({ profilePhotoUrl: undefined });
       showToast({ type: "success", message: "Profile photo removed." });
     } catch (e) {
@@ -1206,8 +1227,8 @@ export default function ProfileModal({ visible, onClose }: Props) {
               onPress={handlePickPhoto}
               activeOpacity={0.85}
             >
-              {photoUrl ? (
-                <Image source={{ uri: photoUrl }} style={pm.avatarImg} />
+              {hasPhoto && token ? (
+                <ExpoImage key={`${user?.id}:${photoRevision}`} source={getProfilePhotoSource(token, user?.id, photoRevision)} style={pm.avatarImg} cachePolicy="none" contentFit="cover" />
               ) : (
                 <LinearGradient
                   colors={["#7c3aed", "#4f46e5"]}
@@ -1238,7 +1259,7 @@ export default function ProfileModal({ visible, onClose }: Props) {
                 <TouchableOpacity onPress={handlePickPhoto}>
                   <Text style={pm.photoLink}>Change Photo</Text>
                 </TouchableOpacity>
-                {!!photoUrl && (
+                {!!hasPhoto && (
                   <TouchableOpacity onPress={handleRemovePhoto}>
                     <Text style={pm.removeLink}>Remove</Text>
                   </TouchableOpacity>
@@ -1304,6 +1325,7 @@ export default function ProfileModal({ visible, onClose }: Props) {
           <ProfileToast toast={toast} onDone={() => setToast(null)} />
         </View>
       </KeyboardAvoidingView>
+      {alertDialog}
     </Modal>
   );
 }

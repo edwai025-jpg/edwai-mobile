@@ -14,6 +14,8 @@ import {
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import api, { ApiError, SessionInfo } from "@/services/api";
+import { useProfileAlert } from "@/hooks/useProfileAlert";
+import { currentSessionsFirst, sessionDevice, sessionLastUsed } from "@/services/profileContracts";
 
 type Props = {
   visible: boolean;
@@ -21,12 +23,15 @@ type Props = {
 };
 
 export default function SessionsModal({ visible, onClose }: Props) {
-  const { accessToken } = useAuth();
+  const { accessToken, logout } = useAuth();
+  const { showAlert, alertDialog } = useProfileAlert();
   const token = accessToken ?? "";
 
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(false);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<number | null>(null);
+  const [signingOutAll, setSigningOutAll] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -40,13 +45,14 @@ export default function SessionsModal({ visible, onClose }: Props) {
     if (!visible) return;
     setLoading(true);
     setSessions([]);
+    setLoadError(null);
     api.profile.getSessions(token)
-      .then(setSessions)
-      .catch(() => {})
+      .then((rows) => setSessions(currentSessionsFirst(rows)))
+      .catch((e) => setLoadError(e instanceof Error ? e.message : "Could not load sessions."))
       .finally(() => setLoading(false));
   }, [visible, token]);
 
-  const handleRevoke = async (id: string) => {
+  const handleRevoke = async (id: number) => {
     setRevokingId(id);
     try {
       await api.profile.deleteSession(token, id);
@@ -57,6 +63,25 @@ export default function SessionsModal({ visible, onClose }: Props) {
     } finally {
       setRevokingId(null);
     }
+  };
+
+  const handleLogoutAll = () => {
+    if (signingOutAll) return;
+    showAlert("Sign Out Everywhere", "This will sign you out on every device, including this one.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign Out Everywhere", style: "destructive", onPress: async () => {
+        setSigningOutAll(true);
+        try {
+          await api.profile.logoutAll(token);
+          await logout({ localOnly: true });
+          onClose();
+        } catch (e) {
+          showToast("err", e instanceof Error ? e.message : "Could not sign out everywhere.");
+        } finally {
+          setSigningOutAll(false);
+        }
+      } },
+    ]);
   };
 
   return (
@@ -79,7 +104,9 @@ export default function SessionsModal({ visible, onClose }: Props) {
             </View>
           ) : (
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body}>
-              {sessions.length === 0 ? (
+              {loadError ? (
+                <View style={s.center}><Text style={s.emptyText}>{loadError}</Text></View>
+              ) : sessions.length === 0 ? (
                 <View style={s.center}>
                   <Text style={s.emptyText}>No active sessions found.</Text>
                 </View>
@@ -87,20 +114,15 @@ export default function SessionsModal({ visible, onClose }: Props) {
                 sessions.map((session) => (
                   <View key={session.id} style={s.sessionRow}>
                     <View style={s.sessionIcon}>
-                      <Feather name="smartphone" size={18} color={Colors.primary} />
+                      <Feather name={sessionDevice(session.device_hint).mobile ? "smartphone" : "monitor"} size={18} color={Colors.primary} />
                     </View>
                     <View style={{ flex: 1, gap: 2 }}>
                       <Text style={s.deviceName} numberOfLines={1}>
-                        {session.device_info ?? session.user_agent ?? "Unknown Device"}
+                        {sessionDevice(session.device_hint).label}
                       </Text>
-                      {!!session.ip_address && (
-                        <Text style={s.sessionMeta}>IP: {session.ip_address}</Text>
-                      )}
-                      {!!session.last_used_at && (
-                        <Text style={s.sessionMeta}>
-                          Last used: {new Date(session.last_used_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                        </Text>
-                      )}
+                      <Text style={s.sessionMeta}>{session.auth_method}</Text>
+                      <Text style={s.sessionMeta}>Location: Unknown</Text>
+                      <Text style={s.sessionMeta}>{sessionLastUsed(session.last_used_at)}</Text>
                       {session.is_current && (
                         <Text style={s.currentTag}>● Current session</Text>
                       )}
@@ -123,6 +145,12 @@ export default function SessionsModal({ visible, onClose }: Props) {
             </ScrollView>
           )}
 
+          <TouchableOpacity style={{ padding: 16 }} onPress={handleLogoutAll} disabled={signingOutAll}>
+            <Text style={s.revokeBtnText}>{signingOutAll ? "Signing out…" : "Sign out everywhere"}</Text>
+          </TouchableOpacity>
+          <Text style={[s.sessionMeta, { paddingHorizontal: 16, paddingBottom: 12 }]}>
+            This device may not be marked as current. Signing out its session can require you to sign in again.
+          </Text>
           {toast && (
             <View style={[s.toast, toast.type === "ok" ? s.toastOk : s.toastErr]}>
               <Text style={s.toastText}>{toast.type === "ok" ? "✓ " : "✕ "}{toast.msg}</Text>
@@ -130,6 +158,7 @@ export default function SessionsModal({ visible, onClose }: Props) {
           )}
         </View>
       </View>
+      {alertDialog}
     </Modal>
   );
 }
