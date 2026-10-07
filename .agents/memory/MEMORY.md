@@ -5,3 +5,4 @@
 - [Mobile Profile scope](mobile-profile-scope.md) — Approved API/behavior fixes preserve the separate tab and mobile layout; no copied web navigation or invented settings/payments.
 - [Profile session contract](profile-session-contract.md) — Bearer-only native sessions cannot identify the current device; external timezone-less session times are UTC.
 - [External API browser tests](external-api-browser-tests.md) — Fixture interception must fail closed; seed auth once so logout checks cannot silently re-authenticate.
+- [Study resource scope](study-resource-scope.md) — Completed-answer controls use frozen context and existing APIs; voice quota and replay are distinct from question usage.

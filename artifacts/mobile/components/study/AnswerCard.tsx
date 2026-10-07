@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -17,7 +17,9 @@ import {
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 
-import FlashcardsSection from "@/components/study/FlashcardsSection";
+import StudyResources from "@/components/study/StudyResources";
+import { useFocusEffect } from "expo-router";
+import type { StudyAnswerContext } from "@/services/studyResources";
 import { useTheme } from "@/context/theme";
 import {
   BoardPageConfig,
@@ -420,14 +422,23 @@ export type AnswerCardProps = {
   imagesLoading?: boolean;
   question?: string;
   accessToken?: string;
+  studyContext?: StudyAnswerContext | null;
 };
 
 export default function AnswerCard({
   streaming, streamText, response, loading, mode,
   disclaimerMessages, boardPageConfig, typographySettings, imagesLoading,
-  question, accessToken,
+  question, accessToken, studyContext,
 }: AnswerCardProps) {
   const { isDark } = useTheme();
+  const [isFocused, setIsFocused] = useState(false);
+  useFocusEffect(useCallback(() => {
+    setIsFocused(true);
+    return () => setIsFocused(false);
+  }, []));
+  const resourceActions = !streaming && isFocused && response?.answer && studyContext && accessToken
+    ? <StudyResources key={studyContext.id} context={studyContext} accessToken={accessToken} />
+    : null;
 
   /* ── loading spinner ── */
   if (loading && !streaming) {
@@ -491,6 +502,7 @@ export default function AnswerCard({
           {!streaming && response?.validation && mode === "explain" && (
             <ValidationBadge v={response.validation} />
           )}
+          {resourceActions}
         </View>
       ) : (
         <LinearGradient colors={["#eff6ff", "#faf5ff"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[an.answerCard, { borderColor: answerBorder }]}>
@@ -507,12 +519,8 @@ export default function AnswerCard({
           {!streaming && response?.validation && mode === "explain" && (
             <ValidationBadge v={response.validation} />
           )}
+          {resourceActions}
         </LinearGradient>
-      )}
-
-      {/* BOX 6 — Flashcard Practice (between answer and sources) */}
-      {!streaming && response?.answer && question && accessToken && (
-        <FlashcardsSection question={question} answer={response.answer} accessToken={accessToken} />
       )}
 
       {/* BOX 3 — Sources (page badge pills) */}

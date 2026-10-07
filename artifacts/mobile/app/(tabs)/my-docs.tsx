@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnswerCard from "@/components/study/AnswerCard";
-import FlashcardsSection from "@/components/study/FlashcardsSection";
+import { resolveStudyLanguage, type StudyAnswerContext } from "@/services/studyResources";
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { useAuth } from "@/context/auth";
 import { useBannerUsage } from "@/hooks/useBannerUsage";
@@ -199,7 +199,7 @@ const up = StyleSheet.create({
 /* ─── Main Screen ───────────────────────────────────────────────────────── */
 export default function OwnBooksScreen() {
   const insets = useSafeAreaInsets();
-  const { accessToken, logout } = useAuth();
+  const { accessToken, logout, user } = useAuth();
   const { isDark, toggleTheme } = useTheme();
 
   /* usage / upgrade */
@@ -243,8 +243,13 @@ export default function OwnBooksScreen() {
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [response, setResponse] = useState<QueryResponse | null>(null);
+  const [studyContext, setStudyContext] = useState<StudyAnswerContext | null>(null);
 
   const abortCtrl = useRef<AbortController | null>(null);
+  useEffect(() => {
+    abortCtrl.current?.abort();
+    setResponse(null); setStudyContext(null); setStreaming(false); setQueryLoading(false);
+  }, [user?.id]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -346,6 +351,9 @@ export default function OwnBooksScreen() {
 
   /* ── select doc ── */
   const onDocSelect = useCallback(async (doc: DocumentItem) => {
+    abortCtrl.current?.abort();
+    setStudyContext(null);
+    setStreaming(false); setQueryLoading(false);
     setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText("");
     setYtMode(doc.source_type === "youtube" ? null : "qa");
     if (!accessToken) return;
@@ -361,15 +369,25 @@ export default function OwnBooksScreen() {
     abortCtrl.current = ctrl;
     setQueryMode(qMode); setQueryLoading(true); setStreaming(true);
     setStreamText(""); setResponse(null);
+    setStudyContext(null);
+    const originalQuestion = q.trim();
+    const bookTitle = selectedDoc.title;
+    const valid = () => abortCtrl.current === ctrl && !ctrl.signal.aborted;
     let accumulated = "";
     try {
       const res = await api.phase2.streamQuery(
         accessToken,
         { document_id: selectedDoc.id, question: q.trim(), mode: qMode },
-        (chunk) => { accumulated += chunk; setStreamText((t) => t + chunk); },
+        (chunk) => { if (valid()) { accumulated += chunk; setStreamText((t) => t + chunk); } },
         ctrl.signal
       );
       const finalRes = res.answer ? res : { ...res, answer: accumulated };
+      if (!valid()) return;
+      setStudyContext({
+        id: `${selectedDoc.id}:${Date.now()}`, question: originalQuestion, answer: finalRes.answer,
+        language: resolveStudyLanguage(finalRes.answer_language ?? finalRes.language, user?.medium, finalRes.answer),
+        bookTitle, pageNumber: finalRes.sources?.[0]?.page ?? null,
+      });
       setResponse(finalRes); setStreaming(false); setQueryLoading(false);
       void refreshUsage();
       /* Add to local history immediately — server already saves it automatically */
@@ -379,6 +397,7 @@ export default function OwnBooksScreen() {
         return [newItem, ...deduped].slice(0, 20);
       });
     } catch (e) {
+      if (!valid()) return;
       if ((e as Error)?.name !== "AbortError") {
         const msg = e instanceof ApiError
           ? e.message
@@ -387,7 +406,7 @@ export default function OwnBooksScreen() {
       }
       setStreaming(false); setQueryLoading(false);
     }
-  }, [question, selectedDoc, accessToken, refreshUsage]);
+  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium]);
 
   /* ── youtube: generate notes ── */
   const handleGenerateNotes = useCallback(() => {
@@ -653,12 +672,7 @@ export default function OwnBooksScreen() {
 
         {/* ─── ANSWER ─── */}
         {(queryLoading || streaming || response) && (
-          <AnswerCard loading={queryLoading && !streaming} streaming={streaming} streamText={streamText} response={response} mode={queryMode} />
-        )}
-
-        {/* ─── FLASHCARDS ─── */}
-        {!streaming && response?.answer && accessToken && (
-          <FlashcardsSection question={question} answer={response.answer} accessToken={accessToken} />
+          <AnswerCard loading={queryLoading && !streaming} streaming={streaming} streamText={streamText} response={response} mode={queryMode} studyContext={studyContext} accessToken={accessToken ?? undefined} />
         )}
 
         <View style={sc.footer}>

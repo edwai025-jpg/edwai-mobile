@@ -23,7 +23,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnswerCard from "@/components/study/AnswerCard";
-import FlashcardsSection from "@/components/study/FlashcardsSection";
+import { resolveStudyLanguage, type StudyAnswerContext } from "@/services/studyResources";
 import IndianLanguageKeyboard from "@/components/study/IndianLanguageKeyboard";
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { Colors } from "@/constants/colors";
@@ -292,6 +292,7 @@ export default function TextbooksScreen() {
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [response, setResponse] = useState<QueryResponse | null>(null);
+  const [studyContext, setStudyContext] = useState<StudyAnswerContext | null>(null);
   const [imagesLoading, setImagesLoading] = useState(false);
 
   /* ocr */
@@ -307,6 +308,10 @@ export default function TextbooksScreen() {
   const [showKeyboard, setShowKeyboard] = useState(false);
 
   const abortCtrl = useRef<AbortController | null>(null);
+  useEffect(() => {
+    abortCtrl.current?.abort();
+    setResponse(null); setStudyContext(null); setStreaming(false); setQueryLoading(false);
+  }, [user?.id]);
   const prevQuestion = useRef("");
   const boardId = user?.boardId;
   const prevBoardIdRef = useRef<number | undefined | "__init__">("__init__");
@@ -459,6 +464,9 @@ export default function TextbooksScreen() {
   }, [accessToken, selectedClass]);
 
   const onDocSelect = useCallback(async (doc: Phase1Document) => {
+    abortCtrl.current?.abort();
+    setStudyContext(null);
+    setStreaming(false); setQueryLoading(false); setImagesLoading(false);
     setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText("");
     if (!accessToken) return;
     try { setHistory(await api.study.getQueryHistory(accessToken, doc.id)); } catch {}
@@ -504,15 +512,25 @@ export default function TextbooksScreen() {
     abortCtrl.current = ctrl;
     setMode(qMode); setQueryLoading(true); setStreaming(true);
     setStreamText(""); setResponse(null);
+    setStudyContext(null);
+    const originalQuestion = question.trim();
+    const bookTitle = selectedDoc.title;
+    const valid = () => abortCtrl.current === ctrl && !ctrl.signal.aborted;
     let accumulated = "";
     try {
       const res = await api.study.streamQuery(
         accessToken,
         { document_id: selectedDoc.id, question: question.trim(), mode: qMode },
-        (chunk) => { accumulated += chunk; setStreamText((t) => t + chunk); },
+        (chunk) => { if (valid()) { accumulated += chunk; setStreamText((t) => t + chunk); } },
         ctrl.signal
       );
       const finalRes = res.answer ? res : { ...res, answer: accumulated };
+      if (!valid()) return;
+      setStudyContext({
+        id: `${selectedDoc.id}:${Date.now()}`, question: originalQuestion, answer: finalRes.answer,
+        language: resolveStudyLanguage(finalRes.answer_language ?? finalRes.language, user?.medium, finalRes.answer),
+        bookTitle, pageNumber: finalRes.sources?.[0]?.page ?? null,
+      });
       setResponse(finalRes); setStreaming(false); setQueryLoading(false);
       /* Phase 1: fetch citation/diagram images asynchronously after stream */
       if (finalRes.image_source_pages?.length && accessToken) {
@@ -527,13 +545,14 @@ export default function TextbooksScreen() {
               pages,
               include_diagrams: includeDiagrams,
             });
+            if (!valid()) return;
             setResponse((prev) => prev ? {
               ...prev,
               phase1_citations: imgRes.citation_images?.length ? imgRes.citation_images : prev.phase1_citations,
               diagram_images: imgRes.diagram_images?.length ? imgRes.diagram_images : prev.diagram_images,
             } : prev);
           } catch {}
-          finally { setImagesLoading(false); }
+          finally { if (valid()) setImagesLoading(false); }
         }, 300);
       }
       /* Add to local history immediately and persist to AsyncStorage */
@@ -554,6 +573,7 @@ export default function TextbooksScreen() {
       /* Refresh usage after each query */
       void refreshUsage();
     } catch (e) {
+      if (!valid()) return;
       if ((e as Error)?.name !== "AbortError") {
         const msg = e instanceof ApiError
           ? e.message
@@ -562,7 +582,7 @@ export default function TextbooksScreen() {
       }
       setStreaming(false); setQueryLoading(false);
     }
-  }, [question, selectedDoc, accessToken, refreshUsage]);
+  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium]);
 
   /* ── image / OCR ── */
   const handleImageCapture = useCallback(async (fromCamera: boolean) => {
@@ -824,6 +844,7 @@ export default function TextbooksScreen() {
             imagesLoading={imagesLoading}
             question={question}
             accessToken={accessToken ?? undefined}
+            studyContext={studyContext}
           />
         )}
 

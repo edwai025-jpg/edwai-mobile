@@ -14,3 +14,9 @@ When Expo recommends an exact native dependency version, preserve that exact pin
 **Why:** Expo's alignment command can install the correct version but write a caret range, allowing a subsequent dependency refresh to select a native minor release that differs from Expo Go's bundled module.
 
 **How to apply:** Compare the resulting manifest ranges with Expo's recommendations after alignment, not just the installed versions. Keep the exact-version recommendation exact.
+
+For artifact-scoped dependencies in this pnpm workspace, the package callback cannot currently target an artifact: it runs at the root and rejects workspace flags as package names. Update the artifact manifest and synchronize with the workspace's normal pnpm installation instead.
+
+**Why:** Supplying an artifact directory was ignored, and passing filter flags was rejected; adding native Expo modules otherwise attempted an unintended root installation.
+
+**How to apply:** Read the package-management instructions first, preserve Expo's bundled-version constraints, and verify the artifact's resolved packages after installation. Check for unrelated tool-generated configuration changes.

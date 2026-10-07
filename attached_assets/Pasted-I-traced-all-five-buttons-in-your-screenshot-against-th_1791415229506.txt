@@ -1,0 +1,395 @@
+I traced all five buttons in your screenshot against the current web components and backend routes. Below is a paste-ready mobile handoff covering their placement, styling, API contracts and behaviour.
+
+No web or backend changes were made. This is source-based documentation, not a live authenticated API test.
+
+EDUwAI mobile handoff: completed-answer action buttons
+1. Placement and visibility
+The buttons belong inside the Answer card, immediately below the rendered answer, not in the main study-screen header.
+
+Order:
+
+Answer text
+Optional tutor explanation transcript or error
+────────────────────────────────────────────
+Read Aloud
+Tutor Explanation | voice quota
+Quiz Me
+Flashcards
+Report Issue
+They form one left-aligned, wrapping row. On narrow phone screens, allow additional rows while retaining this order.
+
+Exact web layout
+Property	Source value
+Space above action bar	12 px
+Action-bar top padding	12 px
+Divider	1 px, #e5e7eb at 60% opacity
+Gap between buttons / wrapped rows	8 px
+Alignment	Vertically centred, left aligned
+Wrapping	Enabled
+Button horizontal padding	16 px
+Button vertical padding	10 px
+Corner radius	12 px
+Border	1 px
+Text	System font, 14 px, weight 600, normal line height 20 px
+Icon-to-label gap	6 px
+Shadow	Tailwind shadow-sm
+A normal single-line button is approximately 42 px tall, including its border. Width is determined by its label—do not copy fixed widths from the screenshot.
+
+For native accessibility, provide at least 44 pt touch targets on iOS and 48 dp on Android, while preserving the visual proportions.
+
+Visibility rules
+No answer content → no action bar.
+Read Aloud, Tutor Explanation and Quiz Me render when answer content exists.
+Flashcards and Report Issue additionally require the original question.
+The screenshot’s out-of-syllabus notice still has these controls. The current web component does not hide them for that notice.
+Tutor Explanation’s quota is part of its compound button; it is not a separate microphone action.
+Native recommendation: enable answer-derived actions only after the answer has finished generating. The current web streaming path renders a partial AnswerRenderer without the complete question/language/theme props; do not reproduce that incomplete state as the final native contract.
+
+2. Colours and icons
+The screenshot shows the light variant.
+
+Light theme: idle buttons
+Button	Background	Border	Text
+Read Aloud	#e0f2fe	#7dd3fc	#0369a1
+Tutor Explanation	#f3e8ff	#d8b4fe	#7e22ce
+Tutor quota segment	#f3e8ff	Left divider #d8b4fe	#9333ea
+Quiz Me	#e0e7ff	#a5b4fc	#4338ca
+Flashcards	#ede9fe	#c4b5fd	#6d28d9
+Report Issue	#ffe4e6	#fda4af	#e11d48
+Report Issue uses a bold 700-weight label.
+
+Dark theme: idle buttons
+Button	Background	Border	Text
+Read Aloud	#0c4a6e at 40%	#0ea5e9 at 50%	#7dd3fc
+Tutor Explanation	#581c87 at 40%	#c084fc at 60%	#d8b4fe
+Tutor quota segment	#581c87 at 30%	Left divider #c084fc at 40%	#d8b4fe
+Quiz Me	#312e81 at 40%	#818cf8 at 50%	#a5b4fc
+Flashcards	#4c1d95 at 40%	#a78bfa at 50%	#c4b5fd
+Report Issue	#881337 at 30%	#fb7185 at 50%	#fda4af
+Disabled controls have 50% opacity.
+
+Web icons are mostly Unicode: 🔊, 🎓, 🎙️, 📝 and ✨. Their rendering differs across Android and iOS; native icons with equivalent meaning are acceptable.
+
+Report Issue uses a 12 × 12 px outlined warning triangle, stroke width 2.5.
+
+Source: src-frontend/components/AnswerRenderer.jsx
+
+3. Shared backend connection
+Use the mobile app’s existing authenticated EDUwAI API client.
+
+The web production configuration currently points to:
+
+https://api.eduwai.in/api
+This address was extracted from src-frontend/config.js; production reachability was not tested in this extraction.
+
+All routes below require the existing bearer access token:
+
+Authorization: Bearer <access token>
+Content-Type: application/json
+Do not connect the mobile build to Replit’s development /api proxy, and do not embed AI-provider credentials in the app.
+
+Preserve this context for each completed answer
+original question
+completed answer text
+answer language
+user medium_name
+book title, if available
+first source page number, if available
+answer identity/version for rejecting stale results
+Freeze this context per answer. Editing the question input afterward must not change which question is sent for flashcards or reports.
+
+4. Read Aloud
+API
+POST /api/tts
+{
+  "text": "Plain-text version of the completed answer",
+  "language_code": "en-IN"
+}
+Response: binary audio, not JSON and not an audio URL.
+
+Possible content types:
+
+audio/mpeg
+audio/wav
+Read the actual Content-Type; do not assume one file format.
+
+Button states
+Read Aloud → Loading… → Pause
+Pause → Resume
+Resume → Pause
+Playback ends → Read Aloud
+While playing or paused, show an adjacent ■ Stop button. Pause, resume and stop are local player operations—no API calls.
+
+Disable Read Aloud while:
+
+Its audio is loading.
+Tutor Explanation is generating.
+Tutor Explanation is playing.
+Existing backend limits
+The current implementation reads only an initial portion of long text:
+
+GCP primary path: first 400 words.
+GCP fallback: first 120 words.
+Development path: first 80 words.
+Do not promise that the entire long answer will be spoken. These are backend limits, not native UI failures.
+
+Errors include 400 for empty text and 503 for unavailable TTS. Native should show an error/retry state; the existing web hook silently resets on failure.
+
+Sources: useTextToSpeech.js, main.py:6362–6444
+
+5. Tutor Explanation and voice quota
+This generates a new teacher-style explanation, rather than reading the original answer verbatim.
+
+Fetch quota
+GET /api/student/explain-quota
+Example structure:
+
+{
+  "allowed": true,
+  "used": 0,
+  "limit": 10,
+  "remaining": 10
+}
+The screenshot’s 10/10 means remaining / limit. It is not a hardcoded allowance and is separate from the main question quota.
+
+Generate explanation
+POST /api/explain
+{
+  "text": "Plain-text version of the completed answer",
+  "language": "english"
+}
+Notice the difference:
+
+Read Aloud: language_code: "en-IN"
+Tutor Explanation: language: "english"
+Response body: binary MP3 or WAV audio.
+
+Response header:
+
+X-Explain-Text: <base64-encoded UTF-8 explanation>
+Base64-decode the header into bytes, then decode those bytes as UTF-8. Display:
+
+Explanation: [decoded transcript]
+The transcript appears above the action bar. Audio may cover only its initial portion: the primary GCP path caps spoken text at 4,500 UTF-8 bytes; fallback/development paths use shorter excerpts.
+
+Button states
+Tutor Explanation → Generating… → Pause
+Pause → Resume
+Playback ends or Stop → Play again
+Show an adjacent ■ Stop while playing or paused.
+Pause/resume/replay reuse downloaded audio.
+Play again must not call /explain again or consume another allowance.
+Disable generation while Read Aloud is loading, playing or paused.
+Voice quota becomes amber when remaining is 1–3.
+At zero remaining, replace the compound control with Voice limit reached.
+Quota errors
+Exhaustion returns 429 with JSON:
+
+{
+  "detail": {
+    "quota_exceeded": true,
+    "explains_used": 10,
+    "explain_limit": 10,
+    "message": "..."
+  }
+}
+Because success is binary, the client must still decode error bytes as JSON when a non-success response arrives.
+
+Refresh quota after successful generation, a quota error, and app resume. Do not rely exclusively on a local decrement.
+
+Sources: AnswerRenderer.jsx, main.py:6462–6631,9780–9788
+
+6. Quiz Me
+Placement and behaviour
+Tapping Quiz Me opens a modal and immediately requests questions. Native may use a full-screen modal or sheet, with safe-area padding and scrollable content.
+
+API
+POST /api/mcq
+{
+  "text": "Plain-text version of the completed answer",
+  "language": "english"
+}
+Example response structure, with fictional content:
+
+{
+  "questions": [
+    {
+      "question": "Example question?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correct": 0,
+      "difficulty": "easy",
+      "explanation": "Why Option A is correct."
+    }
+  ]
+}
+correct is a zero-based option index, not an option letter.
+
+The backend requests a variable number of questions based on input length:
+
+Answer word count	Requested questions
+Under 100	4
+100–249	6
+250–449	8
+450 or more	10
+Render the actual returned array. Do not hardcode six questions.
+
+Local quiz operations
+These do not call the backend:
+
+Select an option.
+Check Answer.
+Reveal the correct answer/explanation.
+Calculate the score.
+Submit the quiz; unanswered items count as incorrect.
+Regenerate/Retake requests /mcq again and resets selections and score. The current route has no dedicated quiz quota.
+
+Each quiz question also supports Report Issue through the same report endpoint described below.
+
+Validation: the backend checks that the generated result is a nonempty array, but does not fully validate each question. Native should validate option arrays, correct-index bounds and required fields before rendering.
+
+Sources: MCQModal.jsx, main.py:6634–6752
+
+7. Flashcards
+API
+POST /api/flashcards
+{
+  "question": "Original question for this answer",
+  "answer": "Completed answer, retaining its original text"
+}
+Unlike TTS and quiz requests, the web sends the original answer, not the stripped speech version.
+
+Response structure:
+
+{
+  "flashcards": [
+    {
+      "front": "Recall question",
+      "back": "Answer",
+      "type": "concept"
+    }
+  ],
+  "count": 1
+}
+Supported types:
+
+definition
+concept
+process
+fact
+diagram
+diagram is a card category, not a guaranteed image URL.
+
+Display and operations
+Opens an inline Flashcard Practice panel below the button row.
+Tap a card to flip front/back.
+Previous/next navigation is local.
+Mark mastered/unmastered is local.
+Progress and mastered count are local.
+Collapse/expand reuses the current deck.
+Regenerate calls /flashcards again and resets practice progress.
+There is no mastery-save endpoint in this component.
+
+Decks cover one answer, not the whole textbook. The service uses at most the first 15,000 answer characters and returns at most 10 cards.
+
+Timing and errors
+The route has a 65-second server generation timeout. Allow a client timeout of approximately 90 seconds, subject to the actual production gateway’s limits; do not impose a 20–30-second timeout.
+
+Handle:
+
+422: invalid input or validation failure.
+502: generation failed.
+504: generation timed out.
+Prevent duplicate generation taps. Reusing an existing deck on reopening is a native efficiency recommendation; the current top-level web Flashcards button triggers regeneration on repeated clicks.
+
+Sources: FlashcardSection.jsx, flashcard_service.py, main.py:7537–7594
+
+8. Report Issue
+Tapping Report Issue only opens the form. No request is sent until Submit Report.
+
+The web form expands inline below the action bar.
+
+Issue values
+Send the exact ID, not its display label:
+
+Display label	API value
+Incorrect answer	incorrect
+Answer too short	too_short
+Answer too long	too_long
+Irrelevant answer	irrelevant
+Missing key concepts	missing_concepts
+Wrong page / source cited	wrong_source
+Other	other
+API
+POST /api/support/report-answer
+{
+  "book_title": "Book title or empty string",
+  "page_number": null,
+  "question": "Original question",
+  "ai_response": "First 500 characters of the displayed answer",
+  "issue_type": "incorrect",
+  "description": "Optional details"
+}
+For parity with the answer action bar:
+
+book_title: selected book title, or "".
+page_number: first source’s page, or null.
+ai_response: first 500 characters of the answer.
+description: trimmed text, or null.
+Successful response:
+
+{"ok": true}
+Require an issue selection, disable Submit while submitting, and show success only after the server responds. The web success panel closes automatically after 15 seconds and also provides Close.
+
+The backend derives student identity from authentication; do not submit student name, email or user ID.
+
+For reports inside Quiz Me, the web uses "MCQ Question" as the book title and includes the quiz question/options/correct answer/explanation as report context.
+
+Sources: ReportIssueButton.jsx, support_router.py:125–162
+
+9. Android/iOS requirements
+Audio
+Use a native player capable of MP3 and WAV.
+Download authenticated audio bytes into an app-private temporary file.
+Choose file extension from the response MIME type.
+Do not pass an authenticated POST endpoint directly to a player expecting a public GET URL.
+These playback features require no microphone permission.
+Allow only one active audio feature at a time.
+Handle audio interruption, headphones disconnecting and app backgrounding.
+Stop/release players and temporary files on answer change, screen exit or logout.
+Update UI after playback actually starts; handle player errors.
+Language and text
+Resolve language in this order:
+
+Supported language on the answer response.
+User’s medium_name.
+Language detected from answer text.
+English fallback.
+Read Aloud maps language names to BCP-47 codes, for example hindi → hi-IN and telugu → te-IN.
+
+Known mismatch: frontend utilities include Odia, but the current Explain/Quiz backend language maps omit it; Explain audio falls back to en-IN. Do not claim full Odia audio parity without separate validation.
+
+The web strips Markdown and removes LaTeX expressions before speech/quiz generation. Consequently, spoken text may omit mathematical formulas. Preserve the displayed answer; any native improvement to formula speech should be explicit rather than silently changing the content.
+
+Requests and state
+Generate only when tapped; do not preload all audio, quizzes and decks.
+Keep results associated with the answer that requested them.
+Ignore late responses after switching answers or leaving the screen.
+Disable duplicate submissions.
+Do not blindly retry Tutor Explanation or reports after ambiguous timeouts: explanation may already have consumed quota, and a report may already have been saved.
+Use the existing token-refresh/sign-in flow for 401.
+Clear protected cached results on logout.
+Provide accessible labels, scalable text and reduced-motion alternatives for card flips.
+Support Android Back and iOS modal dismissal without leaving stale loading states.
+Native acceptance checks
+Verify on both platforms:
+
+Correct button order and wrapping with large text.
+MP3 and WAV playback, pause/resume/stop and interruptions.
+Tutor replay without another generation request.
+Dynamic quota, exhausted quota and binary-response errors.
+Non-English transcript decoding.
+Quiz indexing, score calculation and regeneration.
+Flashcard timeout, navigation and local mastery.
+Report success/failure and duplicate-tap prevention.
+Answer switching during an outstanding request.
+Scope for the mobile platform: implement these native controls against the existing EDUwAI backend. Do not rebuild the backend, add guessed endpoints, or modify the web app.

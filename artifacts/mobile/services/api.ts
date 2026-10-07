@@ -18,7 +18,7 @@ const PROXY_BASE = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api/edwai`
   : null;
 
-function resolveUrl(path: string): string {
+export function resolveUrl(path: string): string {
   const apiPath = path.replace(/^\/api/, "");
 
   if (Platform.OS === "web") {
@@ -245,6 +245,8 @@ export type ValidationResult = {
 
 export type QueryResponse = {
   answer: string;
+  language?: string;
+  answer_language?: string;
   sources?: PageCitation[];
   diagram_images?: DiagramImage[];
   citation_images?: CitationImage[];
@@ -376,6 +378,8 @@ function parseSseTextPhase2(
         model_used?: string;
         cache_used?: boolean;
         context_cached?: boolean;
+        language?: string;
+        answer_language?: string;
       };
       if (parsed.type === "token" && parsed.content) {
         fullAnswer += parsed.content;
@@ -384,6 +388,8 @@ function parseSseTextPhase2(
         if (parsed.answer) responseData.answer = parsed.answer;
         if (parsed.sources) responseData.sources = parsed.sources;
         if (parsed.cache_used !== undefined) responseData.cached = parsed.cache_used;
+        if (parsed.language) responseData.language = parsed.language;
+        if (parsed.answer_language) responseData.answer_language = parsed.answer_language;
       } else if (parsed.type === "error") {
         throw new ApiError(parsed.content ?? "Stream error", 500, null);
       }
