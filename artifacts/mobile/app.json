@@ -8,7 +8,6 @@
     "scheme": "edwai",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "primaryLanguage": "hi",
     "locales": {
       "hi": "./locales/hi.json",
       "en": "./locales/en.json"
