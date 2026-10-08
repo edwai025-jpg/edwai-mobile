@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ActivityIndicator,
@@ -534,7 +535,7 @@ export default SupportChatWidget;
 
 const styles = StyleSheet.create({
   confirmBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(17,24,39,0.35)",
     alignItems: "center",
     justifyContent: "center",
@@ -559,10 +560,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     elevation: 6,
-    shadowColor: Colors.indigo,
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    ...platformShadow(Colors.indigo, 0, 4, 0.3, 10),
     zIndex: 50,
   },
   screen: { flex: 1, backgroundColor: Colors.gray50 },

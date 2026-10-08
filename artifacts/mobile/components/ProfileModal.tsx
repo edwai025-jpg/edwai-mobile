@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { Image as ExpoImage } from "expo-image";
@@ -1669,10 +1670,7 @@ const dp = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.darkCardBorder,
     marginTop: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    ...platformShadow("#000", 0, 4, 0.3, 8),
     elevation: 10,
   },
   option: {
@@ -1711,10 +1709,7 @@ const pt = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     borderWidth: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
+    ...platformShadow("#000", 0, 4, 0.15, 10),
     elevation: 10,
   },
   cardSuccess: { borderColor: "#22c55e" },

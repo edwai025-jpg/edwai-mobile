@@ -10,7 +10,7 @@ class ApiError extends Error {
 function load(file, globals) {
   const exports = {};
   const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, file), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: false },
   }).outputText;
   vm.runInNewContext(code, {
     exports, Uint8Array, AbortController, atob, setTimeout, clearTimeout, ...globals,

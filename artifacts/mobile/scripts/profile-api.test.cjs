@@ -9,7 +9,7 @@ function load(file, scope = {}) {
   const exports = {};
   const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, file), "utf8"), {
     fileName: path.join(__dirname, file),
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: false },
   }).outputText;
   vm.runInNewContext(code, { exports, FormData, Blob, ...scope });
   return exports;

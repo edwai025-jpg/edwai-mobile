@@ -462,6 +462,8 @@ export async function streamQuery(
     const { fullAnswer, responseData } = parseSseText(text, onChunk);
     return {
       answer: responseData.answer ?? fullAnswer,
+      language: responseData.language,
+      answer_language: responseData.answer_language,
       sources: responseData.sources,
       diagram_images: responseData.diagram_images,
       citation_images: responseData.citation_images,
@@ -497,6 +499,8 @@ export async function streamQueryPhase2(
     const { fullAnswer, responseData } = parseSseTextPhase2(text, onChunk);
     return {
       answer: responseData.answer ?? fullAnswer,
+      language: responseData.language,
+      answer_language: responseData.answer_language,
       sources: responseData.sources,
       cached: responseData.cached,
     };
@@ -504,10 +508,10 @@ export async function streamQueryPhase2(
 
   /* Non-streaming JSON fallback */
   try {
-    const parsed = JSON.parse(text) as { answer?: string; sources?: PageCitation[]; cache_used?: boolean };
+    const parsed = JSON.parse(text) as QueryResponse & { cache_used?: boolean };
     const answer = parsed.answer ?? "";
     if (answer) onChunk(answer);
-    return { answer, sources: parsed.sources, cached: parsed.cache_used };
+    return { answer, language: parsed.language, answer_language: parsed.answer_language, sources: parsed.sources, cached: parsed.cache_used };
   } catch {}
 
   throw new ApiError("Unexpected response from server", 200, null);

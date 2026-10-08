@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
@@ -270,10 +271,7 @@ const kb = StyleSheet.create({
     borderTopRightRadius: 20,
     borderTopWidth: 1,
     paddingBottom: 28,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    ...platformShadow("#000", 0, -4, 0.3, 12),
     elevation: 20,
   },
   handle: {

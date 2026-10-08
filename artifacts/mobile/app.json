@@ -7,15 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "eduwai",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "locales": {
       "hi": "./locales/hi.json",
       "en": "./locales/en.json"
-    },
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#667eea"
     },
     "ios": {
       "supportsTablet": false,
@@ -74,6 +68,14 @@
         }
       ],
       "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#667eea"
+        }
+      ],
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
       [
@@ -91,7 +93,9 @@
         }
       ],
       "expo-web-browser",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-secure-store",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

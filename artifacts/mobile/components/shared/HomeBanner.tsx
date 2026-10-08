@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { Feather } from "@expo/vector-icons";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -373,7 +374,7 @@ const bn = StyleSheet.create({
 
 /* Nav styles */
 const nb = StyleSheet.create({
-  shell: { overflow: "hidden", shadowColor: Colors.bannerShadow, shadowOpacity: 1, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+  shell: { overflow: "hidden", ...platformShadow(Colors.bannerShadow, 0, 4, 1, 12), elevation: 4 },
   nav: { paddingHorizontal: 14, paddingBottom: 12 },
   avatarHalo: { position: "absolute", top: -2, left: -2, right: -2, bottom: -2, borderRadius: 18, opacity: 0.65 },
   navRow: { flexDirection: "row", alignItems: "center", gap: 8 },

@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -229,13 +230,11 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.white,
     alignItems: "center", justifyContent: "center",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 4, elevation: 2, marginBottom: 24,
+    ...platformShadow("#000", 0, 2, 0.08, 4), elevation: 2, marginBottom: 24,
   },
   card: {
     backgroundColor: Colors.white, borderRadius: 24, padding: 28,
-    shadowColor: Colors.navy, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12, shadowRadius: 24, elevation: 8,
+    ...platformShadow(Colors.navy, 0, 8, 0.12, 24), elevation: 8,
     borderWidth: 1, borderColor: Colors.gray200,
   },
   logoRow: {

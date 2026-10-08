@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
@@ -125,15 +126,12 @@ const styles = StyleSheet.create({
   root: {
     paddingBottom: 12,
     paddingHorizontal: 16,
-    shadowColor: "rgba(99,71,234,0.35)",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 16,
+    ...platformShadow("rgba(99,71,234,0.35)", 0, 4, 1, 16),
     elevation: 10,
     zIndex: 10,
   },
   decorDots: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.07,
   },
   row1: {

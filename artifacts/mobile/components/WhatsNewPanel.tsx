@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
@@ -297,10 +298,7 @@ const p = StyleSheet.create({
   root: {
     backgroundColor: Colors.white,
     borderRadius: 16,
-    shadowColor: "#4F46E5",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
+    ...platformShadow("#4F46E5", 0, 4, 0.07, 16),
     elevation: 4,
     marginBottom: 20,
     overflow: "hidden",

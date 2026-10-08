@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -437,8 +438,7 @@ const s = StyleSheet.create({
   card: {
     backgroundColor: Colors.white, borderRadius: 16, paddingTop: 28,
     paddingHorizontal: 18, paddingBottom: 24,
-    shadowColor: "#4F46E5", shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08, shadowRadius: 20, elevation: 5, marginBottom: 16,
+    ...platformShadow("#4F46E5", 0, 6, 0.08, 20), elevation: 5, marginBottom: 16,
   },
 
   sectionBadgeRow: {
@@ -497,8 +497,7 @@ const s = StyleSheet.create({
   pickerPlaceholder: { color: Colors.placeholder },
   dropdown: {
     marginTop: 4, borderWidth: 1, borderColor: Colors.gray200, borderRadius: 8,
-    backgroundColor: Colors.white, shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12,
+    backgroundColor: Colors.white, ...platformShadow("#000", 0, 4, 0.08, 12),
     elevation: 4, overflow: "hidden",
   },
   dropdownOption: {

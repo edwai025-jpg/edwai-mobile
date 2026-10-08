@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { Feather, FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as Linking from "expo-linking";
@@ -317,8 +318,8 @@ const styles = StyleSheet.create({
     borderRadius: 14, borderWidth: 1.5, borderColor: Colors.gray200, backgroundColor: Colors.gray50,
   },
   tabActive: {
-    backgroundColor: Colors.primary, borderColor: Colors.primary, shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 3,
+    backgroundColor: Colors.primary, borderColor: Colors.primary,
+    ...platformShadow(Colors.primary, 0, 3, 0.25, 6), elevation: 3,
   },
   tabText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.gray700 },
   tabTextActive: { color: Colors.white },

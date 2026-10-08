@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import React from "react";
 import {
   Platform,
@@ -83,10 +84,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     alignItems: "center",
     gap: 8,
-    shadowColor: Colors.navy,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
+    ...platformShadow(Colors.navy, 0, 4, 0.07, 12),
     elevation: 3,
     borderWidth: 1,
     borderColor: Colors.gray100,

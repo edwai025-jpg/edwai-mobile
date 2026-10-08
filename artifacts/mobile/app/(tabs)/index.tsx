@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
@@ -112,7 +113,7 @@ const dp = StyleSheet.create({
   disabled: { opacity: 0.4 },
   selText: { fontSize: 14, color: TEXT_COLOR, fontFamily: "Inter_400Regular", flex: 1 },
   placeholder: { color: MUTED },
-  dropdown: { marginTop: 4, borderWidth: 1, borderColor: BORDER, borderRadius: 8, backgroundColor: "#2a2a3e", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 8, overflow: "hidden", zIndex: 99 },
+  dropdown: { marginTop: 4, borderWidth: 1, borderColor: BORDER, borderRadius: 8, backgroundColor: "#2a2a3e", ...platformShadow("#000", 0, 4, 0.5, 12), elevation: 8, overflow: "hidden", zIndex: 99 },
   option: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
   optSel: { backgroundColor: "rgba(102,126,234,0.22)" },
   optText: { fontSize: 14, color: TEXT_COLOR },

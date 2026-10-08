@@ -172,7 +172,7 @@ const s = StyleSheet.create({
   closeTxt: { fontSize: 16, color: "#6b7280" },
   webview: { flex: 1 },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(255,255,255,0.9)",
     alignItems: "center",
     justifyContent: "center",

@@ -1,3 +1,4 @@
+import { platformShadow } from "@/constants/shadow";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -230,10 +231,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
+    ...platformShadow("#000", 0, 1, 0.05, 2),
     elevation: 1,
   },
   inner: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 10, flexShrink: 1, minWidth: 0 },

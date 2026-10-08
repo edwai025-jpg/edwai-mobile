@@ -179,7 +179,7 @@ function SearchSheet({
 }
 
 const sh = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 10, justifyContent: "flex-end" },
+  overlay: { ...StyleSheet.absoluteFill, zIndex: 10, justifyContent: "flex-end" },
   dimArea: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
   sheet: { backgroundColor: Colors.darkCard, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: Colors.darkCardBorder, borderBottomWidth: 0, maxHeight: "72%" },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.darkDivider, alignSelf: "center", marginTop: 10, marginBottom: 2 },
