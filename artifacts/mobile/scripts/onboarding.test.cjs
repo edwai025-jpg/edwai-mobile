@@ -14,6 +14,15 @@ function load(file, scope = {}) {
   return exports;
 }
 const validation = load("../services/onboarding.ts");
+test("announcement autoplay clamps to the viewport and loops after the last card", () => {
+  const { nextAnnouncementOffset } = load("../services/announcementScroll.ts");
+  assert.equal(nextAnnouncementOffset(0, 1084, 320, 267), 267);
+  assert.equal(nextAnnouncementOffset(534, 1084, 320, 267), 764);
+  assert.equal(nextAnnouncementOffset(764, 1084, 320, 267), 0);
+  assert.equal(nextAnnouncementOffset(0, 255, 320, 267), 0);
+  assert.equal(nextAnnouncementOffset(0, 1084, 0, 267), 0);
+  assert.equal(nextAnnouncementOffset(267, 562, 528, 267), 0);
+});
 
 test("name validation matches normalized Unicode name contract", () => {
   for (const name of ["Ada Lovelace", " O'Connor  ", "Anne-Marie", "José", "张 三", " María   García "]) {

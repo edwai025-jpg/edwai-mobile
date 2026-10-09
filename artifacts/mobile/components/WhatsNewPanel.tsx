@@ -2,11 +2,12 @@ import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Text, View,
+  AccessibilityInfo, ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 
 import { openExternal, T, shadow } from "@/components/onboarding/ui";
 import api, { AppConfig, WhatsNewItem } from "@/services/api";
+import { nextAnnouncementOffset } from "@/services/announcementScroll";
 
 type Feat = React.ComponentProps<typeof Feather>["name"];
 const RESOURCES: { key: string; title: string; sub: string; cfg: string | null; fallback: string; colors: [string, string]; icon: Feat; badge: boolean }[] = [
@@ -74,16 +75,29 @@ export default function WhatsNewPanel() {
   const [tab, setTab] = useState<"new" | "res">("new");
   const [news, setNews] = useState<Load<{ items: WhatsNewItem[]; total: number | null }>>({ status: "loading", data: { items: [], total: null } });
   const [cfg, setCfg] = useState<Load<AppConfig>>({ status: "loading", data: {} });
-  const [pos, setPos] = useState(0);
+  const [active, setActive] = useState(AppState.currentState !== "background" && AppState.currentState !== "inactive");
+  const [reduceMotion, setReduceMotion] = useState(true);
   const [linkErr, setLinkErr] = useState("");
   const scroller = useRef<ScrollView>(null);
+  const scroll = useRef({ offset: 0, content: 0, viewport: 0 });
+  const interaction = useRef({ held: false, resumeAt: 0 });
   const alive = useRef(true);
   const nTok = useRef(0); const cTok = useRef(0);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    let mounted = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then(value => {
+      if (mounted) setReduceMotion(value);
+    }).catch(() => {});
+    const motion = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
+    const activity = AppState.addEventListener("change", state => setActive(state === "active"));
+    return () => { mounted = false; motion.remove(); activity.remove(); };
+  }, []);
 
   const loadNews = useCallback(() => {
     const t = ++nTok.current;
-    setNews({ status: "loading", data: { items: [], total: null } }); setPos(0);
+    setNews({ status: "loading", data: { items: [], total: null } });
+    scroll.current.offset = 0;
     api.data.getWhatsNew().then((r) => {
       if (alive.current && t === nTok.current) setNews({ status: "ready", data: { items: r.items ?? [], total: typeof r.total_boards === "number" ? r.total_boards : null } });
     }).catch(() => { if (alive.current && t === nTok.current) setNews({ status: "error", data: { items: [], total: null } }); });
@@ -99,13 +113,20 @@ export default function WhatsNewPanel() {
 
   const items = news.data.items;
   const newCount = items.filter((i) => i.is_new).length;
-  const go = (i: number) => {
-    const n = Math.max(0, Math.min(items.length - 1, i));
-    scroller.current?.scrollTo({ x: n * (CARD_W + GAP), animated: true });
-    setPos(n);
-  };
-  const onEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setPos(Math.max(0, Math.min(items.length - 1, Math.round(e.nativeEvent.contentOffset.x / (CARD_W + GAP)))));
+  useEffect(() => {
+    if (tab !== "new" || news.status !== "ready" || items.length < 2 || !active || reduceMotion) return;
+    const timer = setInterval(() => {
+      if (interaction.current.held || Date.now() < interaction.current.resumeAt) return;
+      const { offset, content, viewport } = scroll.current;
+      const next = nextAnnouncementOffset(offset, content, viewport, CARD_W + GAP);
+      if (next !== offset) scroller.current?.scrollTo({ x: next, animated: true });
+    }, 3500);
+    return () => clearInterval(timer);
+  }, [tab, news.status, items.length, active, reduceMotion]);
+  const pauseScroll = () => { interaction.current.held = true; };
+  const resumeScroll = () => {
+    interaction.current.held = false;
+    interaction.current.resumeAt = Date.now() + 6000;
   };
   const open = async (url: string) => {
     setLinkErr("");
@@ -116,7 +137,13 @@ export default function WhatsNewPanel() {
     const on = tab === key;
     return (
       <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={extra ? `${label}, ${extra}` : label}
-        onPress={() => setTab(key)} style={[w.tabBtn, on && w.tabOn]}>
+        onPress={() => {
+          if (key !== tab) {
+            scroll.current.offset = 0;
+            interaction.current.held = false;
+            setTab(key);
+          }
+        }} style={[w.tabBtn, on && w.tabOn]}>
         <Feather name={icon} size={16} color={on ? T.white : "rgba(255,255,255,0.6)"} />
         <Text style={[w.tabText, { color: on ? T.white : "rgba(255,255,255,0.6)" }]}>{label}</Text>
         {extra ? <View style={w.cap}><Text style={w.capText}>{extra}</Text></View> : null}
@@ -146,20 +173,15 @@ export default function WhatsNewPanel() {
             ) : (
               <View>
                 <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} snapToInterval={CARD_W + GAP} decelerationRate="fast"
-                  onMomentumScrollEnd={onEnd} contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 8, gap: GAP }} accessibilityLabel="Announcements, swipe sideways">
+                  onLayout={e => { scroll.current.viewport = e.nativeEvent.layout.width; }}
+                  onContentSizeChange={width => { scroll.current.content = width; }}
+                  onScroll={e => { scroll.current.offset = e.nativeEvent.contentOffset.x; }} scrollEventThrottle={16}
+                  onTouchStart={pauseScroll} onTouchEnd={resumeScroll} onTouchCancel={resumeScroll}
+                  onScrollBeginDrag={pauseScroll} onScrollEndDrag={resumeScroll}
+                  contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 8, gap: GAP }}
+                  accessibilityLabel="Announcements, scroll sideways">
                   {items.map((it, i) => <Card key={`${it.type}-${it.name}-${i}`} item={it} />)}
                 </ScrollView>
-                {items.length > 1 ? (
-                  <View style={w.pager}>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Previous announcement" disabled={pos === 0} onPress={() => go(pos - 1)} style={[w.pgBtn, pos === 0 && { opacity: 0.35 }]}>
-                      <Feather name="chevron-left" size={20} color={T.white} />
-                    </Pressable>
-                    <Text style={w.pgText} accessibilityLiveRegion="polite">{pos + 1} of {items.length}</Text>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Next announcement" disabled={pos >= items.length - 1} onPress={() => go(pos + 1)} style={[w.pgBtn, pos >= items.length - 1 && { opacity: 0.35 }]}>
-                      <Feather name="chevron-right" size={20} color={T.white} />
-                    </Pressable>
-                  </View>
-                ) : null}
               </View>
             )}
             <View style={w.hint}>
@@ -238,9 +260,6 @@ const w = StyleSheet.create({
   name: { fontSize: 14, fontWeight: "700", color: T.g900, lineHeight: 19 },
   meta: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
   metaText: { fontSize: 12, color: T.g500, flexShrink: 1 },
-  pager: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  pgBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)" },
-  pgText: { color: T.white, fontSize: 13, fontWeight: "600", minWidth: 64, textAlign: "center" },
   empty: { alignItems: "center", paddingHorizontal: 20, paddingVertical: 24, gap: 8 },
   emptyT: { color: "rgba(255,255,255,0.9)", fontSize: 14, fontWeight: "500" },
   emptyS: { color: "rgba(255,255,255,0.7)", fontSize: 12, lineHeight: 18, textAlign: "center" },
