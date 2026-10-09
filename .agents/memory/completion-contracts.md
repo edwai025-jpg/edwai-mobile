@@ -9,6 +9,12 @@ The user wants the setup guide first, then Profile, then What's New & Resources.
 
 **How to apply:** Keep this scoped to new-user completion, not the separate mobile Profile tab or other study screens.
 
+The guide-first order refers to onboarding content, not global navigation. Home, Back to Login, and EDUwAI branding belong above that content rather than inside the profile form.
+
+**Why:** The user explicitly requested easier access to navigation at the top of Complete Profile.
+
+**How to apply:** Preserve the navigation header independently of the guide → form → announcements order when revising onboarding.
+
 The external backend can save a name-only Own Resources profile while returning `profile_complete=false`. Ordinary completion depends on name plus board; pre-registered students depend on the terms timestamp. Normal-user checkbox agreement is local and is not guaranteed to persist a terms timestamp.
 
 **Why:** These are explicit limitations in the supplied web handoff, not errors to conceal with a fabricated default board or a locally forced permanent completion flag.

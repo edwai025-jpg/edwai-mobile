@@ -167,28 +167,33 @@ function ProfileScreen() {
   return (
     <View style={{ flex: 1 }}>
       <LinearGradient colors={["#eff6ff", "#ffffff", "#faf5ff"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <View style={st.pageHeader}>
+        <View style={[st.headerInner, { paddingTop: (Platform.OS === "web" ? 67 : insets.top) + 8 }]}>
+          <View style={st.navRow}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Home" onPress={() => openLegal(legalUrls.home)} style={[st.navBtn, st.navHome]}>
+              <Feather name="home" size={16} color={T.g600} /><Text style={[st.navText, { color: T.g600 }]}>Home</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Back to Login" disabled={off} onPress={doLogout} style={[st.navBtn, st.navBack, off && { opacity: 0.5 }]}>
+              <Feather name="arrow-left" size={16} color={T.primary} /><Text style={[st.navText, { color: T.primary }]}>Back to Login</Text>
+            </Pressable>
+          </View>
+          <View style={st.brandRow}>
+            <Image source={logo} style={st.brandLogo} resizeMode="contain" accessibilityLabel="EDUwAI logo" />
+            <Text style={st.brandName} accessibilityLabel="EDUwAI">EDUw<Text style={{ color: T.orange }}>AI</Text></Text>
+          </View>
+        </View>
+      </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: (Platform.OS === "web" ? 24 : insets.top) + 16, paddingBottom: insets.bottom + 40, gap: 20, maxWidth: 560, width: "100%", alignSelf: "center" }}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: insets.bottom + 40, gap: 20, maxWidth: 560, width: "100%", alignSelf: "center" }}>
           {/* 1. GUIDE */}
           <SetupGuide />
 
           {/* 2. FORM */}
           <View style={st.form}>
-            <View style={st.navRow}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Home" onPress={() => openLegal(legalUrls.home)} style={[st.navBtn, st.navHome]}>
-                <Feather name="home" size={16} color={T.g600} /><Text style={[st.navText, { color: T.g600 }]}>Home</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Back to Login" disabled={off} onPress={doLogout} style={[st.navBtn, st.navBack, off && { opacity: 0.5 }]}>
-                <Feather name="arrow-left" size={16} color={T.primary} /><Text style={[st.navText, { color: T.primary }]}>Back to Login</Text>
-              </Pressable>
-            </View>
-
-            <View style={{ alignItems: "center", marginBottom: 24 }}>
-              <Image source={logo} style={{ height: 48, width: 160, marginBottom: 16 }} resizeMode="contain" accessibilityLabel="EDUwAI logo" />
-              <View style={st.pill}><View style={st.dot} /><Text style={st.pillText}>SETUP YOUR PROFILE</Text></View>
-              <Text style={st.h1} accessibilityRole="header">Welcome to <Text style={{ color: T.ink }}>EDUw</Text><Text style={{ color: T.orange }}>AI</Text></Text>
-              <Text style={st.sub}>Tell us about yourself to personalise your experience</Text>
-            </View>
+            <LinearGradient colors={[T.ink, T.primaryDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={st.setupHeader}>
+              <Feather name="user" size={22} color={T.white} />
+              <Text style={st.setupTitle} accessibilityRole="header">Setup Profile</Text>
+            </LinearGradient>
 
             {error ? (
               <View style={st.banner} accessibilityRole="alert" accessibilityLiveRegion="polite">
@@ -346,17 +351,19 @@ function Divider({ n }: { n: number }) {
 }
 
 const st = StyleSheet.create({
+  pageHeader: { backgroundColor: T.white, borderBottomWidth: 1, borderBottomColor: T.indigo100 },
+  headerInner: { maxWidth: 560, width: "100%", alignSelf: "center", paddingHorizontal: 16, paddingBottom: 12 },
+  brandRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  brandLogo: { height: 48, width: 56 },
+  brandName: { fontSize: 24, fontFamily: "Inter_700Bold", color: T.ink, flexShrink: 1 },
   form: { backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 16, borderWidth: 1, borderColor: T.g200, padding: 20, ...shadow },
-  navRow: { flexDirection: "row", justifyContent: "space-between", gap: 12, marginBottom: 20, flexWrap: "wrap" },
+  navRow: { flexDirection: "row", justifyContent: "space-between", gap: 12, marginBottom: 8, flexWrap: "wrap" },
   navBtn: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, borderRadius: 8 },
   navHome: { backgroundColor: T.white, borderWidth: 1, borderColor: T.g200 },
   navBack: { backgroundColor: "rgba(102,126,234,0.1)" },
   navText: { fontSize: 13, fontWeight: "600" },
-  pill: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(102,126,234,0.1)", borderColor: "rgba(102,126,234,0.2)", borderWidth: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 16 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: T.primary },
-  pillText: { fontSize: 12, fontWeight: "600", color: T.primary, letterSpacing: 0.4 },
-  h1: { fontSize: 28, lineHeight: 36, fontWeight: "700", color: T.g900, marginBottom: 4, textAlign: "center" },
-  sub: { fontSize: 14, color: T.g500, textAlign: "center", lineHeight: 20 },
+  setupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, padding: 16, borderRadius: 12, marginBottom: 24 },
+  setupTitle: { fontSize: 22, lineHeight: 28, fontWeight: "700", color: T.white, flexShrink: 1 },
   banner: { flexDirection: "row", gap: 8, backgroundColor: T.red50, borderColor: T.red200, borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 16 },
   bannerText: { flex: 1, color: T.red700, fontSize: 14, lineHeight: 20 },
   circle: { width: 32, height: 32, borderRadius: 16, backgroundColor: T.primary, alignItems: "center", justifyContent: "center" },
