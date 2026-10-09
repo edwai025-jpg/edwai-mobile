@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { EdwAILogo } from "@/components/EdwAILogo";
+import { T } from "@/components/onboarding/ui";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import api, { ApiError } from "@/services/api";
@@ -135,7 +135,7 @@ export default function OTPScreen() {
 
           <View style={styles.card}>
             <View style={styles.logoRow}>
-              <EdwAILogo size="md" />
+              <Text style={styles.brandName} accessibilityLabel="EDUwAI">EDUw<Text style={{ color: T.orange }}>AI</Text></Text>
             </View>
 
             <Text style={styles.title}>Enter Verification Code</Text>
@@ -239,6 +239,9 @@ const styles = StyleSheet.create({
   },
   logoRow: {
     flexDirection: "row", alignItems: "baseline", justifyContent: "center", marginBottom: 20,
+  },
+  brandName: {
+    fontSize: 22, fontFamily: "Inter_700Bold", color: T.ink,
   },
   title: {
     fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.gray900,
