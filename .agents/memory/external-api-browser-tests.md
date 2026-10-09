@@ -20,3 +20,9 @@ Cross-origin browser fixtures must model response-header exposure, not just retu
 **Why:** A valid explanation transcript header was present in the fixture response but unreadable to browser JavaScript without CORS exposure. This falsely appeared to be a transcript-rendering failure while audio playback and quota updates worked.
 
 **How to apply:** When mocking binary audio with transcript metadata, include the appropriate allow-origin and expose-headers values. Distinguish missing fixture exposure from decoding or rendering bugs before changing application behavior.
+
+Freeze application edits while a critical Expo browser pass is running.
+
+**Why:** Editing shared API/auth modules can trigger a full development reload, resetting in-memory selections and session-only access. This can look like a catalogue bug during fixture testing.
+
+**How to apply:** Finish code changes and restart before the pass. If selections suddenly reset, check for a new application-start log before changing production selection logic; continue only the affected or unverified scenarios on the stable app.

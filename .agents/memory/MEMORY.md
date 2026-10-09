@@ -1,9 +1,10 @@
 - [Mobile visual direction](mobile-visual-direction.md) — Entry page and study banner follow web visual references while preserving mobile layouts.
 - [Support chat scope](support-chat-scope.md) — Human support must use the existing web API; REST foreground chat and native push are separate integrations.
-- [Expo browser confirmations](mobile-platform-quirks.md) — Native alerts can be inert on web; provide actionable in-app confirmations in the preview.
+- [Expo browser caveats](mobile-platform-quirks.md) — Native alerts need in-app confirmations; white startup snapshots may precede font loading.
 - [Package installation verification](package-installation.md) — A successful lockfile update may leave workspace symlinks unchanged; verify actual installed versions before testing.
 - [Mobile SDK boundaries](mobile-sdk-boundaries.md) — Keep mobile React peer contexts separate from other artifacts; use Expo's headless setting for the hosted server.
 - [Mobile Profile scope](mobile-profile-scope.md) — Approved API/behavior fixes preserve the separate tab and mobile layout; no copied web navigation or invented settings/payments.
 - [Profile session contract](profile-session-contract.md) — Bearer-only native sessions cannot identify the current device; external timezone-less session times are UTC.
 - [External API browser tests](external-api-browser-tests.md) — Fixture interception must fail closed; seed auth once so logout checks cannot silently re-authenticate.
 - [Study resource scope](study-resource-scope.md) — Completed-answer controls use frozen context and existing APIs; voice quota and replay are distinct from question usage.
+- [Profile completion contract](completion-contracts.md) — Required order and full onboarding scope; preserve server completion truth and non-idempotent request limitations.

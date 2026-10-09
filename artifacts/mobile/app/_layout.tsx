@@ -24,14 +24,15 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
-  const { isRestored, isLoggedIn, isProfileComplete } = useAuth();
+  const { isRestored, isLoggedIn, isProfileComplete, canUseOwnResources, user } = useAuth();
+  const requiresOrgTerms = !!(user?.isPreRegistered && !user.termsAcceptedAt);
   const router = useRouter();
   const segments = useSegments();
 
   useEffect(() => {
-    const target = getAuthRedirect({ isRestored, isLoggedIn, isProfileComplete }, segments);
+    const target = getAuthRedirect({ isRestored, isLoggedIn, isProfileComplete, canUseOwnResources, requiresOrgTerms }, segments);
     if (target) router.replace(target);
-  }, [isRestored, isLoggedIn, isProfileComplete, segments, router]);
+  }, [isRestored, isLoggedIn, isProfileComplete, canUseOwnResources, requiresOrgTerms, segments, router]);
 
   if (!isRestored) return null;
 

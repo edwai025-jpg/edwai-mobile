@@ -1,551 +1,396 @@
-import { platformShadow } from "@/constants/shadow";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+  Alert, BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import OrgTerms from "@/components/onboarding/OrgTerms";
+import Picker, { LoadingRow, RetryRow } from "@/components/onboarding/Picker";
+import PhoneField from "@/components/onboarding/PhoneField";
+import SetupGuide from "@/components/onboarding/SetupGuide";
+import { useCatalogue } from "@/components/onboarding/useCatalogue";
+import { ActionButton, Checkbox, ErrorLine, openExternal, T, TextLink, Wordmark, shadow } from "@/components/onboarding/ui";
 import WhatsNewPanel from "@/components/WhatsNewPanel";
-import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
-import api, { ApiError, BoardItem, ClassItem, StateItem } from "@/services/api";
+import { ApiError } from "@/services/api";
+import { legalUrls, mutationErrorMessage, validateName, validatePhone } from "@/services/onboarding";
 
-type PickerItem = { id: number; name: string };
+const logo = require("@/assets/images/eduwai-logo.png");
 
-function SectionBadge({ number }: { number: number }) {
-  return (
-    <View style={s.sectionBadgeRow}>
-      <View style={s.sectionCircle}>
-        <Text style={s.sectionCircleNum}>{number}</Text>
-      </View>
-      <View style={s.sectionDivider} />
-    </View>
-  );
-}
-
-function PickerField({
-  label,
-  items,
-  selectedId,
-  onSelect,
-  placeholder,
-  disabled,
-  loading: listLoading,
-}: {
-  label: string;
-  items: PickerItem[];
-  selectedId: number | null;
-  onSelect: (item: PickerItem) => void;
-  placeholder: string;
-  disabled?: boolean;
-  loading?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const selectedName = items.find((i) => i.id === selectedId)?.name ?? "";
-
-  return (
-    <View style={s.pickerWrapper}>
-      <Text style={s.fieldLabel}>{label}</Text>
-      <Pressable
-        style={[s.pickerSelector, disabled && s.pickerDisabled]}
-        onPress={() => !disabled && !listLoading && setOpen(!open)}
-      >
-        {listLoading ? (
-          <ActivityIndicator size="small" color={Colors.primary} style={{ marginRight: 4 }} />
-        ) : (
-          <Text style={[s.pickerText, !selectedId && s.pickerPlaceholder]}>
-            {selectedName || placeholder}
-          </Text>
-        )}
-        <Feather
-          name={open ? "chevron-up" : "chevron-down"}
-          size={16}
-          color={disabled ? Colors.gray300 : Colors.gray400}
-        />
-      </Pressable>
-      {open && !listLoading && (
-        <View style={s.dropdown}>
-          <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: 180 }}>
-            {items.map((item) => (
-              <Pressable
-                key={item.id}
-                style={[s.dropdownOption, item.id === selectedId && s.dropdownOptionSelected]}
-                onPress={() => { onSelect(item); setOpen(false); }}
-              >
-                <Text style={[s.dropdownOptionText, item.id === selectedId && s.dropdownOptionTextSel]}>
-                  {item.name}
-                </Text>
-                {item.id === selectedId && <Feather name="check" size={13} color={Colors.indigo} />}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-    </View>
-  );
-}
+type Kind = "class" | "classRequest" | "boardRequest" | "own";
 
 export default function CompleteProfileScreen() {
+  const { user, isRestored, isLoggedIn } = useAuth();
+  const router = useRouter();
+  useEffect(() => {
+    if (isRestored && !isLoggedIn) router.replace("/login");
+  }, [isRestored, isLoggedIn, router]);
+  if (user?.isPreRegistered && !user.termsAcceptedAt) {
+    return <OrgTerms onDone={() => router.replace("/(tabs)")} />;
+  }
+  return <ProfileScreen />;
+}
+
+function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { completeProfile, user } = useAuth();
+  const { user, requestCurriculum, completeProfile, logout } = useAuth();
+  const cat = useCatalogue();
 
   const [name, setName] = useState(user?.name ?? "");
-  const [phone, setPhone] = useState(user?.phone?.replace("+91", "") ?? "");
+  const [phone, setPhone] = useState("");
+  const [accepted, setAccepted] = useState(false);
+  const [nameErr, setNameErr] = useState("");
+  const [phoneErr, setPhoneErr] = useState("");
+  const [termsErr, setTermsErr] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState<"" | Kind>("");
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [boardReq, setBoardReq] = useState("");
+  const [classReq, setClassReq] = useState("");
+  const [classPanel, setClassPanel] = useState(false);
+  const lock = useRef(false);
+  const memo = useRef(new Map<string, { id?: number; ambiguous?: boolean }>());
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
-  const [states, setStates] = useState<StateItem[]>([]);
-  const [boards, setBoards] = useState<BoardItem[]>([]);
-  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const { states, boards, classes, stateId, boardId, classId } = cat;
+  const boardName = boards.items.find((b) => b.id === boardId)?.name ?? "";
+  const noBoards = stateId !== null && boards.status === "ready" && boards.parentId === stateId && boards.items.length === 0;
+  const noClasses = boardId !== null && classes.status === "ready" && classes.parentId === boardId && classes.items.length === 0;
+  const hasClasses = boardId !== null && classes.status === "ready" && classes.parentId === boardId && classes.items.length > 0;
 
-  const [statesLoading, setStatesLoading] = useState(true);
-  const [boardsLoading, setBoardsLoading] = useState(false);
-  const [classesLoading, setClassesLoading] = useState(false);
-
-  const [selectedState, setSelectedState] = useState<StateItem | null>(null);
-  const [selectedBoard, setSelectedBoard] = useState<BoardItem | null>(null);
-  const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
-
-  const [privacyAccepted, setPrivacyAccepted] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  const topInset = Platform.OS === "web" ? 67 : insets.top;
-
+  const doLogout = async () => {
+    try { await logout(); } finally { router.replace("/login"); }
+  };
   useEffect(() => {
-    api.data.getStates()
-      .then((data) => setStates(data.sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => { /* silent */ })
-      .finally(() => setStatesLoading(false));
+    if (Platform.OS !== "android") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      Alert.alert("Leave setup?", "Going back signs you out. You can sign in again to finish your profile.", [
+        { text: "Stay", style: "cancel" },
+        { text: "Sign out", style: "destructive", onPress: () => { void doLogout(); } },
+      ]);
+      return true;
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleStateSelect = async (item: StateItem) => {
-    setSelectedState(item);
-    setSelectedBoard(null);
-    setSelectedClass(null);
-    setBoards([]);
-    setClasses([]);
-    setBoardsLoading(true);
-    try {
-      const data = await api.data.getBoards(item.id);
-      setBoards(data.sort((a, b) => a.name.localeCompare(b.name)));
-    } catch {
-      // silent
-    } finally {
-      setBoardsLoading(false);
-    }
+  const onState = (id: number) => { setBoardReq(""); setClassReq(""); setClassPanel(false); setError(""); cat.selectState(id); };
+  const onBoard = (id: number) => { setClassReq(""); setClassPanel(false); setError(""); cat.selectBoard(id); };
+
+  const validate = (): boolean => {
+    const n = validateName(name);
+    const p = phone ? validatePhone(phone) : "";
+    const t = accepted ? "" : "Please accept the Terms of Service and Privacy Policy to continue.";
+    setNameErr(n); setPhoneErr(p); setTermsErr(t); setError("");
+    return !n && !p && !t;
   };
 
-  const handleBoardSelect = async (item: PickerItem) => {
-    const board = boards.find(b => b.id === item.id);
-    if (!board) return;
-    setSelectedBoard(board);
-    setSelectedClass(null);
-    setClasses([]);
-    setClassesLoading(true);
+  const run = async (kind: Kind) => {
+    if (lock.current || otpBusy) return;
+    if (!validate()) return;
+    if (kind === "class" && (boardId === null || cat.classId === null)) { setError("Please select your class."); return; }
+    if ((kind === "classRequest") && boardId === null) { setError("Please select your board first."); return; }
+    lock.current = true; setBusy(kind);
     try {
-      const data = await api.data.getClasses(item.id);
-      setClasses(data.sort((a, b) => a.name.localeCompare(b.name)));
-    } catch {
-      // silent
-    } finally {
-      setClassesLoading(false);
-    }
-  };
-
-  const canProceedOwnBooks = name.trim().length > 0 && privacyAccepted;
-  const canGetStarted = name.trim().length > 0 && !!selectedBoard && privacyAccepted;
-
-  const doSubmit = async (boardId: number, classId?: number): Promise<boolean> => {
-    setErrorMsg("");
-    setLoading(true);
-    try {
-      const phoneDigits = phone.replace(/\D/g, "");
-      const phonePayload =
-        phoneDigits.length === 10 && /^[6-9]/.test(phoneDigits)
-          ? `+91${phoneDigits}`
-          : undefined;
-
-      await completeProfile({
-        name: name.trim(),
-        stateId: selectedState?.id,
-        boardId,
-        classId,
-        phone: phonePayload,
-      });
-      return true;
+      const cleanName = name.trim().replace(/\s+/g, " ");
+      const phonePayload = phone ? `+91${phone}` : undefined;
+      let own = false;
+      let data: { name: string; stateId?: number; boardId?: number; classId?: number; phone?: string } = { name: cleanName, phone: phonePayload };
+      if (kind === "class") {
+        data = { ...data, stateId: stateId ?? undefined, boardId: boardId ?? undefined, classId: cat.classId ?? undefined };
+      } else if (kind === "classRequest" || kind === "boardRequest") {
+        const payload = kind === "classRequest"
+          ? { state_id: stateId, board_id: boardId, board_name: boardName, class_name_requested: classReq.trim() || null }
+          : { state_id: stateId, board_id: null, board_name: boardReq.trim() || null, class_name_requested: null };
+        const key = JSON.stringify(payload);
+        const previous = memo.current.get(key);
+        if (previous?.ambiguous) {
+          setError("We couldn’t confirm whether your request was sent. To avoid sending it twice, please edit it or continue with your own resources.");
+          return;
+        }
+        if (previous?.id === undefined) {
+          try {
+            const r = await requestCurriculum(payload);
+            memo.current.set(key, { id: r.id });
+          } catch (e) {
+            if (e instanceof ApiError && e.statusCode >= 400 && e.statusCode < 500 && e.statusCode !== 408 && !/could not be confirmed/i.test(e.message)) { setError(mutationErrorMessage(e, "Could not send your request. Please try again.")); }
+            else {
+              memo.current.set(key, { ambiguous: true });
+              setError("We couldn’t confirm whether your request was sent. To avoid sending it twice, please edit it or continue with your own resources.");
+            }
+            return;
+          }
+        }
+        if (kind === "classRequest") data = { ...data, stateId: stateId ?? undefined, boardId: boardId ?? undefined };
+        else { data = { ...data, stateId: stateId ?? undefined }; own = true; }
+      } else {
+        own = true;
+        data = { ...data, stateId: stateId ?? undefined, boardId: boardId ?? undefined };
+      }
+      const saved = await completeProfile(data, own ? { allowOwnResources: true } : undefined);
+      if (!own && !saved.profileComplete) {
+        setError("Your profile was saved, but setup could not be confirmed. Please check your curriculum and try again.");
+        return;
+      }
+      router.replace(own ? "/(tabs)/my-docs" : "/(tabs)");
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "Failed to save profile. Please try again.";
-      setErrorMsg(msg);
-      return false;
+      const msg = mutationErrorMessage(e, "Failed to save profile. Please try again.");
+      if (alive.current) {
+        setError(msg);
+        if (phone && /phone|mobile|number/i.test(msg)) setPhoneErr(msg);
+      }
     } finally {
-      setLoading(false);
+      lock.current = false;
+      if (alive.current) setBusy("");
     }
   };
 
-  const handleSubmit = async () => {
-    if (!name.trim()) { setErrorMsg("Please enter your full name"); return; }
-    if (!selectedBoard) { setErrorMsg("Please select your board"); return; }
-    if (!privacyAccepted) { setErrorMsg("Please accept the Terms of Service and Privacy Policy"); return; }
-    const ok = await doSubmit(selectedBoard.id, selectedClass?.id);
-    if (ok) router.replace("/(tabs)");
+  const openLegal = async (url: string) => {
+    if (!(await openExternal(url))) setError("Could not open the link. Please try again.");
   };
-
-  const handleProceedOwnBooks = async () => {
-    if (!canProceedOwnBooks) return;
-    const boardId = selectedBoard?.id ?? 5;
-    const ok = await doSubmit(boardId, selectedClass?.id);
-    if (ok) router.replace("/(tabs)/my-docs");
+  const legal = (label: string, url: string) => (
+    <Text accessibilityRole="link" onPress={(event) => { event.stopPropagation(); void openLegal(url); }} style={st.legalLink}>{label}</Text>
+  );
+  const toggleTerms = () => { setAccepted((a) => !a); setTermsErr(""); setError(""); };
+  const off = busy !== "" || otpBusy;
+  const openClassPanel = () => {
+    if (!name.trim()) { setNameErr("Please enter your name first."); return; }
+    setClassPanel(true);
   };
+  const ownReady = name.trim().length > 0 && accepted;
 
   return (
-    <View style={s.root}>
-      <LinearGradient
-        colors={["#EEF2FF", "#FFFFFF", "#F5F3FF"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+    <View style={{ flex: 1 }}>
+      <LinearGradient colors={["#eff6ff", "#ffffff", "#faf5ff"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: (Platform.OS === "web" ? 24 : insets.top) + 16, paddingBottom: insets.bottom + 40, gap: 20, maxWidth: 560, width: "100%", alignSelf: "center" }}>
+          {/* 1. GUIDE */}
+          <SetupGuide />
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView
-          contentContainerStyle={[s.scroll, { paddingTop: topInset + 20, paddingBottom: insets.bottom + 48 }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* ── BADGE ── */}
-          <View style={s.setupBadge}>
-            <View style={s.setupBadgeDot} />
-            <Text style={s.setupBadgeText}>SETUP YOUR PROFILE</Text>
-          </View>
-
-          {/* ── TITLE ── */}
-          <Text style={s.titleLine}>
-            <Text style={s.titleEdw}>Welcome to Edw</Text>
-            <Text style={s.titleAI}>AI</Text>
-          </Text>
-          <Text style={s.subtitle}>Tell us about yourself to personalise your experience</Text>
-
-          {/* ── ERROR BANNER ── */}
-          {!!errorMsg && (
-            <View style={s.errorBanner}>
-              <Feather name="alert-circle" size={14} color="#B91C1C" />
-              <Text style={s.errorText}>{errorMsg}</Text>
-            </View>
-          )}
-
-          {/* ══ MAIN CARD ══ */}
-          <View style={s.card}>
-
-            {/* ─ SECTION 1 ─ */}
-            <SectionBadge number={1} />
-
-            <Text style={s.fieldLabel}>Your Name</Text>
-            <TextInput
-              style={s.input}
-              placeholder="Enter your full name"
-              placeholderTextColor={Colors.placeholder}
-              value={name}
-              onChangeText={(t) => { setName(t); setErrorMsg(""); }}
-              autoCapitalize="words"
-            />
-
-            <View style={s.hr} />
-
-            <View style={s.mobileHeaderRow}>
-              <Text style={s.fieldLabel}>Mobile Number</Text>
-              <View style={s.optionalPill}>
-                <Text style={s.optionalPillText}>optional</Text>
-              </View>
-            </View>
-            <Text style={s.mobileDesc}>
-              Add your Indian mobile number to enable phone OTP login and get it pre-filled during payment.
-            </Text>
-            <View style={s.phoneRow}>
-              <View style={s.phonePrefix}>
-                <Text style={s.phonePrefixText}>+91</Text>
-              </View>
-              <TextInput
-                style={s.phoneInput}
-                placeholder="10-digit mobile number"
-                placeholderTextColor={Colors.placeholder}
-                keyboardType="phone-pad"
-                value={phone}
-                onChangeText={(t) => setPhone(t.replace(/\D/g, "").slice(0, 10))}
-                maxLength={10}
-              />
-            </View>
-            <View style={s.skipRow}>
-              <Text style={s.skipHint}>This is optional — you can always add it later.</Text>
-              <Pressable onPress={() => setPhone("")}>
-                <Text style={s.skipLink}>Skip for now</Text>
+          {/* 2. FORM */}
+          <View style={st.form}>
+            <View style={st.navRow}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Home" onPress={() => openLegal(legalUrls.home)} style={[st.navBtn, st.navHome]}>
+                <Feather name="home" size={16} color={T.g600} /><Text style={[st.navText, { color: T.g600 }]}>Home</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Back to Login" disabled={off} onPress={doLogout} style={[st.navBtn, st.navBack, off && { opacity: 0.5 }]}>
+                <Feather name="arrow-left" size={16} color={T.primary} /><Text style={[st.navText, { color: T.primary }]}>Back to Login</Text>
               </Pressable>
             </View>
 
-            {/* ─ SECTION 2 ─ */}
-            <View style={{ marginTop: 24 }}>
-              <SectionBadge number={2} />
+            <View style={{ alignItems: "center", marginBottom: 24 }}>
+              <Image source={logo} style={{ height: 48, width: 160, marginBottom: 16 }} resizeMode="contain" accessibilityLabel="EDUwAI logo" />
+              <View style={st.pill}><View style={st.dot} /><Text style={st.pillText}>SETUP YOUR PROFILE</Text></View>
+              <Text style={st.h1} accessibilityRole="header">Welcome to <Text style={{ color: T.ink }}>EDUw</Text><Text style={{ color: T.orange }}>AI</Text></Text>
+              <Text style={st.sub}>Tell us about yourself to personalise your experience</Text>
             </View>
 
-            <Text style={s.findBoardTitle}>Find Your Board</Text>
+            {error ? (
+              <View style={st.banner} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                <Feather name="alert-circle" size={16} color={T.red700} style={{ marginTop: 2 }} />
+                <Text style={st.bannerText}>{error}</Text>
+              </View>
+            ) : null}
 
-            <PickerField
-              label="State"
-              items={states}
-              selectedId={selectedState?.id ?? null}
-              onSelect={handleStateSelect}
-              placeholder="Select State"
-              loading={statesLoading}
+            {/* Section 1 */}
+            <Divider n={1} />
+            <Text style={st.h2}>Your Name</Text>
+            <TextInput
+              style={[st.input, !!nameErr && { borderColor: T.red400 }]}
+              value={name}
+              onChangeText={(t) => { setName(t.slice(0, 101)); setNameErr(""); setError(""); }}
+              editable={!off}
+              placeholder="Enter your full name"
+              placeholderTextColor={T.g400}
+              autoCapitalize="words"
+              autoComplete="name"
+              accessibilityLabel="Full name"
             />
-            <PickerField
-              label="Board / University"
-              items={boards}
-              selectedId={selectedBoard?.id ?? null}
-              onSelect={handleBoardSelect}
-              placeholder="Select Board"
-              disabled={!selectedState}
-              loading={boardsLoading}
-            />
-            <PickerField
-              label="Class / Year"
-              items={classes}
-              selectedId={selectedClass?.id ?? null}
-              onSelect={setSelectedClass}
-              placeholder={classes.length === 0 && selectedBoard ? "No classes available" : "Select Class"}
-              disabled={!selectedBoard}
-              loading={classesLoading}
-            />
+            <ErrorLine text={nameErr} />
 
-            {/* ─ GET STARTED ─ */}
-            <Pressable
-              style={[s.getStartedBtn, (!canGetStarted || loading) && s.getStartedBtnDisabled]}
-              onPress={handleSubmit}
-              disabled={loading}
-            >
-              <LinearGradient
-                colors={canGetStarted ? [Colors.indigo, "#7C3AED"] : ["#A5B4FC", "#C4B5FD"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={s.getStartedBtnGradient}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color={Colors.white} />
-                ) : (
-                  <>
-                    <Text style={s.getStartedBtnText}>Get Started</Text>
-                    <Feather name="check-circle" size={17} color={Colors.white} />
-                  </>
-                )}
-              </LinearGradient>
-            </Pressable>
+            <View style={st.rule} />
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+              <Text style={st.h2NoMb}>Mobile Number</Text>
+              <View style={st.opt}><Text style={st.optText}>optional</Text></View>
+            </View>
+            <Text style={st.helper}>Add your Indian mobile number to enable phone OTP login and get it pre-filled during payment.</Text>
+            <PhoneField phone={phone} onChange={(d) => { setPhone(d); setPhoneErr(""); setError(""); }} error={phoneErr} disabled={busy !== ""} onBusyChange={setOtpBusy} />
+            <View style={st.skipRow}>
+              <Text style={[st.skipHint, { flex: 1 }]}>This is optional — you can always add it later.</Text>
+              <TextLink label="Skip for now" color={T.g600} disabled={off} onPress={() => { setPhone(""); setPhoneErr(""); }} />
+            </View>
 
+            {/* Section 2 */}
+            <View style={{ height: 20 }} />
+            <Divider n={2} />
+            <Text style={st.h2}>Find Your Board</Text>
+            {states.status === "loading" ? <LoadingRow text="Loading states..." /> : null}
+            {states.status === "error" ? <RetryRow text="Couldn’t load states. Check your connection." onRetry={cat.loadStates} /> : null}
+            {states.status === "ready" ? (
+              <Picker label="State" items={states.items} selectedId={stateId} onSelect={(i) => onState(i.id)} placeholder="Select State" disabled={off} />
+            ) : null}
+            {stateId !== null && boards.status === "loading" ? <LoadingRow text="Loading boards..." /> : null}
+            {stateId !== null && boards.status === "error" ? <RetryRow text="Couldn’t load boards. Please retry." onRetry={cat.retryBoards} /> : null}
+            {stateId !== null && boards.status === "ready" && !noBoards ? (
+              <Picker label="Board / University" items={boards.items} selectedId={boardId} onSelect={(i) => onBoard(i.id)} placeholder="Select Board" disabled={off} />
+            ) : null}
+
+            {noBoards ? (
+              <View style={st.blue}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <Feather name="tool" size={18} color={T.blue900} />
+                  <Text style={st.blueTitle}>We’re working on this state!</Text>
+                </View>
+                <Text style={st.blueBody}>We are actively working with board materials in your state and will try to onboard them in the near future. Meanwhile, you can use your own study material.</Text>
+                <Text style={st.bluePrompt}>Want us to prioritise your board? Enter the board name below:</Text>
+                <TextInput style={st.blueInput} value={boardReq} onChangeText={(t) => setBoardReq(t)} editable={!off}
+                  placeholder="e.g. Maharashtra State Board, Osmania University" placeholderTextColor={T.g400} accessibilityLabel="Board name to request" />
+                <ActionButton label={boardReq.trim() ? "Submit & Continue with Own Books" : "Continue with Own Books"} busyLabel="Submitting..."
+                  busy={busy === "boardRequest"} disabled={off} onPress={() => run("boardRequest")} colors={[T.blue600, T.blue700]} icon="arrow-right" />
+              </View>
+            ) : null}
+
+            {boardId !== null && classes.status === "loading" ? <LoadingRow text="Loading classes..." /> : null}
+            {boardId !== null && classes.status === "error" ? <RetryRow text="Couldn’t load classes. Please retry." onRetry={cat.retryClasses} /> : null}
+            {hasClasses || noClasses ? (
+              <View style={st.note}>
+                <Text style={st.noteText}>{hasClasses
+                  ? "Select from available classes. Can't find yours? Use the link below — we'll onboard it soon."
+                  : "No classes onboarded for this board yet. Let us know what you need, or proceed with your own books."}</Text>
+              </View>
+            ) : null}
+
+            {hasClasses ? (
+              <View style={{ marginTop: 16 }}>
+                <Divider n={3} />
+                <Text style={st.h2}>Select Your Class</Text>
+                <Picker label="Class" items={classes.items} selectedId={classId} onSelect={(i) => { cat.setClassId(i.id); setClassPanel(false); }} placeholder="Select Class" disabled={off} />
+                {classId !== null && !classPanel ? (
+                  <View style={{ marginBottom: 12 }}>
+                    <ActionButton label="Continue to EDUwAI" busyLabel="Saving..." busy={busy === "class"} disabled={off} onPress={() => run("class")} colors={[T.primary, T.primaryDark]} icon="arrow-right" />
+                  </View>
+                ) : null}
+                {!classPanel ? <TextLink label="Can't find my class" disabled={off} onPress={openClassPanel} /> : null}
+              </View>
+            ) : null}
+            {noClasses && !classPanel ? (
+              <View style={{ marginTop: 12 }}>
+                <ActionButton label="Can't find my class" disabled={off} onPress={openClassPanel} colors={[T.amber500, T.amber600]} />
+              </View>
+            ) : null}
+            {classPanel && (hasClasses || noClasses) ? (
+              <View style={st.amber}>
+                <Text style={st.amberText}>We'll prioritise {boardName}. Tell us your class (optional):</Text>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                  <Text style={{ fontSize: 12, fontWeight: "500", color: T.amber700 }}>Your class</Text>
+                  <Text style={{ fontSize: 12, fontStyle: "italic", color: T.amber500 }}>optional</Text>
+                </View>
+                <TextInput style={st.amberInput} value={classReq} onChangeText={setClassReq} editable={!off}
+                  placeholder="e.g. Class 10, BSc 1st Semester" placeholderTextColor={T.g400} accessibilityLabel="Class to request" />
+                <ActionButton label="Continue to EDUwAI" busyLabel="Continuing..." busy={busy === "classRequest"} disabled={off} onPress={() => run("classRequest")} colors={[T.amber600, T.amber700]} />
+              </View>
+            ) : null}
+
+            {/* OR + own resources */}
+            <View style={st.orRow}><View style={st.dash} /><View style={st.orCap}><Text style={st.orText}>OR</Text></View><View style={st.dash} /></View>
+            <View style={[st.own, !ownReady && { opacity: 0.6 }]}>
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <Feather name="upload" size={24} color={T.green600} style={{ marginTop: 2 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={st.ownT}>Use Your Own Resources</Text>
+                  <Text style={st.ownB}>Upload your own textbooks or YouTube videos and start studying right away.</Text>
+                  {!name.trim() ? <Text style={st.ownHelp}>Enter your name above to continue.</Text>
+                    : !accepted ? <Text style={st.ownHelp}>Agree to the terms below to continue.</Text> : null}
+                  <ActionButton label="Proceed to Own Books" busyLabel="Saving..." busy={busy === "own"} disabled={off || !ownReady} onPress={() => run("own")} colors={[T.green600, T.green700]} />
+                </View>
+              </View>
+            </View>
+
+            {/* Terms */}
+            <View style={st.terms}>
+              <Checkbox checked={accepted} onToggle={toggleTerms} disabled={off}>
+                <Pressable onPress={() => { if (!off) toggleTerms(); }} accessible={false} style={{ minHeight: 44, justifyContent: "center" }}>
+                  <Text style={st.termsText}>I agree to EDUwAI's {legal("Terms of Service", legalUrls.terms)} and {legal("Privacy Policy", legalUrls.privacy)}, including the use of AI to generate answers from textbook content.</Text>
+                </Pressable>
+              </Checkbox>
+            </View>
+            <ErrorLine text={termsErr} />
+
+            <View style={st.footer}>
+              <Feather name="shield" size={16} color={T.green500} />
+              <Text style={st.footerText}>Trusted by 10,000+ students across India</Text>
+            </View>
           </View>
 
-          {/* ══ OWN RESOURCES CARD ══ */}
-          <View style={s.ownCard}>
-            <View style={s.ownCardTopRow}>
-              <View style={s.ownIconBox}>
-                <Feather name="upload" size={22} color={Colors.greenSuccess} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.ownCardTitle}>Use Your Own Resources</Text>
-                <Text style={s.ownCardDesc}>
-                  Upload your own textbooks or YouTube videos and start studying right away.
-                </Text>
-                {!canProceedOwnBooks && (
-                  <Text style={s.ownCardHint}>
-                    {!name.trim()
-                      ? "Enter your name above to continue."
-                      : "Accept the terms below to continue."}
-                  </Text>
-                )}
-              </View>
-            </View>
-            <Pressable
-              style={[s.ownBtn, !canProceedOwnBooks && s.ownBtnDisabled]}
-              onPress={handleProceedOwnBooks}
-              disabled={!canProceedOwnBooks || loading}
-            >
-              <Text style={s.ownBtnText}>Proceed to Own Books</Text>
-            </Pressable>
-          </View>
-
-          {/* ══ TERMS ══ */}
-          <Pressable style={s.termsBox} onPress={() => { setPrivacyAccepted(!privacyAccepted); setErrorMsg(""); }}>
-            <View style={[s.checkbox, privacyAccepted && s.checkboxChecked]}>
-              {privacyAccepted && <Feather name="check" size={11} color={Colors.white} />}
-            </View>
-            <Text style={s.termsText}>
-              I agree to EdwAI's{" "}
-              <Text style={s.termsLink}>Terms of Service</Text>
-              {" "}and{" "}
-              <Text style={s.termsLink}>Privacy Policy</Text>
-              , including the use of AI to generate answers from textbook content.
-            </Text>
-          </Pressable>
-
-          {/* ══ WHAT'S NEW PANEL ══ */}
+          {/* 3. WHATS NEW + TRUST TILES */}
           <WhatsNewPanel />
-
-          {/* ── FOOTER ── */}
-          <View style={s.footerRow}>
-            <Feather name="shield" size={15} color={Colors.greenSuccess} />
-            <Text style={s.footerText}>Trusted by 10,000+ students across India</Text>
-          </View>
+          <View style={{ alignItems: "center" }}><Wordmark size={18} /></View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { paddingHorizontal: 16 },
+function Divider({ n }: { n: number }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 }}>
+      <View style={st.circle}><Text style={st.circleText}>{n}</Text></View>
+      <View style={{ flex: 1, height: 1, backgroundColor: T.g200 }} />
+    </View>
+  );
+}
 
-  setupBadge: {
-    alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "#EEF2FF", borderRadius: 20, borderWidth: 1, borderColor: Colors.indigoBorder,
-    paddingHorizontal: 12, paddingVertical: 5, marginBottom: 18,
-  },
-  setupBadgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.indigo },
-  setupBadgeText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: Colors.indigo, letterSpacing: 1.2 },
-
-  titleLine: { textAlign: "center", marginBottom: 8 },
-  titleEdw: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.indigo },
-  titleAI: { fontSize: 28, fontFamily: "Inter_700Bold", color: Colors.gray900 },
-  subtitle: {
-    fontSize: 13, fontFamily: "Inter_400Regular", color: Colors.gray500,
-    textAlign: "center", marginBottom: 16, lineHeight: 20,
-  },
-
-  errorBanner: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12,
-  },
-  errorText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#B91C1C", lineHeight: 18 },
-
-  card: {
-    backgroundColor: Colors.white, borderRadius: 16, paddingTop: 28,
-    paddingHorizontal: 18, paddingBottom: 24,
-    ...platformShadow("#4F46E5", 0, 6, 0.08, 20), elevation: 5, marginBottom: 16,
-  },
-
-  sectionBadgeRow: {
-    flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 12,
-  },
-  sectionCircle: {
-    width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.indigo,
-    alignItems: "center", justifyContent: "center",
-  },
-  sectionCircleNum: { fontSize: 13, fontFamily: "Inter_700Bold", color: Colors.white },
-  sectionDivider: { flex: 1, height: 1, backgroundColor: Colors.gray200 },
-
-  fieldLabel: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.gray700, marginBottom: 7 },
-
-  input: {
-    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 8, backgroundColor: Colors.white,
-    paddingHorizontal: 14, paddingVertical: 0, height: 48,
-    fontSize: 15, fontFamily: "Inter_400Regular", color: Colors.gray900, marginBottom: 16,
-  },
-
-  hr: { height: 1, backgroundColor: Colors.gray100, marginBottom: 16 },
-
-  mobileHeaderRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 5 },
-  optionalPill: { backgroundColor: Colors.gray100, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
-  optionalPillText: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.gray500 },
-  mobileDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.gray400, lineHeight: 18, marginBottom: 10 },
-
-  phoneRow: {
-    flexDirection: "row", borderWidth: 1, borderColor: Colors.gray200, borderRadius: 8,
-    height: 48, overflow: "hidden", marginBottom: 8,
-  },
-  phonePrefix: {
-    width: 52, backgroundColor: Colors.gray100, alignItems: "center", justifyContent: "center",
-    borderRightWidth: 1, borderRightColor: Colors.gray200,
-  },
-  phonePrefixText: { fontSize: 14, fontFamily: "Inter_500Medium", color: Colors.gray600 },
-  phoneInput: {
-    flex: 1, paddingHorizontal: 14, fontSize: 15, fontFamily: "Inter_400Regular",
-    color: Colors.gray900, backgroundColor: Colors.white,
-  },
-
-  skipRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
-  skipHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.gray400, flex: 1 },
-  skipLink: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.indigo },
-
-  findBoardTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.gray900, marginBottom: 14 },
-
-  pickerWrapper: { marginBottom: 14 },
-  pickerSelector: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 8, backgroundColor: Colors.white,
-    paddingHorizontal: 14, height: 48,
-  },
-  pickerDisabled: { backgroundColor: Colors.gray50, borderColor: Colors.gray200 },
-  pickerText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.gray900 },
-  pickerPlaceholder: { color: Colors.placeholder },
-  dropdown: {
-    marginTop: 4, borderWidth: 1, borderColor: Colors.gray200, borderRadius: 8,
-    backgroundColor: Colors.white, ...platformShadow("#000", 0, 4, 0.08, 12),
-    elevation: 4, overflow: "hidden",
-  },
-  dropdownOption: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.gray100,
-  },
-  dropdownOptionSelected: { backgroundColor: "#EEF2FF" },
-  dropdownOptionText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.gray800 },
-  dropdownOptionTextSel: { fontFamily: "Inter_600SemiBold", color: Colors.indigo },
-
-  termsBox: {
-    flexDirection: "row", alignItems: "flex-start", gap: 12,
-    backgroundColor: Colors.blueTint, borderRadius: 10, borderWidth: 1, borderColor: Colors.blueTintBorder,
-    padding: 14, marginBottom: 16,
-  },
-  checkbox: {
-    width: 16, height: 16, borderRadius: 3, borderWidth: 1.5, borderColor: Colors.gray300,
-    alignItems: "center", justifyContent: "center", marginTop: 1, backgroundColor: Colors.white,
-  },
-  checkboxChecked: { backgroundColor: Colors.indigo, borderColor: Colors.indigo },
-  termsText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.gray600, lineHeight: 18 },
-  termsLink: { color: Colors.indigo, fontFamily: "Inter_500Medium" },
-
-  getStartedBtn: { borderRadius: 10, overflow: "hidden" },
-  getStartedBtnDisabled: { opacity: 0.7 },
-  getStartedBtnGradient: {
-    height: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-  },
-  getStartedBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.white },
-
-  ownCard: {
-    backgroundColor: Colors.greenSuccessLight, borderRadius: 12,
-    borderWidth: 1, borderColor: Colors.greenSuccessBorder, padding: 16, marginBottom: 16,
-  },
-  ownCardTopRow: { flexDirection: "row", gap: 12, marginBottom: 14 },
-  ownIconBox: {
-    width: 40, height: 40, borderRadius: 8, backgroundColor: "rgba(16,185,129,0.12)",
-    alignItems: "center", justifyContent: "center",
-  },
-  ownCardTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: Colors.gray900, marginBottom: 4 },
-  ownCardDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.gray600, lineHeight: 17 },
-  ownCardHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.gray400, marginTop: 4, fontStyle: "italic" },
-  ownBtn: { backgroundColor: Colors.greenSuccess, borderRadius: 24, paddingVertical: 13, alignItems: "center" },
-  ownBtnDisabled: { backgroundColor: Colors.greenSuccessDisabled },
-  ownBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.white },
-
-  footerRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingBottom: 16,
-  },
-  footerText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.gray700 },
+const st = StyleSheet.create({
+  form: { backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 16, borderWidth: 1, borderColor: T.g200, padding: 20, ...shadow },
+  navRow: { flexDirection: "row", justifyContent: "space-between", gap: 12, marginBottom: 20, flexWrap: "wrap" },
+  navBtn: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, borderRadius: 8 },
+  navHome: { backgroundColor: T.white, borderWidth: 1, borderColor: T.g200 },
+  navBack: { backgroundColor: "rgba(102,126,234,0.1)" },
+  navText: { fontSize: 13, fontWeight: "600" },
+  pill: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(102,126,234,0.1)", borderColor: "rgba(102,126,234,0.2)", borderWidth: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 16 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: T.primary },
+  pillText: { fontSize: 12, fontWeight: "600", color: T.primary, letterSpacing: 0.4 },
+  h1: { fontSize: 28, lineHeight: 36, fontWeight: "700", color: T.g900, marginBottom: 4, textAlign: "center" },
+  sub: { fontSize: 14, color: T.g500, textAlign: "center", lineHeight: 20 },
+  banner: { flexDirection: "row", gap: 8, backgroundColor: T.red50, borderColor: T.red200, borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 16 },
+  bannerText: { flex: 1, color: T.red700, fontSize: 14, lineHeight: 20 },
+  circle: { width: 32, height: 32, borderRadius: 16, backgroundColor: T.primary, alignItems: "center", justifyContent: "center" },
+  circleText: { color: T.white, fontSize: 14, fontWeight: "700" },
+  h2: { fontSize: 16, fontWeight: "600", color: T.g900, marginBottom: 12 },
+  h2NoMb: { fontSize: 16, fontWeight: "600", color: T.g900 },
+  input: { minHeight: 48, borderWidth: 1, borderColor: T.g300, backgroundColor: T.g50, borderRadius: 8, paddingHorizontal: 14, fontSize: 15, color: T.g900 },
+  rule: { height: 1, backgroundColor: T.g200, marginVertical: 16 },
+  opt: { marginLeft: 8, backgroundColor: T.g100, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
+  optText: { fontSize: 12, color: T.g500 },
+  helper: { fontSize: 12, lineHeight: 18, color: T.g500, marginBottom: 12 },
+  skipRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 12 },
+  skipHint: { fontSize: 12, color: T.g500, lineHeight: 17 },
+  blue: { backgroundColor: T.blue50, borderColor: T.blue200, borderWidth: 1, borderRadius: 12, padding: 16 },
+  blueTitle: { fontSize: 14, fontWeight: "600", color: T.blue900, flex: 1 },
+  blueBody: { fontSize: 13, lineHeight: 20, color: T.blue700, marginBottom: 12 },
+  bluePrompt: { fontSize: 13, fontWeight: "500", color: T.blue600, marginBottom: 8, lineHeight: 19 },
+  blueInput: { minHeight: 48, backgroundColor: T.white, borderColor: T.blue300, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, fontSize: 14, color: T.g900, marginBottom: 12 },
+  note: { backgroundColor: T.blue50, borderColor: T.blue200, borderWidth: 1, borderRadius: 8, padding: 12 },
+  noteText: { fontSize: 14, lineHeight: 20, color: T.blue800 },
+  amber: { backgroundColor: T.amber50, borderColor: T.amber200, borderWidth: 1, borderRadius: 8, padding: 16, marginTop: 12 },
+  amberText: { fontSize: 14, lineHeight: 20, color: T.amber800, marginBottom: 12 },
+  amberInput: { minHeight: 48, backgroundColor: T.white, borderColor: T.amber300, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, fontSize: 14, color: T.g900, marginBottom: 12 },
+  orRow: { flexDirection: "row", alignItems: "center", marginVertical: 12 },
+  dash: { flex: 1, height: 0, borderTopWidth: 2, borderStyle: "dashed", borderColor: T.g200 },
+  orCap: { marginHorizontal: 16, paddingHorizontal: 12, paddingVertical: 4, backgroundColor: T.g100, borderWidth: 1, borderColor: T.g200, borderRadius: 16 },
+  orText: { fontSize: 12, fontWeight: "700", color: T.g500, letterSpacing: 1.2 },
+  own: { backgroundColor: "#ecfdf5", borderColor: T.green200, borderWidth: 1, borderRadius: 12, padding: 20 },
+  ownT: { fontSize: 15, fontWeight: "600", color: T.g900, marginBottom: 4 },
+  ownB: { fontSize: 14, lineHeight: 20, color: T.g600, marginBottom: 16 },
+  ownHelp: { fontSize: 12, color: T.g500, marginBottom: 8 },
+  terms: { marginTop: 16, backgroundColor: T.indigo50, borderColor: T.indigo200, borderWidth: 1, borderRadius: 12, paddingVertical: 8, paddingRight: 14, paddingLeft: 4 },
+  termsText: { fontSize: 13, lineHeight: 20, color: T.g600 },
+  legalLink: { color: T.primary, textDecorationLine: "underline", fontWeight: "500" },
+  footer: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: T.g100 },
+  footerText: { fontSize: 14, color: T.g500 },
 });

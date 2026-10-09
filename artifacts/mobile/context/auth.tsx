@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 
-import api, { ApiUser } from "@/services/api";
+import api, { ApiError, ApiUser } from "@/services/api";
 import { credentialStorage } from "@/services/credentialStorage";
 import { supportPush } from "@/services/supportPush";
 import { supportStorageKey } from "@/services/supportSession";
@@ -40,6 +40,8 @@ export type UserProfile = {
   phoneVerified?: boolean;
   emailVerified?: boolean;
   profileComplete?: boolean;
+  isPreRegistered?: boolean;
+  termsAcceptedAt?: string | null;
 };
 
 export function apiUserToProfile(u: ApiUser): UserProfile {
@@ -65,6 +67,8 @@ export function apiUserToProfile(u: ApiUser): UserProfile {
     phoneVerified: u.phone_verified,
     emailVerified: u.email_verified,
     profileComplete: u.profile_complete,
+    ...(u.is_pre_registered !== undefined ? { isPreRegistered: u.is_pre_registered } : {}),
+    ...(u.terms_accepted_at !== undefined ? { termsAcceptedAt: u.terms_accepted_at } : {}),
   };
 }
 
@@ -72,6 +76,7 @@ type AuthState = {
   isRestored: boolean;
   isLoggedIn: boolean;
   isProfileComplete: boolean;
+  canUseOwnResources: boolean;
   user: UserProfile | null;
   accessToken: string | null;
   refreshAccessToken: () => Promise<string>;
@@ -86,10 +91,16 @@ type AuthState = {
   completeProfile: (data: {
     name: string;
     stateId?: number;
-    boardId: number;
+    boardId?: number;
     classId?: number;
     phone?: string;
-  }) => Promise<void>;
+  }, options?: { allowOwnResources?: boolean }) => Promise<UserProfile>;
+  verifyProfilePhone: (phone: string, otp: string) => Promise<UserProfile>;
+  acceptOrgTerms: () => Promise<UserProfile>;
+  requestCurriculum: (data: {
+    state_id: number | null; board_id: number | null;
+    board_name: string | null; class_name_requested: string | null;
+  }) => Promise<{ success: boolean; id: number }>;
   logout: (options?: { localOnly?: boolean }) => Promise<void>;
   updateUser: (updates: Partial<UserProfile>) => Promise<void>;
   refreshUser: (options?: { throwOnError?: boolean }) => Promise<void>;
@@ -111,6 +122,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isRestored, setIsRestored] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isProfileComplete, setIsProfileComplete] = useState(false);
+  // Name-only Own Resources is allowed for this session, not permanent
+  // completion. A later sign-in still honors the server's completion flag.
+  const [canUseOwnResources, setCanUseOwnResources] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [hasPhoto, setHasPhotoState] = useState<boolean | null>(null);
@@ -125,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      const epoch = sessionEpoch.current;
       try {
         const [userData, tokenData, profileData] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.user),
@@ -134,13 +149,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (userData && tokenData) {
           const parsedUser = JSON.parse(userData) as UserProfile;
-          const isComplete = profileData === "true" || parsedUser.profileComplete === true;
-          setUser(parsedUser);
-          setAccessToken(tokenData);
+          let restoredUser = parsedUser;
+          let restoredToken = tokenData;
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 12_000);
+          try {
+            let currentUser: ApiUser;
+            try {
+              currentUser = await api.auth.getMe(restoredToken, controller.signal);
+            } catch (error) {
+              if (!(error instanceof ApiError) || error.statusCode !== 401) throw error;
+              try {
+                restoredToken = await refreshAccessToken();
+              } catch {
+                await logout({ localOnly: true });
+                return;
+              }
+              currentUser = await api.auth.getMe(restoredToken, controller.signal);
+            }
+            restoredUser = { ...parsedUser, ...apiUserToProfile(currentUser) };
+            if (epoch !== sessionEpoch.current) return;
+            await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(restoredUser));
+          } catch (error) {
+            if (error instanceof ApiError && [401, 404].includes(error.statusCode)) {
+              await logout({ localOnly: true });
+              return;
+            }
+            // A transport outage doesn't discard a valid cached session.
+          } finally {
+            clearTimeout(timer);
+          }
+          if (epoch !== sessionEpoch.current) return;
+          const isComplete = typeof restoredUser.profileComplete === "boolean"
+            ? restoredUser.profileComplete : profileData === "true";
+          setUser(restoredUser);
+          setAccessToken(restoredToken);
           setIsLoggedIn(true);
           setIsProfileComplete(isComplete);
-          const epoch = sessionEpoch.current;
-          api.profile.probePhoto(tokenData).then(value => {
+          await AsyncStorage.setItem(STORAGE_KEYS.profileComplete, String(isComplete));
+          api.profile.probePhoto(restoredToken).then(value => {
             if (epoch === sessionEpoch.current) setHasPhoto(value);
           }).catch(() => {
             if (epoch === sessionEpoch.current) setHasPhoto(false);
@@ -178,6 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAccessToken(aToken);
       setIsLoggedIn(true);
       setIsProfileComplete(profileComplete);
+      setCanUseOwnResources(false);
     },
     []
   );
@@ -219,39 +267,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [storeSession]
   );
 
-  const completeProfile = useCallback(
-    async (data: {
-      name: string;
-      stateId?: number;
-      boardId: number;
-      classId?: number;
-      phone?: string;
-    }) => {
-      const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
-      if (!token) throw new Error("Not authenticated");
-
-      const res = await api.auth.saveProfile(token, {
-        full_name: data.name,
-        state_id: data.stateId ?? null,
-        board_id: data.boardId,
-        class_id: data.classId ?? null,
-        phone: data.phone,
-      });
-
-      const updated = apiUserToProfile(res.user);
-      await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updated));
-      await AsyncStorage.setItem(STORAGE_KEYS.profileComplete, "true");
-      setUser(updated);
-      setIsProfileComplete(true);
-    },
-    [accessToken]
-  );
-
   const updateUser = useCallback(
     async (updates: Partial<UserProfile>) => {
       const updated = { ...user, ...updates } as UserProfile;
       await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updated));
       setUser(updated);
+      if (typeof updates.profileComplete === "boolean") {
+        await AsyncStorage.setItem(STORAGE_KEYS.profileComplete, String(updates.profileComplete));
+        setIsProfileComplete(updates.profileComplete);
+      }
     },
     [user]
   );
@@ -267,6 +291,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const apiUser = await api.auth.getMe(token);
       if (epoch !== sessionEpoch.current) return;
       const fresh = apiUserToProfile(apiUser);
+      setIsProfileComplete(fresh.profileComplete === true);
+      await AsyncStorage.setItem(STORAGE_KEYS.profileComplete, String(fresh.profileComplete === true));
       /* Merge fresh server data on top of current state (preserves locally-cached
          fields like plan/questionsUsed that getMe does not return) */
       setUser((prev) => {
@@ -295,15 +321,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async (options?: { localOnly?: boolean }) => {
     supportPush.suspendIdentity();
     sessionEpoch.current += 1;
-    try {
-      const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
-      const rToken = await credentialStorage.getItem(STORAGE_KEYS.refreshToken);
-      if (!options?.localOnly && token && rToken) {
-        await api.auth.logout(token, rToken);
-      }
-    } catch {
-      // ignore errors during logout API call
-    }
+    const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
+    const rToken = await credentialStorage.getItem(STORAGE_KEYS.refreshToken);
     await queryClient.cancelQueries();
     queryClient.clear();
     await AsyncStorage.multiRemove([...Object.values(STORAGE_KEYS), "@edwai/p1_selection"]);
@@ -316,7 +335,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccessToken(null);
     setIsLoggedIn(false);
     setIsProfileComplete(false);
+    setCanUseOwnResources(false);
     setHasPhoto(null);
+    // Capture credentials before clearing them, but don't delay local exit on
+    // a remote outage. We make no claim that revocation succeeded on failure.
+    if (!options?.localOnly && token && rToken) {
+      void api.auth.logout(token, rToken).catch(() => {});
+    }
   }, [accessToken, queryClient, user?.id]);
 
   const refreshAccessToken = useCallback((): Promise<string> => {
@@ -349,12 +374,109 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return promise;
   }, []);
 
+  const runProfileRequest = useCallback(async <T,>(operation: (token: string) => Promise<T>) => {
+    const epoch = sessionEpoch.current;
+    const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
+    if (!token) throw new Error("Please sign in again.");
+    let result: T;
+    try {
+      result = await operation(token);
+    } catch (error) {
+      // A rejected 401 has not committed the write. Share one refresh and replay
+      // once; never automatically replay an ambiguous timeout/network failure.
+      if (!(error instanceof ApiError) || error.statusCode !== 401) throw error;
+      let refreshedToken: string;
+      try {
+        refreshedToken = await refreshAccessToken();
+      } catch (refreshError) {
+        await logout({ localOnly: true });
+        throw refreshError;
+      }
+      try {
+        result = await operation(refreshedToken);
+      } catch (retryError) {
+        if (retryError instanceof ApiError && retryError.statusCode === 401) {
+          await logout({ localOnly: true });
+        }
+        throw retryError;
+      }
+    }
+    if (epoch !== sessionEpoch.current) throw new Error("Session changed. Please sign in again.");
+    return result;
+  }, [accessToken, refreshAccessToken, logout]);
+
+  const applyServerUser = useCallback(async (apiUser: ApiUser, epoch: number) => {
+    if (epoch !== sessionEpoch.current) throw new Error("Session changed. Please sign in again.");
+    const updated = apiUserToProfile(apiUser);
+    await Promise.all([
+      AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updated)),
+      AsyncStorage.setItem(STORAGE_KEYS.profileComplete, String(updated.profileComplete === true)),
+    ]);
+    if (epoch !== sessionEpoch.current) throw new Error("Session changed. Please sign in again.");
+    setUser(updated);
+    setIsProfileComplete(updated.profileComplete === true);
+    return updated;
+  }, []);
+
+  const completeProfile = useCallback(async (
+    data: { name: string; stateId?: number; boardId?: number; classId?: number; phone?: string },
+    options?: { allowOwnResources?: boolean },
+  ) => {
+    const epoch = sessionEpoch.current;
+    const res = await runProfileRequest(token => api.auth.saveProfile(token, {
+      full_name: data.name.trim(),
+      ...(data.stateId !== undefined ? { state_id: data.stateId } : {}),
+      ...(data.boardId !== undefined ? { board_id: data.boardId } : {}),
+      ...(data.classId !== undefined ? { class_id: data.classId } : {}),
+      ...(data.phone ? { phone: data.phone } : {}),
+    }));
+    if (!res.success) throw new Error("Failed to save profile.");
+    const updated = await applyServerUser({ ...res.user, profile_complete: res.profile_complete }, epoch);
+    if (options?.allowOwnResources && !(
+      updated.isPreRegistered && !updated.termsAcceptedAt
+    )) setCanUseOwnResources(true);
+    void queryClient.invalidateQueries();
+    return updated;
+  }, [runProfileRequest, applyServerUser, queryClient]);
+
+  const verifyProfilePhone = useCallback(async (phone: string, otp: string) => {
+    const epoch = sessionEpoch.current;
+    const res = await runProfileRequest(token => api.auth.verifyPhoneForProfile(token, phone, otp));
+    if (!res.success || !res.user?.phone_verified || res.user.phone !== phone) {
+      throw new Error("Phone verification could not be confirmed. Please try again.");
+    }
+    return applyServerUser(res.user, epoch);
+  }, [runProfileRequest, applyServerUser]);
+
+  const acceptOrgTerms = useCallback(async () => {
+    const epoch = sessionEpoch.current;
+    const res = await runProfileRequest(token => api.auth.saveProfile(token, { terms_accepted: true }));
+    if (!res.success || !res.user?.terms_accepted_at || !res.profile_complete) {
+      throw new Error("Terms acceptance could not be confirmed. Please try again.");
+    }
+    const updated = await applyServerUser({ ...res.user, profile_complete: res.profile_complete }, epoch);
+    void queryClient.invalidateQueries();
+    return updated;
+  }, [runProfileRequest, applyServerUser, queryClient]);
+
+  const requestCurriculum = useCallback(async (data: {
+    state_id: number | null; board_id: number | null;
+    board_name: string | null; class_name_requested: string | null;
+  }) => {
+    const response = await runProfileRequest(token => api.onboarding.requestCurriculum(token, data));
+    if (!response.success || !Number.isInteger(response.id) || response.id <= 0) {
+      throw new Error("The request result could not be confirmed. Use Own Resources instead of submitting it again.");
+    }
+    return response;
+  }, [runProfileRequest]);
+
   return (
     <AuthContext.Provider
       value={{
         isRestored,
         isLoggedIn,
         isProfileComplete,
+        canUseOwnResources,
         user,
         accessToken,
         refreshAccessToken,
@@ -366,6 +488,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         verifyEmailOtp,
         loginWithGoogleToken,
         completeProfile,
+        verifyProfilePhone,
+        acceptOrgTerms,
+        requestCurriculum,
         logout,
         updateUser,
         refreshUser,

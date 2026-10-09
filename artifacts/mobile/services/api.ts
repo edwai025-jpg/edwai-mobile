@@ -43,6 +43,17 @@ export function resolveUrl(path: string): string {
     }
   }
 
+  // Native builds may use the supplied public API base (with or without /api).
+  // Web previews continue through the existing proxy for CORS isolation.
+  const configured = process.env.EXPO_PUBLIC_EDUWAI_API_BASE_URL?.trim().replace(/\/+$/, "");
+  if (configured) {
+    const url = new URL(configured);
+    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
+      throw new Error("The EDUwAI API base must be a public HTTPS URL without credentials or query parameters.");
+    }
+    const base = url.pathname === "/" ? `${url.origin}/api` : configured;
+    return `${base}${apiPath}`;
+  }
   return `${PROD_URL}${path}`;
 }
 
@@ -64,6 +75,9 @@ export type ApiUser = {
   org_role?: string | null;
   org_id?: number | null;
   org_name?: string | null;
+  is_pre_registered?: boolean;
+  terms_accepted_at?: string | null;
+  org_subdomain?: string | null;
   auth_provider: "phone" | "email" | "google";
   phone_verified: boolean;
   email_verified: boolean;
@@ -85,7 +99,8 @@ export type WhatsNewItem = {
   name: string;
   state: string;
   type: "board" | "class";
-  date: string;
+  date: string | null;
+  created_at?: string | null;
   is_new: boolean;
 };
 
@@ -302,7 +317,11 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    const detail = (data as { detail?: string })?.detail ?? `HTTP ${res.status}`;
+    const rawDetail = (data as { detail?: unknown })?.detail;
+    const detail = typeof rawDetail === "string" ? rawDetail
+      : Array.isArray(rawDetail)
+        ? rawDetail.map((item: { msg?: string }) => item?.msg).filter(Boolean).join("; ") || `HTTP ${res.status}`
+        : `HTTP ${res.status}`;
     throw new ApiError(detail, res.status, data);
   }
 
@@ -553,8 +572,8 @@ const api = {
         }
       ),
 
-    getMe: (accessToken: string) =>
-      request<ApiUser>("/api/auth/me", {}, accessToken),
+    getMe: (accessToken: string, signal?: AbortSignal) =>
+      request<ApiUser>("/api/auth/me", { signal }, accessToken),
 
     logout: (accessToken: string, refresh_token: string) =>
       request<{ message: string }>(
@@ -569,11 +588,12 @@ const api = {
     saveProfile: (
       accessToken: string,
       data: {
-        full_name: string;
+        full_name?: string;
         state_id?: number | null;
-        board_id: number;
+        board_id?: number | null;
         class_id?: number | null;
         phone?: string;
+        terms_accepted?: boolean;
       }
     ) =>
       request<{ success: boolean; profile_complete: boolean; user: ApiUser }>(
@@ -590,7 +610,7 @@ const api = {
       phone: string,
       otp: string
     ) =>
-      request<{ message: string }>(
+      request<{ success: boolean; user: ApiUser }>(
         "/api/auth/phone/verify-for-profile",
         {
           method: "POST",
@@ -598,6 +618,21 @@ const api = {
         },
         accessToken
       ),
+  },
+
+  onboarding: {
+    requestCurriculum: (
+      accessToken: string,
+      data: {
+        state_id: number | null;
+        board_id: number | null;
+        board_name: string | null;
+        class_name_requested: string | null;
+      },
+    ) => request<{ success: boolean; id: number }>("/api/class-requests", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }, accessToken),
   },
 
   data: {
