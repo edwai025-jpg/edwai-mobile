@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert, BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  Alert, BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -17,8 +17,6 @@ import WhatsNewPanel from "@/components/WhatsNewPanel";
 import { useAuth } from "@/context/auth";
 import { ApiError } from "@/services/api";
 import { legalUrls, mutationErrorMessage, validateName, validatePhone } from "@/services/onboarding";
-
-const logo = require("@/assets/images/eduwai-logo.png");
 
 type Kind = "class" | "classRequest" | "boardRequest" | "own";
 
@@ -171,15 +169,12 @@ function ProfileScreen() {
         <View style={[st.headerInner, { paddingTop: (Platform.OS === "web" ? 67 : insets.top) + 8 }]}>
           <View style={st.navRow}>
             <Pressable accessibilityRole="button" accessibilityLabel="Home" onPress={() => openLegal(legalUrls.home)} style={[st.navBtn, st.navHome]}>
-              <Feather name="home" size={16} color={T.g600} /><Text style={[st.navText, { color: T.g600 }]}>Home</Text>
+              <Feather name="home" size={14} color={T.g600} /><Text style={[st.navText, { color: T.g600 }]}>Home</Text>
             </Pressable>
+            <Text style={st.brandName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} accessibilityLabel="EDUwAI">EDUw<Text style={{ color: T.orange }}>AI</Text></Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Back to Login" disabled={off} onPress={doLogout} style={[st.navBtn, st.navBack, off && { opacity: 0.5 }]}>
-              <Feather name="arrow-left" size={16} color={T.primary} /><Text style={[st.navText, { color: T.primary }]}>Back to Login</Text>
+              <Feather name="arrow-left" size={14} color={T.primary} /><Text style={[st.navText, { color: T.primary }]}>Back to Login</Text>
             </Pressable>
-          </View>
-          <View style={st.brandRow}>
-            <Image source={logo} style={st.brandLogo} resizeMode="contain" accessibilityLabel="EDUwAI logo" />
-            <Text style={st.brandName} accessibilityLabel="EDUwAI">EDUw<Text style={{ color: T.orange }}>AI</Text></Text>
           </View>
         </View>
       </View>
@@ -353,15 +348,13 @@ function Divider({ n }: { n: number }) {
 const st = StyleSheet.create({
   pageHeader: { backgroundColor: T.white, borderBottomWidth: 1, borderBottomColor: T.indigo100 },
   headerInner: { maxWidth: 560, width: "100%", alignSelf: "center", paddingHorizontal: 16, paddingBottom: 12 },
-  brandRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
-  brandLogo: { height: 48, width: 56 },
-  brandName: { fontSize: 24, fontFamily: "Inter_700Bold", color: T.ink, flexShrink: 1 },
+  brandName: { flex: 1, fontSize: 20, fontFamily: "Inter_700Bold", color: T.ink, textAlign: "center" },
   form: { backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 16, borderWidth: 1, borderColor: T.g200, padding: 20, ...shadow },
-  navRow: { flexDirection: "row", justifyContent: "space-between", gap: 12, marginBottom: 8, flexWrap: "wrap" },
-  navBtn: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, borderRadius: 8 },
+  navRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 },
+  navBtn: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, borderRadius: 8 },
   navHome: { backgroundColor: T.white, borderWidth: 1, borderColor: T.g200 },
   navBack: { backgroundColor: "rgba(102,126,234,0.1)" },
-  navText: { fontSize: 13, fontWeight: "600" },
+  navText: { fontSize: 12, fontWeight: "600" },
   setupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, padding: 16, borderRadius: 12, marginBottom: 24 },
   setupTitle: { fontSize: 22, lineHeight: 28, fontWeight: "700", color: T.white, flexShrink: 1 },
   banner: { flexDirection: "row", gap: 8, backgroundColor: T.red50, borderColor: T.red200, borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 16 },

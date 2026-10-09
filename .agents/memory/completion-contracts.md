@@ -9,9 +9,9 @@ The user wants the setup guide first, then Profile, then What's New & Resources.
 
 **How to apply:** Keep this scoped to new-user completion, not the separate mobile Profile tab or other study screens.
 
-The guide-first order refers to onboarding content, not global navigation. Home, Back to Login, and EDUwAI branding belong above that content rather than inside the profile form.
+The guide-first order refers to onboarding content, not global navigation. Home, the EDUwAI wordmark, and Back to Login share one top row, with no image logo, above that content rather than inside the profile form.
 
-**Why:** The user explicitly requested easier access to navigation at the top of Complete Profile.
+**Why:** The user requested easier access to navigation at the top of Complete Profile, then specified that the image logo looked odd and should be removed.
 
 **How to apply:** Preserve the navigation header independently of the guide → form → announcements order when revising onboarding.
 
