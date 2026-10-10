@@ -26,3 +26,9 @@ Do not assume the Expo browser recorder releases microphone tracks when its stop
 **Why:** The inspected Expo 57 browser recorder finalizes its Blob on stop but leaves MediaStream cleanup for later lifecycle handling. A mounted composer must release the microphone immediately instead.
 
 **How to apply:** Explicitly release all browser tracks on stop, cancellation, interruption, or late permission resolution. If replacing the browser adapter with an SDK recorder, recheck that installed version's cleanup semantics first.
+
+Expo 57 installs its own global fetch by default; native URI-only FormData parts are not compatible with its multipart encoder.
+
+**Why:** A real-phone voice upload failed with `Unsupported FormDataPart implementation`. The installed Expo encoder explicitly rejects URI-only parts and accepts Blob or file-like values exposing readable bytes. Browser FormData tests did not exercise that encoder.
+
+**How to apply:** Check the installed native transport before choosing a multipart representation. For Expo fetch, provide real file bytes with the intended MIME type and filename, and test serialization against the installed encoder rather than only asserting mocked FormData fields. Do not globally switch fetch transports to fix one caller.

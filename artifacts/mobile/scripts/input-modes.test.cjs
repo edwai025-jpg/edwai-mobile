@@ -87,6 +87,12 @@ function nativeCapture({ granted = true, canAskAgain = true, size = 128, prepare
         getInfoAsync: async () => ({ exists: true, isDirectory: false, size }),
         deleteAsync: async uri => { calls.push(["delete", uri]); },
       };
+      if (id === "expo-file-system") return {
+        File: class {
+          constructor(uri) { assert.equal(uri, recorder.uri); }
+          async bytes() { return new Uint8Array([0, 255, 127, 2]); }
+        },
+      };
       if (id === "./inputModes") return modes;
       throw new Error(`Unexpected dependency: ${id}`);
     },
@@ -104,7 +110,9 @@ test("native AAC-in-MP4 file is finalized once, uploaded with accurate metadata,
   const [first, second] = await Promise.all([recording.stop(), recording.stop()]);
   assert.equal(first, second); assert.equal(fixture.calls.filter(item => item === "stop").length, 1);
   assert.deepEqual(plain(first.file), { uri: fixture.recorder.uri, type: "audio/mp4", name: "voice-question.m4a" });
-  assert.deepEqual(plain(fixture.capture.voiceFormData(first, 12).parts), [["audio", plain(first.file)], ["duration_seconds", "12"]]);
+  const parts = fixture.capture.voiceFormData(first, 12).parts;
+  assert.deepEqual(plain(parts), [["audio", { name: first.file.name, type: first.file.type }], ["duration_seconds", "12"]]);
+  assert.deepEqual(Array.from(await parts[0][1].bytes()), [0, 255, 127, 2]);
   assert.ok(fixture.calls.some(item => Array.isArray(item) && item[0] === "record" && item[1] === 60));
   await first.dispose(); assert.ok(fixture.calls.some(item => Array.isArray(item) && item[0] === "delete"));
 });
@@ -147,6 +155,37 @@ test("browser stop finalizes a real multipart Blob and releases every microphone
   const file = await recording.stop(), form = capture.voiceFormData(file, 2);
   assert.equal(stopped, 1); assert.equal(form.get("audio").name, "voice-question.webm"); assert.equal(form.get("duration_seconds"), "2");
   assert.equal(form.get("audio").type, "audio/webm;codecs=opus");
+});
+test("installed Expo multipart encoder rejects legacy URI parts and encodes native voice bytes", async () => {
+  class NativeForm {
+    constructor() { this._parts = []; }
+  }
+  const patched = load("node_modules/expo/src/winter/FormData.ts");
+  patched.installFormDataPatch(NativeForm);
+  const encoder = load("node_modules/expo/src/winter/fetch/convertFormData.ts", {
+    TextEncoder,
+    require: id => {
+      if (id === "../../utils/blobUtils") return { blobToArrayBufferAsync: blob => blob.arrayBuffer() };
+      throw new Error(`Unexpected encoder dependency: ${id}`);
+    },
+  });
+  const legacy = new NativeForm();
+  legacy.append("audio", { uri: "file:///cache/voice.m4a", type: "audio/mp4", name: "voice-question.m4a" });
+  await assert.rejects(encoder.convertFormDataAsync(legacy, "voice-boundary"), /Unsupported FormDataPart implementation/);
+  const fixture = nativeCapture();
+  const recording = await fixture.capture.startVoiceCapture(fixture.recorder, new AbortController().signal);
+  const file = await recording.stop();
+  const form = fixture.capture.voiceFormData(file, 12);
+  const nativeForm = new NativeForm();
+  for (const [name, value] of form.parts) nativeForm.append(name, value);
+  const encoded = await encoder.convertFormDataAsync(nativeForm, "voice-boundary");
+  const wire = Buffer.from(encoded.body);
+  assert.ok(wire.includes(Buffer.from([0, 255, 127, 2])), "audio must remain binary, not a URI or base64 string");
+  assert.match(wire.toString("latin1"), /name="audio"; filename="voice-question\.m4a"\r\ncontent-type: audio\/mp4/);
+  assert.match(wire.toString("latin1"), /name="duration_seconds"\r\n\r\n12\r\n/);
+  assert.equal(encoded.boundary, "voice-boundary");
+  assert.deepEqual([...nativeForm.keys()], ["audio", "duration_seconds"]);
+  await file.dispose();
 });
 test("usage is a GET and voice is one authenticated multipart POST without provider, model or language fields", async () => {
   const calls = [];

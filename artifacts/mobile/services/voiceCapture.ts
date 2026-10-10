@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import { requestRecordingPermissionsAsync, setAudioModeAsync } from "expo-audio";
 import type { AudioRecorder } from "expo-audio";
 import * as FileSystem from "expo-file-system/legacy";
+import { File } from "expo-file-system";
 import { MAX_VOICE_BYTES } from "./inputModes";
 
 export type VoiceFile = { file: Blob | { uri: string; type: string; name: string }; size: number; dispose: () => Promise<void> };
@@ -81,10 +82,19 @@ export async function startVoiceCapture(recorder: AudioRecorder, signal: AbortSi
 }
 export function voiceFormData(file: VoiceFile, duration: number): FormData {
   const form = new FormData();
-  if (typeof Blob !== "undefined" && file.file instanceof Blob) {
+  if (!("uri" in file.file)) {
     const extension = file.file.type.includes("mp4") ? "m4a" : file.file.type.includes("ogg") ? "ogg" : "webm";
     form.append("audio", file.file, `voice-question.${extension}`);
-  } else form.append("audio", file.file as unknown as Blob);
+  } else {
+    const nativeFile = file.file;
+    // Expo 57's default fetch encoder cannot upload legacy URI-only parts.
+    // Keep the MIME/name while exposing the actual cached file bytes.
+    form.append("audio", {
+      name: nativeFile.name,
+      type: nativeFile.type,
+      bytes: () => new File(nativeFile.uri).bytes(),
+    } as unknown as Blob);
+  }
   form.append("duration_seconds", String(duration));
   return form;
 }
