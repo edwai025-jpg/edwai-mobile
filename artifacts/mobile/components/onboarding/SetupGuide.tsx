@@ -18,7 +18,6 @@ export default function SetupGuide() {
           <Text style={g.time}>About 2 minutes</Text>
         </View>
         <Text style={g.h} accessibilityRole="header">Complete your profile in 3 simple steps</Text>
-        <Text style={g.sub}>Tell us who you are, match your curriculum, then choose how you want to study.</Text>
       </View>
       <View style={g.grid}>
         {STEPS.map((st) => (
@@ -46,7 +45,6 @@ const g = StyleSheet.create({
   pillText: { color: T.indigo100, fontSize: 11, fontWeight: "700", letterSpacing: 1.6 },
   time: { color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: "500" },
   h: { color: T.white, fontSize: 20, fontWeight: "700", lineHeight: 26 },
-  sub: { color: "rgba(224,231,255,0.85)", fontSize: 13, lineHeight: 20, marginTop: 6 },
   grid: { padding: 16, gap: 12 },
   mini: { borderRadius: 12, borderWidth: 1, padding: 12 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
