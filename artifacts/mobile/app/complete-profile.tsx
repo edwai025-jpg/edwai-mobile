@@ -12,7 +12,7 @@ import Picker, { LoadingRow, RetryRow } from "@/components/onboarding/Picker";
 import PhoneField from "@/components/onboarding/PhoneField";
 import SetupGuide from "@/components/onboarding/SetupGuide";
 import { useCatalogue } from "@/components/onboarding/useCatalogue";
-import { ActionButton, Checkbox, ErrorLine, openExternal, T, TextLink, Wordmark, shadow } from "@/components/onboarding/ui";
+import { ActionButton, Checkbox, ErrorLine, openExternal, T, TextLink, shadow } from "@/components/onboarding/ui";
 import WhatsNewPanel from "@/components/WhatsNewPanel";
 import { useAuth } from "@/context/auth";
 import { ApiError } from "@/services/api";
@@ -329,7 +329,6 @@ function ProfileScreen() {
 
           {/* 3. WHATS NEW + TRUST TILES */}
           <WhatsNewPanel />
-          <View style={{ alignItems: "center" }}><Wordmark size={18} /></View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
