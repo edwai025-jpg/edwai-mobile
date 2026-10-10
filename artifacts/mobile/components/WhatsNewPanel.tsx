@@ -236,7 +236,7 @@ export default function WhatsNewPanel() {
           <Text style={w.tileNum}>{news.data.total === null ? "—" : news.data.total}</Text>
           <Text style={w.tileS}>Boards</Text>
         </View>
-        <View style={w.tile3}><Feather name="bookmark" size={18} color={T.primaryDark} /><Text style={w.tileT}>Citations Included</Text></View>
+        <View style={w.tile3}><Feather name="sliders" size={18} color={T.primaryDark} /><Text style={w.tileT}>Adaptive Learning Features</Text></View>
       </View>
     </View>
   );
