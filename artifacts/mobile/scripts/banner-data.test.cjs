@@ -47,7 +47,7 @@ test("photo source uses authenticated endpoint, not a storage key, with identity
     FormData,
     process: { env: { EXPO_PUBLIC_DOMAIN: "fixture.replit.dev" } },
     require: name => {
-      if (name === "./profilePhotoUpload") return {};
+      if (name === "./profilePhotoUpload" || name === "./answerStream") return {};
       assert.equal(name, "react-native");
       return { Platform: { OS: "web" } };
     },

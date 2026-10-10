@@ -15,7 +15,9 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import Markdown from "react-native-markdown-display";
+import StemAnswerBody from "./StemAnswerBody";
+import { preprocessLatex } from "@/services/stemFormatting";
+import api from "@/services/api";
 
 import StudyResources from "@/components/study/StudyResources";
 import { useFocusEffect } from "expo-router";
@@ -46,11 +48,7 @@ function parseTypography(t?: TypographySettings | null) {
 
 /* ─── Preprocess markdown text ───────────────────────────────────────────── */
 export function preprocessMarkdown(text: string): string {
-  let out = text;
-  out = out.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$${inner}$$`);
-  out = out.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`);
-  out = out.replace(/\[Page (\d+)\]/g, (_, n) => `**[Page ${n}]**`);
-  return out;
+  return preprocessLatex(text);
 }
 
 /* ─── Dynamic markdown styles ────────────────────────────────────────────── */
@@ -431,6 +429,14 @@ export default function AnswerCard({
   question, accessToken, studyContext,
 }: AnswerCardProps) {
   const { isDark } = useTheme();
+  const [fetchedTypography, setFetchedTypography] = useState<TypographySettings | null>(null);
+  useEffect(() => {
+    if (typographySettings !== undefined || !accessToken) return;
+    let active = true;
+    api.study.getTypographySettings(accessToken).then(value => { if (active) setFetchedTypography(value); }).catch(() => {});
+    return () => { active = false; };
+  }, [accessToken, typographySettings]);
+  const effectiveTypography = typographySettings ?? fetchedTypography;
   const [isFocused, setIsFocused] = useState(false);
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -456,8 +462,6 @@ export default function AnswerCard({
 
   const rawText = streaming ? streamText : (response?.answer ?? "");
   if (!rawText) return null;
-  const displayText = preprocessMarkdown(rawText);
-
   /* ── theme tokens for BOX 2 ── */
   const answerBorder = isDark ? "rgba(102,126,234,0.30)" : "#bfdbfe";
   const iconBg = isDark ? "rgba(102,126,234,0.25)" : "#ffffff";
@@ -498,7 +502,7 @@ export default function AnswerCard({
               {streaming && <Text style={an.typing}>typing...</Text>}
             </View>
           </View>
-          <Markdown style={getMdStyles(isDark, typographySettings) as never}>{displayText}</Markdown>
+          <StemAnswerBody content={rawText} isDark={isDark} typography={effectiveTypography} streaming={streaming} />
           {!streaming && response?.validation && mode === "explain" && (
             <ValidationBadge v={response.validation} />
           )}
@@ -515,7 +519,7 @@ export default function AnswerCard({
               {streaming && <Text style={an.typing}>typing...</Text>}
             </View>
           </View>
-          <Markdown style={getMdStyles(isDark, typographySettings) as never}>{displayText}</Markdown>
+          <StemAnswerBody content={rawText} isDark={isDark} typography={effectiveTypography} streaming={streaming} />
           {!streaming && response?.validation && mode === "explain" && (
             <ValidationBadge v={response.validation} />
           )}

@@ -56,7 +56,8 @@ for (const streaming of [true, false]) {
         : `data: ${JSON.stringify({ type: "token", content: answer })}\n\ndata: ${JSON.stringify({ type: "done", ...metadata })}\n`;
       const signal = new AbortController().signal;
       const api = load("../services/api.ts", {
-        require: name => name === "react-native" ? { Platform: { OS: "ios" } } : {},
+        require: name => name === "react-native" ? { Platform: { OS: "ios" } }
+          : name === "./answerStream" ? load("../services/answerStream.ts", {}) : {},
         fetch: async (_url, options) => {
           assert.equal(options.headers.Authorization, "Bearer fictional-sdk-test");
           assert.equal(options.headers.Accept, "text/event-stream");
@@ -78,7 +79,8 @@ for (const streaming of [true, false]) {
 
 test("Own Books JSON fallback keeps answer-language metadata", async () => {
   const api = load("../services/api.ts", {
-    require: name => name === "react-native" ? { Platform: { OS: "ios" } } : {},
+    require: name => name === "react-native" ? { Platform: { OS: "ios" } }
+      : name === "./answerStream" ? load("../services/answerStream.ts", {}) : {},
     fetch: async () => fixtureResponse(JSON.stringify({
       answer: "తెలుగు సమాధానం", language: "te", answer_language: "telugu", cache_used: true,
     }), false),

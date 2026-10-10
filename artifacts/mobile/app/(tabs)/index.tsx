@@ -289,7 +289,9 @@ export default function TextbooksScreen() {
   useEffect(() => {
     abortCtrl.current?.abort();
     setResponse(null); setStudyContext(null); setStreaming(false); setQueryLoading(false);
-  }, [user?.id]);
+    setStreamText(""); setImagesLoading(false);
+    return () => abortCtrl.current?.abort();
+  }, [user?.id, selectedDoc?.id]);
   const boardId = user?.boardId;
   const prevBoardIdRef = useRef<number | undefined | "__init__">("__init__");
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;
@@ -450,6 +452,7 @@ export default function TextbooksScreen() {
     const ctrl = new AbortController();
     abortCtrl.current = ctrl;
     setMode(qMode); setQueryLoading(true); setStreaming(true);
+    setImagesLoading(false);
     setStreamText(""); setResponse(null);
     setStudyContext(null);
     const originalQuestion = question.trim();

@@ -250,7 +250,9 @@ export default function OwnBooksScreen() {
   useEffect(() => {
     abortCtrl.current?.abort();
     setResponse(null); setStudyContext(null); setStreaming(false); setQueryLoading(false);
-  }, [user?.id]);
+    setStreamText("");
+    return () => abortCtrl.current?.abort();
+  }, [user?.id, selectedDoc?.id]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

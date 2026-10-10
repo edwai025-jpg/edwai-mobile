@@ -9,3 +9,4 @@
 - [Study resource scope](study-resource-scope.md) — Completed-answer controls use frozen context and existing APIs; voice quota and replay are distinct from question usage.
 - [Profile completion contract](completion-contracts.md) — Required order and full onboarding scope; preserve server completion truth and non-idempotent request limitations.
 - [Question input scope](input-mode-scope.md) — Detailed PDF parity boundaries; voice capture is independent of books and answer/explanation quotas.
+- [Answer formatting parity](answer-formatting-scope.md) — One renderer, unchanged answer APIs, no notation repair or extra generation; chemistry tests must match module conditions.

@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import type { ImagePickerAsset } from "expo-image-picker";
 import { prepareProfilePhotoUpload } from "./profilePhotoUpload";
+import { readAnswerStream } from "./answerStream";
 
 const PROD_URL = "https://edwai-api-953672603784.asia-south1.run.app";
 export const PHOTO_ENDPOINT = `${PROD_URL}/api/student/profile/photo`;
@@ -339,93 +340,14 @@ export class ApiError extends Error {
   }
 }
 
-/* Parse Phase 1 SSE lines: {chunk:"..."} tokens, final blob has answer/sources/etc. */
-function parseSseText(
-  text: string,
-  onChunk: (chunk: string) => void
-): { fullAnswer: string; responseData: Partial<QueryResponse> } {
-  let fullAnswer = "";
-  const responseData: Partial<QueryResponse> = {};
-  const lines = text.split("\n");
-  for (const line of lines) {
-    if (!line.startsWith("data: ")) continue;
-    const payload = line.slice(6).trim();
-    if (payload === "[DONE]" || payload === "") continue;
-    try {
-      const parsed = JSON.parse(payload) as {
-        chunk?: string;
-        answer?: string;
-        sources?: PageCitation[];
-        diagram_images?: DiagramImage[];
-        citation_images?: CitationImage[];
-        validation?: ValidationResult;
-        cached?: boolean;
-        image_source_pages?: number[];
-        is_visual_question?: boolean;
-        document_id?: number;
-      };
-      if (parsed.chunk) {
-        fullAnswer += parsed.chunk;
-        onChunk(parsed.chunk);
-      } else {
-        Object.assign(responseData, parsed);
-      }
-    } catch {}
-  }
-  return { fullAnswer, responseData };
-}
-
-/* Parse Phase 2 SSE lines: {type:"token",content:"..."} and {type:"done",...} */
-function parseSseTextPhase2(
-  text: string,
-  onChunk: (chunk: string) => void
-): { fullAnswer: string; responseData: Partial<QueryResponse> } {
-  let fullAnswer = "";
-  const responseData: Partial<QueryResponse> = {};
-  const lines = text.split("\n");
-  for (const line of lines) {
-    if (!line.startsWith("data: ")) continue;
-    const payload = line.slice(6).trim();
-    if (payload === "[DONE]" || payload === "") continue;
-    try {
-      const parsed = JSON.parse(payload) as {
-        type?: string;
-        content?: string;
-        answer?: string;
-        sources?: PageCitation[];
-        citations?: number[];
-        model_used?: string;
-        cache_used?: boolean;
-        context_cached?: boolean;
-        language?: string;
-        answer_language?: string;
-      };
-      if (parsed.type === "token" && parsed.content) {
-        fullAnswer += parsed.content;
-        onChunk(parsed.content);
-      } else if (parsed.type === "done") {
-        if (parsed.answer) responseData.answer = parsed.answer;
-        if (parsed.sources) responseData.sources = parsed.sources;
-        if (parsed.cache_used !== undefined) responseData.cached = parsed.cache_used;
-        if (parsed.language) responseData.language = parsed.language;
-        if (parsed.answer_language) responseData.answer_language = parsed.answer_language;
-      } else if (parsed.type === "error") {
-        throw new ApiError(parsed.content ?? "Stream error", 500, null);
-      }
-    } catch (e) {
-      if (e instanceof ApiError) throw e;
-    }
-  }
-  return { fullAnswer, responseData };
-}
-
 /* ── Generic SSE streaming helper ─────────────────────────────────────── */
 async function fetchStream(
   path: string,
   body: Record<string, unknown>,
   accessToken: string,
+  onChunk: (chunk: string) => void,
   signal?: AbortSignal
-): Promise<{ text: string; res: Response }> {
+): Promise<QueryResponse> {
   const url = resolveUrl(path);
   const res = await fetch(url, {
     method: "POST",
@@ -449,22 +371,7 @@ async function fetchStream(
     throw new ApiError(detail, res.status, null);
   }
 
-  /* If ReadableStream is available (browser) read chunk-by-chunk */
-  const reader = res.body?.getReader?.();
-  if (reader) {
-    const decoder = new TextDecoder();
-    let accumulated = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      accumulated += decoder.decode(value, { stream: true });
-    }
-    return { text: accumulated, res };
-  }
-
-  /* React Native: body is undefined — read buffered text */
-  const text = await res.text();
-  return { text, res };
+  return readAnswerStream(res, onChunk, signal);
 }
 
 /* ── Phase 1 query stream ──────────────────────────────────────────────── */
@@ -475,32 +382,7 @@ export async function streamQuery(
   onChunk: (chunk: string) => void,
   signal?: AbortSignal
 ): Promise<QueryResponse> {
-  const { text } = await fetchStream(path, body, accessToken, signal);
-
-  if (text.includes("data: ")) {
-    const { fullAnswer, responseData } = parseSseText(text, onChunk);
-    return {
-      answer: responseData.answer ?? fullAnswer,
-      language: responseData.language,
-      answer_language: responseData.answer_language,
-      sources: responseData.sources,
-      diagram_images: responseData.diagram_images,
-      citation_images: responseData.citation_images,
-      validation: responseData.validation,
-      cached: responseData.cached,
-      image_source_pages: responseData.image_source_pages,
-      is_visual_question: responseData.is_visual_question,
-      document_id: responseData.document_id,
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(text) as QueryResponse;
-    if (parsed.answer) onChunk(parsed.answer);
-    return parsed;
-  } catch {}
-
-  throw new ApiError("Unexpected response from server", 200, null);
+  return fetchStream(path, body, accessToken, onChunk, signal);
 }
 
 /* ── Phase 2 query stream ──────────────────────────────────────────────── */
@@ -512,28 +394,7 @@ export async function streamQueryPhase2(
   signal?: AbortSignal
 ): Promise<QueryResponse> {
   const path = `/api/phase2/documents/${documentId}/query/stream`;
-  const { text } = await fetchStream(path, body, accessToken, signal);
-
-  if (text.includes("data: ")) {
-    const { fullAnswer, responseData } = parseSseTextPhase2(text, onChunk);
-    return {
-      answer: responseData.answer ?? fullAnswer,
-      language: responseData.language,
-      answer_language: responseData.answer_language,
-      sources: responseData.sources,
-      cached: responseData.cached,
-    };
-  }
-
-  /* Non-streaming JSON fallback */
-  try {
-    const parsed = JSON.parse(text) as QueryResponse & { cache_used?: boolean };
-    const answer = parsed.answer ?? "";
-    if (answer) onChunk(answer);
-    return { answer, language: parsed.language, answer_language: parsed.answer_language, sources: parsed.sources, cached: parsed.cache_used };
-  } catch {}
-
-  throw new ApiError("Unexpected response from server", 200, null);
+  return fetchStream(path, body, accessToken, onChunk, signal);
 }
 
 const api = {
@@ -799,7 +660,7 @@ const api = {
       body: { document_id: number; question: string; mode: "retrieve" | "explain" },
       onChunk: (chunk: string) => void,
       signal?: AbortSignal
-    ) => streamQuery("/api/query", body, token, onChunk, signal),
+    ) => streamQuery("/api/query/stream", body, token, onChunk, signal),
 
     extractQuestionFromImage: (token: string, imageUri: string) => {
       const formData = new FormData();
