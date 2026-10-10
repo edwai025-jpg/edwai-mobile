@@ -84,6 +84,8 @@ async function proxyHandler(req: any, res: any) {
 }
 
 // Preserve the multipart boundary and bytes; JSON middleware intentionally skips it.
+// Voice accepts 10 MiB of audio plus 64 KiB of multipart framing on the existing upstream.
+router.all(/^\/edwai\/(transcribe-voice-question)$/, express.raw({ type: "multipart/form-data", limit: 10 * 1024 * 1024 + 64 * 1024 }), proxyHandler);
 router.all(/^\/edwai\/(.*)$/, express.raw({ type: "multipart/form-data", limit: "6mb" }), proxyHandler);
 
 export default router;

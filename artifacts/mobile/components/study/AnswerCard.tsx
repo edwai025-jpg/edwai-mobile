@@ -45,7 +45,7 @@ function parseTypography(t?: TypographySettings | null) {
 }
 
 /* ─── Preprocess markdown text ───────────────────────────────────────────── */
-function preprocessMarkdown(text: string): string {
+export function preprocessMarkdown(text: string): string {
   let out = text;
   out = out.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `$$${inner}$$`);
   out = out.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`);
@@ -54,7 +54,7 @@ function preprocessMarkdown(text: string): string {
 }
 
 /* ─── Dynamic markdown styles ────────────────────────────────────────────── */
-function getMdStyles(isDark: boolean, typography?: TypographySettings | null) {
+export function getMdStyles(isDark: boolean, typography?: TypographySettings | null) {
   const { fontSize, lineHeight, fontFamily } = parseTypography(typography);
   const body = isDark ? "#e5e7eb" : "#1f2937";
   const heading = isDark ? "#fff" : "#111827";

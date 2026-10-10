@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnswerCard from "@/components/study/AnswerCard";
 import { resolveStudyLanguage, type StudyAnswerContext } from "@/services/studyResources";
-import IndianLanguageKeyboard from "@/components/study/IndianLanguageKeyboard";
+import QuestionComposer from "@/components/study/QuestionComposer";
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
@@ -48,21 +48,6 @@ const CARD_BG = "#1e1e3a";
 const BORDER = "rgba(255,255,255,0.10)";
 const TEXT_COLOR = "#f9fafb";
 const MUTED = "#9ca3af";
-
-const TRANS_LANGS = [
-  { code: "hindi", label: "Hindi", native: "हि" },
-  { code: "telugu", label: "Telugu", native: "తె" },
-  { code: "tamil", label: "Tamil", native: "த" },
-  { code: "kannada", label: "Kannada", native: "ಕ" },
-  { code: "malayalam", label: "Malayalam", native: "മ" },
-  { code: "marathi", label: "Marathi", native: "म" },
-  { code: "bengali", label: "Bengali", native: "ব" },
-  { code: "gujarati", label: "Gujarati", native: "ગ" },
-  { code: "punjabi", label: "Punjabi", native: "ਪ" },
-  { code: "odia", label: "Odia", native: "ଓ" },
-];
-
-type InputMode = "normal" | "transliterate" | "keyboard";
 
 /* ─── Picker ─────────────────────────────────────────────────────────────── */
 function DarkPicker({
@@ -300,20 +285,11 @@ export default function TextbooksScreen() {
   const [captureUri, setCaptureUri] = useState<string | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
 
-  /* input mode */
-  const [inputMode, setInputMode] = useState<InputMode>("normal");
-  const [transLang, setTransLang] = useState("hindi");
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [transWord, setTransWord] = useState("");
-  const [showLangPicker, setShowLangPicker] = useState(false);
-  const [showKeyboard, setShowKeyboard] = useState(false);
-
   const abortCtrl = useRef<AbortController | null>(null);
   useEffect(() => {
     abortCtrl.current?.abort();
     setResponse(null); setStudyContext(null); setStreaming(false); setQueryLoading(false);
   }, [user?.id]);
-  const prevQuestion = useRef("");
   const boardId = user?.boardId;
   const prevBoardIdRef = useRef<number | undefined | "__init__">("__init__");
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;
@@ -371,17 +347,6 @@ export default function TextbooksScreen() {
       { text: "Sign Out", style: "destructive", onPress: () => logout() },
     ]);
   }, [logout]);
-
-  const handleKeyboardInput = useCallback((char: string) => {
-    setQuestion((q) => q + char);
-  }, []);
-
-  const handleKeyboardBackspace = useCallback(() => {
-    setQuestion((q) => {
-      if (!q) return q;
-      return [...q].slice(0, -1).join("");
-    });
-  }, []);
 
   /* ── board status ── */
   const loadBoardStatus = useCallback(async () => {
@@ -468,7 +433,7 @@ export default function TextbooksScreen() {
     abortCtrl.current?.abort();
     setStudyContext(null);
     setStreaming(false); setQueryLoading(false); setImagesLoading(false);
-    setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText("");
+    setSelectedDoc(doc); setResponse(null); setStreamText("");
     if (!accessToken) return;
     try { setHistory(await api.study.getQueryHistory(accessToken, doc.id)); } catch {}
     /* Persist selection so history survives app restarts */
@@ -477,33 +442,6 @@ export default function TextbooksScreen() {
       JSON.stringify({ cls: selectedClass, subject: selectedSubject, doc })
     ).catch(() => {});
   }, [accessToken, selectedClass, selectedSubject]);
-
-  /* ── transliterate ── */
-  const handleQuestionChange = useCallback((text: string) => {
-    setQuestion(text);
-    if (inputMode === "transliterate" && text.endsWith(" ") && !prevQuestion.current.endsWith(" ") && accessToken) {
-      const words = text.trimEnd().split(/\s+/);
-      const lastWord = words[words.length - 1];
-      if (lastWord && lastWord.length > 0 && /^[a-zA-Z]+$/.test(lastWord)) {
-        setTransWord(lastWord);
-        api.study.transliterate(accessToken, transLang, lastWord)
-          .then(setSuggestions).catch(() => setSuggestions([]));
-      }
-    } else if (!text.endsWith(" ")) {
-      setSuggestions([]);
-    }
-    prevQuestion.current = text;
-  }, [inputMode, transLang, accessToken]);
-
-  const handlePickSuggestion = useCallback((suggestion: string) => {
-    const words = question.trimEnd().split(/\s+/);
-    words[words.length - 1] = suggestion;
-    const newQ = words.join(" ") + " ";
-    setQuestion(newQ);
-    prevQuestion.current = newQ;
-    setSuggestions([]);
-    setTransWord("");
-  }, [question]);
 
   /* ── query ── */
   const handleQuery = useCallback(async (qMode: "retrieve" | "explain") => {
@@ -620,7 +558,6 @@ export default function TextbooksScreen() {
   const isRestricted = !!boardStatus?.is_restricted && boardStatus.processing_status !== "completed";
   const boardReady = !boardStatusLoading && !isRestricted;
   const hasNoBoard = !boardId;
-  const activeLang = TRANS_LANGS.find((l) => l.code === transLang);
   const cardBg = isDark ? CARD_BG : "#ffffff";
   const cardBorder = isDark ? BORDER : "#e5e7eb";
   const textCol = isDark ? TEXT_COLOR : "#111827";
@@ -713,100 +650,29 @@ export default function TextbooksScreen() {
         )}
 
         {/* ─── QUESTION INTERFACE ─── */}
-        {selectedDoc && (
-          <View style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+        <View style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <View style={sc.qHeader}>
               <View style={[sc.qIconBox, !isDark && { backgroundColor: "rgba(102,126,234,0.10)" }]}><Text style={{ fontSize: 18 }}>💬</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={[sc.cardTitle, { color: textCol }]}>Ask a Question</Text>
-                <Text style={[sc.qDocName, { color: mutedCol }]} numberOfLines={1}>From: <Text style={{ color: PRIMARY }}>{selectedDoc.title}</Text></Text>
+                <Text style={[sc.qDocName, { color: mutedCol }]} numberOfLines={1}>{selectedDoc ? `From: ${selectedDoc.title}` : "Select a textbook before submitting"}</Text>
               </View>
             </View>
 
             <RecentQuestionsPanel history={history} onSelect={setQuestion} />
 
-            {/* Input Mode Bar */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }} contentContainerStyle={{ gap: 6, paddingRight: 4 }}>
-              {(["normal", "transliterate", "keyboard"] as InputMode[]).map((m) => {
-                const label = m === "normal" ? "✍️ Normal" : m === "transliterate" ? "🔤 Transliterate" : "⌨️ Keyboard";
-                const active = inputMode === m;
-                return (
-                  <Pressable
-                    key={m}
-                    style={[im.btn, active && im.btnActive, !active && !isDark && { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" }]}
-                    onPress={() => { setInputMode(m); setSuggestions([]); }}
-                  >
-                    <Text style={[active ? im.btnTextActive : im.btnText, !active && !isDark && { color: "#374151" }]}>{label}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            {/* Language picker (transliterate) */}
-            {inputMode === "transliterate" && (
-              <View style={{ marginBottom: 10 }}>
-                <Pressable style={im.langBtn} onPress={() => setShowLangPicker((v) => !v)}>
-                  <Text style={im.langBtnText}>{activeLang?.native} {activeLang?.label}</Text>
-                  <Feather name={showLangPicker ? "chevron-up" : "chevron-down"} size={13} color={PRIMARY} />
-                </Pressable>
-                {showLangPicker && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={im.langList} contentContainerStyle={{ gap: 6, padding: 8 }}>
-                    {TRANS_LANGS.map((l) => (
-                      <Pressable key={l.code} style={[im.langChip, transLang === l.code && im.langChipActive]} onPress={() => { setTransLang(l.code); setShowLangPicker(false); }}>
-                        <Text style={[im.langChipText, transLang === l.code && im.langChipTextActive]}>{l.native} {l.label}</Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                )}
-                <Text style={im.transHint}>Type in English → Press Space to convert (e.g., "namaste " → "नमस्ते ")</Text>
-              </View>
-            )}
-
-            {inputMode === "keyboard" && (
-              <Pressable style={im.keyboardTrigger} onPress={() => setShowKeyboard(true)}>
-                <Text style={im.keyboardTriggerIcon}>⌨️</Text>
-                <Text style={im.keyboardTriggerText}>Tap to open Indian Language Keyboard</Text>
-                <Feather name="chevron-right" size={14} color={PRIMARY} />
-              </Pressable>
-            )}
-
-            {/* Textarea */}
-            <View style={[sc.textareaWrap, !isDark && { backgroundColor: "#f9fafb", borderColor: "#e5e7eb" }]}>
-              <TextInput
-                style={[sc.textarea, { backgroundColor: isDark ? "#2a2a3e" : "#f9fafb", color: textCol }]}
-                multiline
-                numberOfLines={4}
-                placeholder={inputMode === "transliterate" ? 'Type in English, press Space to convert (e.g., "namaste ")' : "e.g., What are the main relief features of India?"}
-                placeholderTextColor={mutedCol}
-                value={question}
-                onChangeText={handleQuestionChange}
-                editable={!isQuerying && !ocrLoading}
-                textAlignVertical="top"
-              />
-              <View style={sc.toolbar}>
-                <Pressable style={sc.toolBtn} onPress={() => handleImageCapture(true)} disabled={isQuerying}>
+            <QuestionComposer
+              value={question} onChange={setQuestion} documentKey={`textbook:${selectedDoc?.id ?? "none"}`} isDark={isDark}
+              disabled={isQuerying} imageBusy={ocrLoading}
+              tools={<>
+                <Pressable accessibilityRole="button" accessibilityLabel="Capture question with camera" style={sc.toolBtn} onPress={() => handleImageCapture(true)} disabled={isQuerying || ocrLoading}>
                   <Feather name="camera" size={15} color={isQuerying ? MUTED : "#a78bfa"} />
                 </Pressable>
-                <Pressable style={sc.toolBtn} onPress={() => handleImageCapture(false)} disabled={isQuerying}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Choose question image" style={sc.toolBtn} onPress={() => handleImageCapture(false)} disabled={isQuerying || ocrLoading}>
                   <Feather name="image" size={15} color={isQuerying ? MUTED : "#a78bfa"} />
                 </Pressable>
-              </View>
-            </View>
-
-            {/* Transliterate suggestions */}
-            {suggestions.length > 0 && (
-              <View style={im.suggestionsWrap}>
-                <Text style={im.suggestionsLabel}>Suggestions for "{transWord}":</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 4 }}>
-                  {suggestions.slice(0, 5).map((s, i) => (
-                    <Pressable key={i} style={im.suggestionChip} onPress={() => handlePickSuggestion(s)}>
-                      <Text style={im.suggestionChipNum}>{i + 1}</Text>
-                      <Text style={im.suggestionChipText}>{s}</Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
+              </>}
+            />
 
             {/* OCR feedback */}
             {captureUri && (
@@ -821,15 +687,14 @@ export default function TextbooksScreen() {
 
             {/* Action buttons */}
             <View style={sc.actionRow}>
-              <Pressable style={[sc.actionBtn, { backgroundColor: PRIMARY }, (!question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("retrieve")} disabled={!question.trim() || isQuerying}>
+              <Pressable style={[sc.actionBtn, { backgroundColor: PRIMARY }, (!selectedDoc || !question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("retrieve")} disabled={!selectedDoc || !question.trim() || isQuerying}>
                 {isQuerying && mode === "retrieve" ? <ActivityIndicator size="small" color="#fff" /> : <Text style={sc.actionBtnText}>📖 Answer from Book</Text>}
               </Pressable>
-              <Pressable style={[sc.actionBtn, { backgroundColor: "#059669" }, (!question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("explain")} disabled={!question.trim() || isQuerying}>
+              <Pressable style={[sc.actionBtn, { backgroundColor: "#059669" }, (!selectedDoc || !question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("explain")} disabled={!selectedDoc || !question.trim() || isQuerying}>
                 {isQuerying && mode === "explain" ? <ActivityIndicator size="small" color="#fff" /> : <Text style={sc.actionBtnText}>💡 Learn Concept</Text>}
               </Pressable>
             </View>
-          </View>
-        )}
+        </View>
 
         {/* ─── ANSWER ─── */}
         {(queryLoading || streaming || response) && (
@@ -855,15 +720,6 @@ export default function TextbooksScreen() {
         </View>
       </ScrollView>
       </KeyboardAvoidingView>
-
-      {showKeyboard && (
-        <IndianLanguageKeyboard
-          onInput={handleKeyboardInput}
-          onBackspace={handleKeyboardBackspace}
-          onClose={() => setShowKeyboard(false)}
-          isDarkMode
-        />
-      )}
 
       <UpgradeModal visible={showUpgrade} onClose={() => setShowUpgrade(false)} />
     </LinearGradient>

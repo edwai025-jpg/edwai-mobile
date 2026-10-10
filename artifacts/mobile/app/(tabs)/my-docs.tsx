@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnswerCard from "@/components/study/AnswerCard";
+import QuestionComposer from "@/components/study/QuestionComposer";
 import { resolveStudyLanguage, type StudyAnswerContext } from "@/services/studyResources";
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { useAuth } from "@/context/auth";
@@ -354,7 +355,7 @@ export default function OwnBooksScreen() {
     abortCtrl.current?.abort();
     setStudyContext(null);
     setStreaming(false); setQueryLoading(false);
-    setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText("");
+    setSelectedDoc(doc); setResponse(null); setStreamText("");
     setYtMode(doc.source_type === "youtube" ? null : "qa");
     if (!accessToken) return;
     try { setHistory(await api.phase2.getQueryHistory(accessToken, doc.id)); } catch {}
@@ -579,6 +580,11 @@ export default function OwnBooksScreen() {
         </View>
 
         {/* ─── YOUTUBE MODE PICKER (6f) ─── */}
+        {!selectedDoc && <View style={sc.card}>
+          <Text style={sc.cardTitle}>Ask a Question</Text>
+          <Text style={sc.cardSubtitle}>Select a ready book before submitting. You can type or record your question first.</Text>
+          <QuestionComposer value={question} onChange={setQuestion} documentKey="own-book:none" isDark={isDark} disabled={isQuerying} />
+        </View>}
         {selectedDoc && selectedDoc.is_ready && isYoutube && ytMode === null && (
           <View style={sc.card}>
             <Text style={sc.cardTitle}>🎬 How do you want to use this video?</Text>
@@ -629,19 +635,8 @@ export default function OwnBooksScreen() {
               <>
                 <RecentQuestionsPanel history={history} onSelect={setQuestion} />
 
-                <View style={sc.textareaWrap}>
-                  <TextInput
-                    style={sc.textarea}
-                    multiline
-                    numberOfLines={4}
-                    placeholder={isYoutube ? "Ask anything about this video…" : "e.g., What are the main relief features of India?"}
-                    placeholderTextColor={MUTED}
-                    value={question}
-                    onChangeText={setQuestion}
-                    editable={!isQuerying}
-                    textAlignVertical="top"
-                  />
-                </View>
+                <QuestionComposer value={question} onChange={setQuestion} documentKey={`own-book:${selectedDoc!.id}`}
+                  isDark={isDark} disabled={isQuerying} placeholder={isYoutube ? "Ask anything about this video…" : undefined} />
 
                 <View style={sc.actionRow}>
                   <Pressable
@@ -707,6 +702,7 @@ const sc = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingBottom: 110, paddingTop: 12 },
   card: { backgroundColor: CARD_BG, borderRadius: 12, borderWidth: 1, borderColor: BORDER, padding: 16, marginBottom: 12 },
   cardTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: TEXT_COLOR, marginBottom: 8 },
+  cardSubtitle: { fontSize: 13, lineHeight: 20, color: MUTED, marginBottom: 10 },
   subTabRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
   subTab: { flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: BORDER, alignItems: "center", backgroundColor: "#2a2a3e" },
   subTabActive: { backgroundColor: "#2d2a4a", borderColor: "rgba(102,126,234,0.6)" },

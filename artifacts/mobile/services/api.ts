@@ -822,8 +822,15 @@ const api = {
         token
       ),
 
-    transliterate: (token: string, lang: string, word: string) =>
-      request<string[]>(`/api/transliterate/${lang}/${encodeURIComponent(word)}`, {}, token),
+    transliterate: (token: string, lang: string, word: string, signal?: AbortSignal) =>
+      request<{ result: string[]; success: boolean; error?: string }>(
+        `/api/transliterate/${lang}/${encodeURIComponent(word)}?num_suggestions=5`, { signal }, token),
+
+    getVoiceQuestionUsage: (token: string, signal?: AbortSignal) =>
+      request<import("./inputModes").VoiceQuestionUsage>("/api/billing/voice-question-usage", { signal }, token),
+
+    transcribeVoiceQuestion: (token: string, body: FormData, signal?: AbortSignal) =>
+      request<import("./inputModes").VoiceQuestionResult>("/api/transcribe-voice-question", { method: "POST", body, signal }, token),
 
     getTypographySettings: (token: string) =>
       request<TypographySettings>("/api/typography-settings", {}, token),
