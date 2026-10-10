@@ -232,7 +232,7 @@ function ProfileScreen() {
             {states.status === "loading" ? <LoadingRow text="Loading states..." /> : null}
             {states.status === "error" ? <RetryRow text="Couldn’t load states. Check your connection." onRetry={cat.loadStates} /> : null}
             {states.status === "ready" ? (
-              <Picker label="State" items={states.items} selectedId={stateId} onSelect={(i) => onState(i.id)} placeholder="Select State" disabled={off} />
+              <Picker label="State" items={states.items} selectedId={stateId} onSelect={(i) => onState(i.id)} placeholder="Select State" disabled={off} searchable searchPlaceholder="Search states..." />
             ) : null}
             {stateId !== null && boards.status === "loading" ? <LoadingRow text="Loading boards..." /> : null}
             {stateId !== null && boards.status === "error" ? <RetryRow text="Couldn’t load boards. Please retry." onRetry={cat.retryBoards} /> : null}
