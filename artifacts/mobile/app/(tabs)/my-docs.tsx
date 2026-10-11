@@ -21,6 +21,7 @@ import AnswerCard from "@/components/study/AnswerCard";
 import QuestionComposer, { type QuestionComposerHandle } from "@/components/study/QuestionComposer";
 import RecentQuestionsPanel from "@/components/study/RecentQuestionsPanel";
 import { useRecentQuestions } from "@/hooks/useRecentQuestions";
+import { useSourceSettings } from "@/hooks/useSourceSettings";
 import { resolveStudyLanguage, type StudyAnswerContext } from "@/services/studyResources";
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { useAuth } from "@/context/auth";
@@ -171,6 +172,7 @@ const up = StyleSheet.create({
 export default function OwnBooksScreen() {
   const insets = useSafeAreaInsets();
   const { accessToken, logout, user } = useAuth();
+  const { disclaimerMessages } = useSourceSettings(false);
   const { isDark, toggleTheme } = useTheme();
 
   /* usage / upgrade */
@@ -642,7 +644,7 @@ export default function OwnBooksScreen() {
 
         {/* ─── ANSWER ─── */}
         {(queryLoading || streaming || response) && (
-          <AnswerCard loading={queryLoading && !streaming} streaming={streaming} streamText={streamText} response={response} mode={queryMode} studyContext={studyContext} accessToken={accessToken ?? undefined} />
+          <AnswerCard loading={queryLoading && !streaming} streaming={streaming} streamText={streamText} response={response} mode={queryMode} studyContext={studyContext} accessToken={accessToken ?? undefined} disclaimerMessages={disclaimerMessages} isOwnBook />
         )}
 
         <View style={sc.footer}>

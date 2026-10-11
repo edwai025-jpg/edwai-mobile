@@ -32,3 +32,9 @@ Expo 57 installs its own global fetch by default; native URI-only FormData parts
 **Why:** A real-phone voice upload failed with `Unsupported FormDataPart implementation`. The installed Expo encoder explicitly rejects URI-only parts and accepts Blob or file-like values exposing readable bytes. Browser FormData tests did not exercise that encoder.
 
 **How to apply:** Check the installed native transport before choosing a multipart representation. For Expo fetch, provide real file bytes with the intended MIME type and filename, and test serialization against the installed encoder rather than only asserting mocked FormData fields. Do not globally switch fetch transports to fix one caller.
+
+For Expo bundle checks, discover the managed port and entry URL instead of assuming Metro's default port or the expo-router entry path.
+
+**Why:** The managed server used a different port and a workspace-relative entry URL. The guessed URLs failed while the actual iOS and Android bundles compiled successfully.
+
+**How to apply:** Read the running workflow's port and the served HTML script URL or launch manifest before requesting native bundles. Do not treat a guessed URL's 404 as a compilation failure.

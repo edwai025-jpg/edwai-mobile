@@ -28,6 +28,8 @@ import { resolveStudyLanguage, type StudyAnswerContext } from "@/services/studyR
 import QuestionComposer, { type QuestionComposerHandle } from "@/components/study/QuestionComposer";
 import RecentQuestionsPanel from "@/components/study/RecentQuestionsPanel";
 import { useRecentQuestions } from "@/hooks/useRecentQuestions";
+import { useSourceSettings } from "@/hooks/useSourceSettings";
+import { attachStudyPages, fetchStudyPages, streamedAnswerForDisplay } from "@/services/studyPages";
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
@@ -36,9 +38,7 @@ import { useTheme } from "@/context/theme";
 import { pickStudyImage } from "@/services/studyImageCapture";
 import api, {
   ApiError,
-  BoardPageConfig,
   BoardStatus,
-  DisclaimerMessages,
   Phase1Document,
   QueryResponse,
   TypographySettings,
@@ -189,7 +189,8 @@ const bp = StyleSheet.create({
 /* ─── Main Screen ────────────────────────────────────────────────────────── */
 export default function TextbooksScreen() {
   const insets = useSafeAreaInsets();
-  const { accessToken, user, logout } = useAuth();
+  const { accessToken, user, logout, runAuthenticatedRequest } = useAuth();
+  const { disclaimerMessages, boardPageConfig, pendingBoard } = useSourceSettings(true);
 
   /* usage */
   const { usage, usageLoading, refreshUsage } = useBannerUsage();
@@ -213,8 +214,6 @@ export default function TextbooksScreen() {
 
   /* session config */
   const [typographySettings, setTypographySettings] = useState<TypographySettings | null>(null);
-  const [disclaimerMessages, setDisclaimerMessages] = useState<DisclaimerMessages | null>(null);
-  const [boardPageConfig, setBoardPageConfig] = useState<BoardPageConfig | null>(null);
 
   /* query */
   const [question, setQuestion] = useState("");
@@ -245,7 +244,7 @@ export default function TextbooksScreen() {
     setResponse(null); setStudyContext(null); setStreaming(false); setQueryLoading(false);
     setStreamText(""); setImagesLoading(false);
     return () => abortCtrl.current?.abort();
-  }, [user?.id, selectedDoc?.id]);
+  }, [user?.id, user?.boardId, selectedDoc?.id]);
   const boardId = user?.boardId;
   const prevBoardIdRef = useRef<number | undefined | "__init__">("__init__");
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;
@@ -285,14 +284,7 @@ export default function TextbooksScreen() {
   useEffect(() => {
     if (!accessToken) return;
     api.study.getTypographySettings(accessToken).then(setTypographySettings).catch(() => {});
-    api.study.getDisclaimerMessages(accessToken).then(setDisclaimerMessages).catch(() => {});
   }, [accessToken]);
-
-  /* ── Board page config (fetched when board_id is known) ── */
-  useEffect(() => {
-    if (!accessToken || !boardId) return;
-    api.study.getBoardPageConfig(accessToken, boardId).then(setBoardPageConfig).catch(() => {});
-  }, [accessToken, boardId]);
 
   const handleLogout = useCallback(() => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -407,6 +399,7 @@ export default function TextbooksScreen() {
     setStudyContext(null);
     const originalQuestion = question.trim();
     const bookTitle = selectedDoc.title;
+    const configForAnswer = pendingBoard.current;
     const valid = () => abortCtrl.current === ctrl && !ctrl.signal.aborted;
     let accumulated = "";
     try {
@@ -416,7 +409,8 @@ export default function TextbooksScreen() {
         (chunk) => { if (valid()) { accumulated += chunk; setStreamText((t) => t + chunk); } },
         ctrl.signal
       );
-      const finalRes = res.answer ? res : { ...res, answer: accumulated };
+      const displayMode = (await configForAnswer)?.page_display_mode ?? "original";
+      const finalRes = streamedAnswerForDisplay(res.answer ? res : { ...res, answer: accumulated }, displayMode);
       if (!valid()) return;
       setStudyContext({
         id: `${selectedDoc.id}:${Date.now()}`, question: originalQuestion, answer: finalRes.answer,
@@ -425,27 +419,19 @@ export default function TextbooksScreen() {
       });
       setResponse(finalRes); setStreaming(false); setQueryLoading(false);
       /* Phase 1: fetch citation/diagram images asynchronously after stream */
-      if (finalRes.image_source_pages?.length && accessToken) {
+      if (finalRes.answerTransport !== "json" && !finalRes.answer_not_found && finalRes.document_id && finalRes.image_source_pages?.length) {
         setImagesLoading(true);
-        const docId = finalRes.document_id ?? selectedDoc!.id;
-        const pages = finalRes.image_source_pages!;
-        const includeDiagrams = finalRes.is_visual_question ?? false;
-        setTimeout(async () => {
+        void (async () => {
           try {
-            const imgRes = await api.study.fetchQueryImages(accessToken, {
-              document_id: docId,
-              pages,
-              include_diagrams: includeDiagrams,
+            const imgRes = await fetchStudyPages(finalRes, displayMode, ctrl.signal, {
+              generated: (docId, filename) => runAuthenticatedRequest(token => api.study.fetchAiPage(token, docId, filename, ctrl.signal)),
+              standard: body => runAuthenticatedRequest(token => api.study.fetchQueryImages(token, body, ctrl.signal)),
             });
-            if (!valid()) return;
-            setResponse((prev) => prev ? {
-              ...prev,
-              phase1_citations: imgRes.citation_images?.length ? imgRes.citation_images : prev.phase1_citations,
-              diagram_images: imgRes.diagram_images?.length ? imgRes.diagram_images : prev.diagram_images,
-            } : prev);
+            if (!valid() || !imgRes) return;
+            setResponse(prev => prev ? attachStudyPages(prev, imgRes, displayMode) : prev);
           } catch {}
           finally { if (valid()) setImagesLoading(false); }
-        }, 300);
+        })();
       }
       if (finalRes.answer && !finalRes.answer.startsWith("Error:")) recentQuestions.refreshAfterAnswer();
       /* Refresh usage after each query */
@@ -460,7 +446,7 @@ export default function TextbooksScreen() {
       }
       setStreaming(false); setQueryLoading(false);
     }
-  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium, recentQuestions.refreshAfterAnswer]);
+  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium, recentQuestions.refreshAfterAnswer, pendingBoard, runAuthenticatedRequest]);
 
   /* ── image / OCR ── */
   const handleImageCapture = useCallback(async (fromCamera: boolean) => {

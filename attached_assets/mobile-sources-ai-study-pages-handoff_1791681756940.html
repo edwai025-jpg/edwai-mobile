@@ -1,0 +1,514 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>EDUwAI Sources &amp; AI Study Pages — Mobile Handoff</title><style>html{color-scheme:light;scroll-behavior:smooth}*{box-sizing:border-box}body{margin:0;background:#f4f6fc;color:#202b43;font:15px/1.7 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1100px;margin:32px auto;background:white;padding:40px 48px;border:1px solid #dfe4f2;border-radius:16px;box-shadow:0 8px 30px #263b6b0a}header{border-bottom:1px solid #e3e7f1;padding-bottom:22px;margin-bottom:26px}.eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#667085;font-weight:700}.badge{display:inline-block;margin:12px 6px 12px 0;padding:5px 12px;border-radius:18px;background:#edf0ff;color:#4338ca;font-size:12px;font-weight:700}.banner{padding:16px 18px;border:1px solid #b9dec7;border-radius:10px;background:#effaf2;color:#195b32;font-weight:600}figure{margin:22px 0 0}figure img{display:block;width:100%;height:auto;border:1px solid #dce2f5;border-radius:10px}figcaption{font-size:12px;color:#667085;margin-top:7px}h1{font-size:32px;line-height:1.2;letter-spacing:-.025em;color:#24104f}h2{font-size:23px;line-height:1.35;margin-top:42px;padding-top:16px;border-top:1px solid #e5e8f0;color:#24104f}h3{font-size:18px;margin-top:26px;color:#4338ca}p{margin:14px 0}a{color:#4338ca}li{margin:5px 0}strong{color:#172b4d}code{font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;background:#eef1f8;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{padding:18px;background:#16213b;color:#f1f4ff;border-radius:10px;overflow:auto;line-height:1.6}pre code{padding:0;background:transparent;color:inherit;overflow-wrap:normal}table{display:block;max-width:100%;overflow-x:auto;border-collapse:collapse;font-size:13px;margin:20px 0}th,td{padding:11px 13px;border:1px solid #dce2ed;text-align:left;vertical-align:top;min-width:140px}th{background:#eef1ff;color:#302777;font-weight:700}tr:nth-child(even) td{background:#f9faff}blockquote{padding:10px 18px;border-left:4px solid #667eea;background:#f3f5ff;margin:18px 0}.footer{margin-top:36px;padding-top:18px;border-top:1px solid #dfe4f2;color:#667085;font-size:12px}@media(max-width:700px){body{font-size:14px}main{margin:0;border:0;border-radius:0;padding:24px 18px}h1{font-size:26px}h2{font-size:20px}th,td{padding:9px;min-width:130px}}@media print{body{background:white}main{border:0;box-shadow:none;margin:0;padding:0;max-width:none}h2,h3{break-after:avoid}pre,figure,tr{break-inside:avoid}table{display:table;width:100%;font-size:10px}th,td{min-width:0}code{font-size:10px}h1{font-size:26px}}</style></head><body><main><header><div class="eyebrow">EDUwAI · Mobile developer handoff</div><span class="badge">Sources &amp; AI Study Pages only</span><span class="badge">Same existing web pathway</span><span class="badge">No page images exported</span><div class="banner">Mobile recreates the interface and calls the existing backend. Generation, page selection, storage, and publication stay server-side. Missing AI images never fall back to original textbook pages.</div></header><h1>EDUwAI Sources &amp; AI Study Pages — Mobile Handoff</h1>
+<p>Documentation-only extraction of the existing web pathway. Scope: <strong>Sources notice, AI Study Pages notice/settings, existing image selection and retrieval, backend processing, and page footer</strong>. Previously exported answer controls and Recent Questions are not reimplemented or re-exported.</p>
+<h2>1. Required boundary</h2>
+<p><strong>Mobile recreates the UI and uses the existing web-app backend pathway. Nothing new is implemented on the backend, and mobile does not generate, rank, regenerate, transform, or independently retrieve textbook pages.</strong></p>
+<ul>
+<li>Use existing authenticated EDUwAI APIs and the existing question/answer client.</li>
+<li>Keep generation, relevance selection, storage, publication/version fencing, and configuration in the current backend.</li>
+<li>In <code>edwai_generated</code> mode, display <strong>AI-generated study pages only</strong>. Never replace a missing generated image with an original textbook scan, PDF screenshot, or extracted textbook diagram.</li>
+<li>Do not download a PDF, perform local OCR, search storage buckets, derive a page from a printed page number, or generate a new infographic in mobile.</li>
+<li>Do not introduce another image endpoint, backend, database, provider integration, scheduler, or client-side page-ranking algorithm.</li>
+<li>This export contains <strong>no actual study-page or textbook images</strong>, including the image visible in the supplied screenshot. Example IDs and payloads below are illustrative; image bytes are omitted.</li>
+<li>Other display modes are described only to explain existing branch boundaries; this is not a request to add an original-page viewer to mobile.</li>
+</ul>
+<h2>2. Sources: exact setting-to-screen pathway</h2>
+<h3>Backend setting and student API</h3>
+<p>The Sources text is a global <code>SystemSettings</code> value:</p>
+<table>
+<thead>
+<tr>
+<th>Storage key</th>
+<th>Student response field</th>
+<th>Screen location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>student_source_citation_text</code></td>
+<td><code>source_citation_text</code></td>
+<td>Paragraph beneath “Sources”</td>
+</tr>
+<tr>
+<td><code>student_page_context_text</code></td>
+<td><code>page_context_text</code></td>
+<td>Notice beneath “AI Study Pages” / existing citation-section heading</td>
+</tr>
+</tbody>
+</table>
+<p>Read:</p>
+<pre><code class="language-http">GET &lt;API_ORIGIN&gt;/api/disclaimer-messages
+Authorization: Bearer &lt;EXISTING_ACCESS_TOKEN&gt;
+Accept: application/json
+</code></pre>
+<p><code>&lt;API_ORIGIN&gt;</code> means the mobile app's already configured EDUwAI origin. Include <code>/api</code> only once. Do not create another login flow or send a <code>user_id</code>.</p>
+<p>The response is an object with <code>source_citation_text</code>, <code>page_context_text</code>, and <code>ai_warning_text</code>. The last field is used elsewhere in the answer UI and is outside this extraction.</p>
+<p>Illustrative response using the notice wording supplied by the user:</p>
+<pre><code class="language-json">{
+  &quot;source_citation_text&quot;: &quot;EDUwAI has curated the context using the context and syllabus and training the general content to provide as accurate and as specific information as possible for students to excel in exam preparation. Note : that if you are not able to find the accurate information , use Learn Concept Mode.&quot;,
+  &quot;page_context_text&quot;: &quot;Please review all generated AI study pages carefully. The first image may not always reflect complete accuracy, as these pages often attempt to summarize the entire context. Most importantly, AI systems can generate incorrect information—always verify key details against your course materials, recommended sources, and teachers.&quot;,
+  &quot;ai_warning_text&quot;: &quot;&lt;existing answer warning; not part of this handoff&gt;&quot;
+}
+</code></pre>
+<p><strong>The long wording is configurable, not the code's default and not a value captured from the production database. Mobile must show the API value, not hardcode this sample.</strong> The heading “Sources” is a frontend literal, not part of the returned paragraph.</p>
+<h3>Defaults and legacy handling</h3>
+<p>Both the admin GET and student GET use <code>_student_disclaimer_text</code>:</p>
+<ul>
+<li>Missing row or falsey stored value: return the current default.</li>
+<li>Stored value whose trimmed text equals the exact legacy string: return the current default, without rewriting the stored row.</li>
+<li>Otherwise return the stored value unchanged; the client does not normalize, shorten, translate, or append its own explanation.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Current executable default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source_citation_text</code></td>
+<td><code>EDUwAI generated this response using relevant learning context.</code></td>
+</tr>
+<tr>
+<td><code>page_context_text</code></td>
+<td><code>Related learning context is shown to support your study.</code></td>
+</tr>
+</tbody>
+</table>
+<p>Exact legacy strings recognized by the backend:</p>
+<ul>
+<li>Sources: <code>EDUwAI Generated Content using related syllabus/context, the actual discussion may be in the following pages of official study material/text book.</code></li>
+<li>Page context: <code>Please check the adjacent pages for full context as only top 3 pages are shown here for the reference</code></li>
+</ul>
+<p>Saving an empty string does not disable these notices; GET replaces it with the default. A whitespace-only custom value is truthy and is not replaced by this helper. Do not implement a separate legacy/default-selection algorithm in mobile.</p>
+<h3>Existing admin configuration — reference only</h3>
+<ul>
+<li><code>GET /api/admin/disclaimer-messages</code>: returns the same three fields; admin authentication required.</li>
+<li><code>POST /api/admin/disclaimer-messages</code>: accepts an object containing any of <code>source_citation_text</code>, <code>page_context_text</code>, <code>ai_warning_text</code>. Present keys are inserted/updated in <code>SystemSettings</code>; omitted keys are untouched; commits once.</li>
+<li>Success: <code>{&quot;message&quot;:&quot;Disclaimer messages updated successfully&quot;}</code>.</li>
+<li>These are global settings, not per-book, per-user, or per-board notices.</li>
+<li>Student mobile calls the <strong>student GET only</strong>. Do not add a mobile admin editor or write these settings as part of displaying the notices.</li>
+</ul>
+<h3>Web loading and display conditions</h3>
+<ul>
+<li>Disclaimer state initially contains empty strings.</li>
+<li><code>loadDisclaimerMessages()</code> runs on portal mount.</li>
+<li>On success, each value is assigned as <code>data.&lt;field&gt; || ''</code>.</li>
+<li>On failure, the web logs “Failed to load disclaimer messages”; initial notices remain empty. It does not substitute the screenshot's text locally.</li>
+<li>No push subscription, refresh timer, or per-answer disclaimer reload exists in this loader. Admin edits become visible on a subsequent settings fetch.</li>
+<li>Sources card appears only when <code>answer.sources?.length &gt; 0</code>.</li>
+<li>Sources heading remains visible even if its notice is empty; the paragraph itself is conditional on a truthy <code>source_citation_text</code>.</li>
+<li>The card renders the generic notice, <strong>not a list of source-page numbers, textbook scans, source snippets, or clickable per-source references</strong>.</li>
+<li>The notice is plain text in JSX, not Markdown or HTML. “Learn Concept Mode” inside the setting is not an automatic mode switch or a hyperlink.</li>
+</ul>
+<h2>3. AI Study Pages: display setting and notice</h2>
+<h3>Board-controlled display mode</h3>
+<p>This is a different setting from the notice text:</p>
+<pre><code class="language-http">GET &lt;API_ORIGIN&gt;/api/boards/7/page-config
+Authorization: Bearer &lt;EXISTING_ACCESS_TOKEN&gt;
+</code></pre>
+<pre><code class="language-json">{
+  &quot;board_id&quot;: 7,
+  &quot;page_display_mode&quot;: &quot;edwai_generated&quot;,
+  &quot;ncert_book_code&quot;: null
+}
+</code></pre>
+<ul>
+<li>Backend source: <code>Board.page_display_mode</code>.</li>
+<li>Known branches: <code>original</code>, <strong><code>edwai_generated</code></strong>, and <code>embedded</code>. Preserve the spelling <code>edwai_generated</code>; do not rename it to <code>eduwai_generated</code>.</li>
+<li>Missing/falsey mode defaults to <code>original</code>.</li>
+<li>Missing board returns 404, <code>{&quot;detail&quot;:&quot;Board not found&quot;}</code>.</li>
+<li>Optional query parameter <code>document_id</code> returns that document's <code>ncert_book_code</code>; the normal web call does not pass it, so <code>ncert_book_code</code> is normally null in this fetch.</li>
+<li>The web fetch runs when <code>user?.board_id</code> becomes known/changes, not for every image. If no board ID exists, it does not call this loader.</li>
+<li>Web fetch failure stores <code>{page_display_mode:'original', ncert_book_code:null}</code>.</li>
+<li>The image-serving backend determines its own branch from the <strong>document's</strong> board, rather than accepting a client display-mode override. A mismatch between user-board config and document-board config can affect the frontend label; do not claim they are always the same or change the web implementation to resolve it.</li>
+<li>Existing board administration sets this field through <code>POST /api/admin/boards</code> or <code>PUT /api/admin/boards/{board_id}</code> along with the existing board fields. Mobile does not change board settings.</li>
+</ul>
+<h3>Heading and notice</h3>
+<p>The shared-book image section is gated by:</p>
+<pre><code class="language-text">answer.sources?.[0]?.base64_images?.length &gt; 0
+</code></pre>
+<ul>
+<li>Config <code>edwai_generated</code>: palette icon and heading <strong>“AI Study Pages”</strong>.</li>
+<li>Other configs: book icon and existing heading “Page Citations”.</li>
+<li>Only the <strong>first source object's</strong> <code>base64_images</code> array is read for this shared-book section.</li>
+<li>If all generated-image requests fail or are omitted, the section and its page-context notice do not appear. Do not render placeholder textbook pages.</li>
+<li>The notice is conditional on truthy <code>page_context_text</code>.</li>
+<li>The web adds <code>ℹ️ </code> before the API's plain text. It is not embedded into the image; the backend default itself does not include this icon.</li>
+<li>If an admin includes the icon in the stored string, the existing web markup would add another one; the guide does not silently change that behavior.</li>
+</ul>
+<p>The Sources paragraph and AI Study Pages notice are independent fields. Do not substitute one for the other or use the unrelated <code>ai_warning_text</code> as the study-page notice.</p>
+<h2>4. Streaming retrieval: reproduce this exact web branch</h2>
+<p>The existing shared-book answer stream supplies the image-selection metadata. Mobile does <strong>not</strong> calculate it.</p>
+<p>Relevant fields on the existing stream's <code>done</code> event:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>document_id</code></td>
+<td>Current backend-resolved document identity for image requests</td>
+</tr>
+<tr>
+<td><code>image_source_pages</code></td>
+<td>Ordered physical PDF page IDs selected by the backend</td>
+</tr>
+<tr>
+<td><code>image_primary_pages</code></td>
+<td>Subset classified as direct matches</td>
+</tr>
+<tr>
+<td><code>sources</code></td>
+<td>Existing answer sources; first source receives fetched image presentation data</td>
+</tr>
+<tr>
+<td><code>is_visual_question</code></td>
+<td>Used by standard image POST branch for diagram inclusion</td>
+</tr>
+<tr>
+<td><code>answer_not_found</code></td>
+<td>Suppress image fetching/rendering for unsupported answers</td>
+</tr>
+<tr>
+<td><code>material_not_found</code>, <code>general_fallback</code></td>
+<td>Existing answer state; never invent related pages when the backend sends no eligible image pages</td>
+</tr>
+</tbody>
+</table>
+<p>Illustrative metadata only:</p>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;done&quot;,
+  &quot;document_id&quot;: 42,
+  &quot;image_source_pages&quot;: [18, 20],
+  &quot;image_primary_pages&quot;: [18],
+  &quot;answer_not_found&quot;: false
+}
+</code></pre>
+<p>This is an excerpt, not a complete answer-event schema.</p>
+<h3>Fetch gate</h3>
+<p>The web fetches images only when:</p>
+<ol>
+<li><code>answer_not_found</code> is false.</li>
+<li><code>image_source_pages</code> is non-empty.</li>
+<li>The event has a <code>document_id</code>.</li>
+<li>This is a shared-book answer, not <code>useOwnBook</code>.</li>
+<li>The question/document request is still current.</li>
+</ol>
+<p>It sets image-loading state and attaches the image requests to that answer's cancellation fence.</p>
+<h3>Generated-only branch</h3>
+<p>For <code>edwai_generated</code>, the web:</p>
+<ol>
+<li>Takes <code>image_source_pages.slice(0, 5)</code>. Current backend selection normally returns at most <strong>3</strong>, so five is a frontend bound, not a guarantee of five returned images.</li>
+<li>Builds <code>page_${String(page).padStart(3,'0')}.png</code>.</li>
+<li>Sends parallel authenticated binary GETs:</li>
+</ol>
+<pre><code class="language-http">GET &lt;API_ORIGIN&gt;/api/ai-images/42/page_018.png
+Authorization: Bearer &lt;EXISTING_ACCESS_TOKEN&gt;
+</code></pre>
+<ol start="4">
+<li>On HTTP success, reads the response Blob and converts it to a data URL for the web image element. Native mobile may use its existing image decoder/viewer for the same response bytes; this is rendering, not another processing pipeline.</li>
+<li>Creates a presentation item containing <code>page</code>, <code>data</code>, <code>filename</code>, and <code>image_role</code>.</li>
+<li>Sets <code>image_role</code> to <code>direct_match</code> if the physical page is in <code>image_primary_pages</code>; otherwise <code>nearby_context</code>.</li>
+<li>Drops failed/non-success responses.</li>
+<li>Sorts successful items with direct matches first, then preserves the original backend selection order within each role.</li>
+<li>Applies <code>citation_images</code> to <code>answer.sources[0].base64_images</code> and explicitly applies <code>diagram_images: []</code>.</li>
+<li>Ends loading after all requests settle, without discarding the answer text.</li>
+</ol>
+<p><strong>Important:</strong> failed results carry an internal flag named <code>needsFallback</code>, but this branch does <strong>not</strong> perform a fallback. It filters them out. Do not mistake the variable name for permission to call a PDF/image renderer or switch to <code>/api/images/...</code>.</p>
+<p>The merge only attaches images if there is already a first source object. It does not manufacture a synthetic source for an empty <code>sources</code> array.</p>
+<h3>Cancellation and stale responses</h3>
+<p>The web's <code>createAnswerRequestFence</code> tracks a request ID and document identity. Starting a new question, switching documents, or disposing aborts active query/image requests. <code>isCurrent()</code> is checked before applying image responses or clearing loading state.</p>
+<p>Mobile must preserve that existing request-lifecycle behavior using its current client/UI components. Late images must not be attached to another question or another book. Do not create a second answer lifecycle or cache service for these pages.</p>
+<p>On <code>answer_not_found</code>, the web removes <code>base64_images</code> from returned sources and suppresses diagrams. Generated display mode also suppresses cached <code>event.diagrams</code> through <code>diagramsForDisplayMode</code>. Neither unsupported answers nor generated-mode cache hits authorize original diagram display.</p>
+<h2>5. Binary AI-image API: exact backend behavior</h2>
+<pre><code class="language-http">GET /api/ai-images/{document_id}/{filename}
+</code></pre>
+<ul>
+<li>Requires the existing bearer token.</li>
+<li>Looks up <code>Document</code> by ID; absent document: 404, <code>Document not found</code>.</li>
+<li>For a private organization document, caller must have the same <code>org_id</code>; mismatch: 403, <code>Document not accessible</code>.</li>
+<li>Accepted filename regex: <code>^page_\d{3}(_ai)?\.png$</code>.</li>
+<li>Accepts <code>page_018.png</code> and legacy alias <code>page_018_ai.png</code>.</li>
+<li>Invalid filename: 400, <code>Invalid filename</code>.</li>
+<li>Removes <code>_ai</code> before deriving the storage identity.</li>
+<li>Extracts the three-digit physical page number; the handler's regex currently does not accept a four-digit page filename. Do not work around this by truncating page IDs.</li>
+<li>Reads <code>document.active_image_dispatch_id</code>.</li>
+<li>If <code>document.batch_dispatch_id</code> exists but no active image dispatch is published: 404, <code>AI image not published</code>. It does not serve an older stable image.</li>
+<li>Resolves the key through existing <code>storage.get_ai_page_image_path</code>.</li>
+<li>Downloads the stored bytes and returns them unchanged as <strong><code>Content-Type: image/png</code></strong>, not JSON.</li>
+<li>Storage/download failure: 404, <code>AI image not found</code>.</li>
+<li>No request body, pagination, prompt, model selector, desired mode, source URL, or mobile-specific processing parameter.</li>
+<li>This handler does not add a page footer or run generation when an image is missing.</li>
+</ul>
+<p>Internal paths, documented for understanding only:</p>
+<pre><code class="language-text">Immediate / legacy:
+phase1/ai_images/doc_{document_id}/page_{page:03d}.png
+
+Published versioned delayed attempt:
+phase1/ai_images/doc_{document_id}/dispatches/{active_image_dispatch_id}/page_{page:03d}.png
+</code></pre>
+<p>These are backend storage keys, not public URLs. Mobile must not construct bucket URLs, list objects, use storage credentials, or choose a dispatch itself. The backend owns publication and selects the active attempt.</p>
+<h2>6. Standard image API and non-streaming boundary</h2>
+<p>The web's <strong>original/embedded</strong> streaming branch uses the existing standard POST; generated streaming uses the binary GET branch above instead.</p>
+<pre><code class="language-http">POST &lt;API_ORIGIN&gt;/api/query/images
+Authorization: Bearer &lt;EXISTING_ACCESS_TOKEN&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  &quot;document_id&quot;: 42,
+  &quot;pages&quot;: [18, 20],
+  &quot;primary_pages&quot;: [18],
+  &quot;include_diagrams&quot;: false
+}
+</code></pre>
+<p>Request contract:</p>
+<ul>
+<li><code>document_id</code>: required integer.</li>
+<li><code>pages</code>: required integer array of physical PDF pages.</li>
+<li><code>primary_pages</code>: integer array, default <code>[]</code>.</li>
+<li><code>include_diagrams</code>: boolean, default <code>true</code>; web supplies <code>event.is_visual_question || false</code>.</li>
+<li>Server uses only the first <strong>3</strong> requested pages.</li>
+<li>Backend resolves the document's board mode; there is no client mode override.</li>
+<li>Same document existence and organization checks as binary GET.</li>
+</ul>
+<p>Illustrative generated-mode response, with image data deliberately omitted:</p>
+<pre><code class="language-json">{
+  &quot;diagram_images&quot;: [],
+  &quot;citation_images&quot;: [
+    {
+      &quot;filename&quot;: &quot;page_018_ai.png&quot;,
+      &quot;data&quot;: &quot;data:image/png;base64,&lt;IMAGE_BYTES_OMITTED&gt;&quot;,
+      &quot;page&quot;: 18,
+      &quot;pdf_page&quot;: 18,
+      &quot;image_role&quot;: &quot;direct_match&quot;
+    }
+  ],
+  &quot;image_fetch_errors&quot;: [],
+  &quot;page_display_mode&quot;: &quot;edwai_generated&quot;
+}
+</code></pre>
+<p>Generated behavior inside this endpoint:</p>
+<ul>
+<li>Uses the same active-dispatch storage resolver.</li>
+<li>Skips unpublished/missing generated images.</li>
+<li>Does not load extracted textbook diagrams, even when <code>include_diagrams:true</code>.</li>
+<li>Does not fall back to original scans.</li>
+</ul>
+<p>Other existing branches, <strong>not new mobile features</strong>:</p>
+<ul>
+<li><code>original</code>: backend tries existing PNG/JPEG full-page storage variants; extracted diagrams are separate. This is not an allowed substitute for generated-only mode.</li>
+<li><code>embedded</code>: backend uses the document's <code>ncert_book_code</code> and <code>enable_source_embedding</code> to return <code>ncert_url</code> items with <code>data:null</code>. Existing backend can fall back to original mode if that setup is missing or URL construction fails. This behavior belongs to the embedded branch, not the generated branch.</li>
+</ul>
+<p>Standard endpoint deduplication is backend-only: 8×8 average image hash, Hamming distance at most 5 treated as duplicate, keeping the first; hashing failure retains the item. Diagram output is capped at 3. Non-embedded citation images are deduplicated and sorted direct-match first, then ascending page number. Embedded URLs are not image-deduplicated.</p>
+<p><code>image_fetch_errors</code> contains at most 5 diagnostics only when errors occurred and <strong>both</strong> image arrays are empty; partial success returns an empty error list. The frontend logs diagnostics, silently handles image failures, and retains the answered text. Do not turn a missing image into a repeat answer request.</p>
+<h3>Existing non-streaming answers</h3>
+<p>The existing <code>/api/query</code> pathway can return image presentation data already attached by backend <code>load_citation_diagram_images_for_pages</code>. Cached and teacher-curated branches also preserve the established display selection/serving rules. Mobile must consume the existing response rather than introduce another page-generation call.</p>
+<p>The non-streaming helper resolves generated-only mode, active publication, and physical page IDs on the backend. Missing AI images are omitted; it does not substitute originals in generated mode.</p>
+<p>The fresh-answer path may relabel a returned image's <code>page</code> to its printed-page label after loading, while retaining <code>pdf_page</code> as physical identity. <strong>Use backend-provided <code>image_source_pages</code> / <code>pdf_page</code> for image lookup, not the printed <code>page</code> label.</strong> A page-footer label does not require displaying either number.</p>
+<p>Personal-resource <code>citation_images</code> use a separate existing format/section labelled “Page Citations”. The shared-board AI Study Pages fetch is not added to personal PDFs or videos by this handoff.</p>
+<h2>7. How pages are processed — existing backend only</h2>
+<p>These pages are pre-generated educational artifacts from book processing, <strong>not fresh images generated for each student question</strong>.</p>
+<h3>Content and image generation</h3>
+<p>The existing Phase 1 processing pipeline:</p>
+<ol>
+<li>Extracts page-local text and educational context through existing OCR/document processing.</li>
+<li>Supplies the page text, optional diagram labels, subject, grade/class, and instruction medium to the existing generator.</li>
+<li>Builds a subject/page-type-aware prompt from the page's facts, definitions, and examples.</li>
+<li>Uses the existing full-color portrait study-guide styles (3:4 aspect requested in the prompt), including concept zones, a topic banner, original illustrations, labels, arrows, and examples as appropriate.</li>
+<li>Calls the server-controlled generation provider.</li>
+<li>Saves the resulting bytes through existing <code>upload_ai_page_image</code>; there is no footer-stamping step in this writer.</li>
+</ol>
+<p>The generation entry point rejects text shorter than 20 stripped characters. The metadata/content eligibility helper separately requires at least 30 stripped characters and three Unicode alphabetic word tokens. These are distinct checks, not one universal “minimum text length” mobile should implement.</p>
+<p>The prompt prohibits publisher names/logos, book/chapter headers and footers, page/copyright/section/figure numbering, textbook scans/layouts, and copying/tracing/cropping/overlaying source artwork. Diagrams must be freshly AI-generated representations of the educational concept. Original PDFs/OCR stay in their existing backend retrieval system; they do not become generated infographic pixels.</p>
+<p>Immediate processing already has provider/quota retry handling and prompt escalation levels <code>0 → 1 → 2</code> for no-image/refusal cases. The inspected sequential path has up to 8 quota retry waits <code>[5,15,30,60,60,60,60,60]</code> seconds and a 3-second gap for no-image escalation. These are server ingestion details, not mobile request retries or background jobs.</p>
+<p>Delayed processing stores output within the current dispatch's versioned namespace. The existing backend fences stale attempts before writing/publishing; mobile never selects or publishes a dispatch. Missing assets are handled by the existing backend operational workflow, not by regenerating them from a student device.</p>
+<h3>Model/background settings</h3>
+<p>These are distinct from board display mode and student notices:</p>
+<table>
+<thead>
+<tr>
+<th>Existing setting</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>image_gen_model</code></td>
+<td>Generation model ID</td>
+</tr>
+<tr>
+<td><code>image_gen_region</code></td>
+<td>Generation region override</td>
+</tr>
+<tr>
+<td><code>image_gen_auth_mode</code></td>
+<td>Existing <code>api_key</code> or <code>vertex_ai</code> server transport</td>
+</tr>
+<tr>
+<td><code>image_gen_model_notes</code></td>
+<td>Admin-facing model notes; not a Sources notice, image footer, or study-page disclaimer</td>
+</tr>
+</tbody>
+</table>
+<p>Existing admin APIs: <code>GET</code> and <code>PUT /api/admin/settings/image-gen-model</code>. GET returns <code>model</code>, <code>region</code>, <code>auth_mode</code>, <code>notes</code>. PUT requires <code>model</code>; <code>region</code>, <code>auth_mode</code>, and <code>notes</code> are optional. These are admin-only and <strong>must not be called by mobile to display pages</strong>.</p>
+<p>The image-generation model resolver uses cache/DB, then <code>GCP_IMAGE_GEN_MODEL</code>, then executable default <code>gemini-2.5-flash-image</code>; model DB cache refresh interval is 30 seconds. Region resolver uses its existing cache/environment path, otherwise <code>global</code> for Gemini and <code>us-central1</code> for Imagen. Auth resolver uses existing cache/DB/environment handling, default <code>vertex_ai</code>; Imagen forces Vertex.</p>
+<p>GCP generation routes through the selected existing transport. Non-GCP generation uses the established Gemini developer path. Mobile supplies neither credentials nor generation parameters and does not copy these transport choices into a separate service.</p>
+<h3>Generated-page presentation metadata</h3>
+<p>After a page's OCR checkpoint succeeds, the sequential processor makes a separate, best-effort <code>upsert_page_metadata</code> call. Its failure must not alter OCR, image submission, embeddings, status, answer retrieval, or original citation facts.</p>
+<p>The backend deterministically derives metadata from the existing page text/context, with <strong>no extra model/API call</strong>:</p>
+<ul>
+<li>Topic (up to 300 characters), topic phrases, distinctive terms (up to 120), and math/formula terms.</li>
+<li>Subject category, instruction medium (up to 120 characters), chapter (up to 300), printed page number, and page type.</li>
+<li>Normalized searchable text (up to 20,000 characters), SHA-256 content hash, and <code>image_eligible</code>.</li>
+<li>Current document ID, physical page number, and source dispatch identity. Immediate metadata uses <code>__immediate__</code>; delayed metadata uses its existing dispatch.</li>
+</ul>
+<p>This is presentation metadata for newly processed documents, not a mobile search index or a new answer-retrieval store. No automatic old-book backfill is added by this handoff.</p>
+<h2>8. How the backend chooses relevant generated pages</h2>
+<p>Mobile consumes the selected page IDs; it must not reproduce this algorithm.</p>
+<h3>Current-document metadata route</h3>
+<p><code>select_image_source_pages</code> first calls <code>resolve_generated_page_selection</code>:</p>
+<ul>
+<li>Only runs its generated lookup when the current document's board is <code>edwai_generated</code>.</li>
+<li>Reads the <strong>complete current document's metadata for the active dispatch</strong>, not another book's cached page IDs.</li>
+<li>An unpublished current delayed attempt returns no pages.</li>
+<li>Skips ineligible/out-of-range rows.</li>
+<li>Requires a distinctive question-topic match or an exact multi-word topic phrase. Answer words can improve ranking but cannot make an unrelated page eligible by themselves.</li>
+<li>Uses exact/conservative word forms, not broad fuzzy matching. Formula-only matches need at least two matching formula terms before contributing to direct eligibility.</li>
+<li>Scores candidates as: phrase match <code>+8</code>; each direct term <code>+5</code>; direct-term intersection with question tokens <code>+1.5</code> each; answer overlap <code>+0.25</code> each capped at 8 overlaps; preferred/cached page hint <code>+0.2</code>.</li>
+<li>Deduplicates physical page identity, keeping its best score.</li>
+<li>Sorts descending score then ascending physical page, returns at most 3; qualifying selected pages are marked primary/direct.</li>
+<li>Metadata exists but no relevance match: return empty arrays, <strong>not fallback to arbitrary pages</strong>.</li>
+<li>Once generated mode is established, metadata lookup failure fails closed with empty arrays.</li>
+</ul>
+<h3>Existing legacy selector</h3>
+<p>If the document has no generated metadata, the existing legacy selector remains:</p>
+<ul>
+<li>Uses retrieved page-local evidence, question, answer, preferred pages, and total-page bounds.</li>
+<li>Loads full page text for current-document candidate pages where available, ordered by page and chunk index; fallback evidence is existing retrieved text if that lookup fails.</li>
+<li>Applies existing topic/polarity safety and rejects opposite-only context where appropriate.</li>
+<li>Receives explicit backend limits <code>page_limit:3</code>, <code>primary_limit:3</code>. Do not copy the ranker's standalone default arguments as the active API limit.</li>
+<li>Physical PDF IDs are retrieval identities; printed page numbers are presentation labels.</li>
+</ul>
+<p>Selection is strictly display-only. It does not rewrite answer text, sources/citation facts, embeddings, shared-cache metadata, query history, or the document's indexed syllabus. Cached/teacher answers still use the current document for generated image resolution; cached page IDs are hints, not cross-document image identities.</p>
+<h2>9. Page footer: exactly how it is added</h2>
+<p><strong>The footer is a native/web UI element beneath the image, not text burned into PNG bytes.</strong></p>
+<p>For each shared-book citation item, the web renders:</p>
+<pre><code class="language-text">image_role == &quot;direct_match&quot;  →  &quot;Best match&quot;
+any other/missing role        →  &quot;Nearby context&quot;
+</code></pre>
+<ul>
+<li>Binary generated fetch derives the role from <code>image_primary_pages</code>.</li>
+<li>Standard backend image responses derive the role with <code>_image_role_for_page(page, primary_pages)</code>, using the same membership test; empty primary list means nearby context.</li>
+<li>The footer uses the item metadata, not image OCR, a model-generated label, or a saved footer setting.</li>
+<li>Outer strip: top border, 12 px horizontal / 8 px vertical padding, flex alignment and 8 px gap, base 14 px gray text.</li>
+<li>Label: 12 px, weight 600, uppercase transform, tracking-wide letter spacing (0.025em). Visually renders <strong>BEST MATCH</strong> or <strong>NEARBY CONTEXT</strong>.</li>
+<li>Direct match: Blue 700 label, Blue 300 image-card border.</li>
+<li>Other/missing role: Gray 500 label, Gray 200 image-card border.</li>
+<li>There is no book title, physical page number, printed page number, copyright line, publisher logo, user name, or <code>EDUwAI</code> watermark added by this footer component.</li>
+<li>There is no API call to save a footer and no backend footer-setting key for this strip.</li>
+<li>Server generation/storage/serving paths inspected here do not composite this label onto the PNG.</li>
+<li>A model-produced mark already within image bytes is part of the stored artifact, not this metadata footer.</li>
+<li>Tapping the image opens a viewer with the same <code>data</code> and type <code>citation</code>; the web zoom viewer shows the <strong>image only</strong>, not this external role-label strip.</li>
+</ul>
+<p>The source notice and page-context notice are outside the image too. The answer area also has a separate hardcoded general AI-verification footnote; that is not a study-page image footer and is not re-extracted as another feature here.</p>
+<h2>10. UI configuration for the two requested sections</h2>
+<h3>Sources card</h3>
+<ul>
+<li>Appears after the answer content when there are sources.</li>
+<li>16 px padding, 12 px corner radius, 1 px border.</li>
+<li>Header: document icon at 18 px; “Sources”, weight 600; 8 px gap; 4 px bottom margin.</li>
+<li>Notice: 12 px italic text; 28 px left indent; 12 px bottom margin.</li>
+<li>Light: white card, Gray 200 border, Gray 900 heading, Gray 500 notice.</li>
+<li>Web primary/dark theme: <code>#1e1e2e</code> at 90% opacity, primary color border at 30% opacity, white heading, Gray 400 notice. Current primary token is <code>#667eea</code>.</li>
+</ul>
+<h3>AI Study Pages card</h3>
+<ul>
+<li>Render only for the first source's non-empty image presentation array.</li>
+<li>Outer: 24 px padding, 8 px radius, white background, Gray 200 border. This block stays light in the inspected web markup even under the primary/dark theme.</li>
+<li>Header: 24 px palette icon, 18 px bold Gray 900 title, 8 px gap, 16 px bottom margin.</li>
+<li>Notice: 12 px padding, 8 px radius, Blue 200 border, Blue 50 background, 16 px bottom margin; 14 px Blue 900 text, with info prefix.</li>
+<li>Pages: single-column vertical stack, 16 px spacing, 8 px card radius, clipped rounded corners, white background.</li>
+<li>Image: full available width, automatic height/aspect ratio; accessible alt text “Related study page”.</li>
+<li>Web hover: 1.05 scale; light black hover overlay and zoom icon. These are presentation affordances, not new images.</li>
+<li>Tap: existing image zoom/viewer; dismiss via close button or backdrop, not by fetching a second file.</li>
+<li>Web viewer: black 75% backdrop, z-index 50, 16 px outer padding, max width 1152 px, max height 90vh; white rounded scroll container. Clicking the image container does not dismiss it.</li>
+<li>Image-loading state: spinner and “Loading source images...”, separate from final page card. It ends without losing the answer if images fail.</li>
+</ul>
+<p>Relevant palette: Gray 200 <code>#e5e7eb</code>, Gray 400 <code>#9ca3af</code>, Gray 500 <code>#6b7280</code>, Gray 600 <code>#4b5563</code>, Gray 900 <code>#111827</code>; Blue 50 <code>#eff6ff</code>, Blue 200 <code>#bfdbfe</code>, Blue 300 <code>#93c5fd</code>, Blue 700 <code>#1d4ed8</code>, Blue 900 <code>#1e3a8a</code>.</p>
+<p>Use the mobile application's existing text, image, loading, and viewer components. Do not introduce a new graphics pipeline or UI dependency replacement as part of this extraction.</p>
+<h2>11. API/error quick reference</h2>
+<table>
+<thead>
+<tr>
+<th>Mobile call</th>
+<th>Success</th>
+<th>Important errors</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/disclaimer-messages</code></td>
+<td>JSON notice settings</td>
+<td>Existing auth/network/server failures</td>
+</tr>
+<tr>
+<td><code>GET /api/boards/{board_id}/page-config</code></td>
+<td>JSON board display configuration</td>
+<td>404 board missing</td>
+</tr>
+<tr>
+<td><code>GET /api/ai-images/{document_id}/{filename}</code></td>
+<td>PNG bytes</td>
+<td>400 invalid filename; 403 other organization; 404 document/image missing or unpublished</td>
+</tr>
+<tr>
+<td>Existing <code>POST /api/query/images</code></td>
+<td>JSON image arrays/config/diagnostics</td>
+<td>403 other organization; 404 document missing; 422 invalid request shape</td>
+</tr>
+</tbody>
+</table>
+<p>Invalid/expired tokens use the existing authentication flow. Protected administrative APIs reject non-admin callers. Do not put provider keys, database/storage credentials, or access tokens into the export.</p>
+<p>No mobile call is required for generation-model settings, image publication, footer creation, metadata derivation, regeneration, or changing notices.</p>
+<h2>12. Parity acceptance checklist</h2>
+<ul>
+<li>Sources text and page-context text come from their separate backend settings.</li>
+<li>Sample/screenshot wording is not hardcoded as a substitute for API settings.</li>
+<li>Heading and retrieval branch use the existing board configuration.</li>
+<li>Generated streaming fetches the same authenticated <code>/api/ai-images/...</code> resources selected by the backend.</li>
+<li>A missing/unpublished generated image is omitted, never replaced by an original page or diagram.</li>
+<li>No mobile generation, OCR, page-selection algorithm, bucket access, or regeneration job exists.</li>
+<li>Physical page IDs are used for lookup; printed labels are never substituted for them.</li>
+<li>Direct-match ordering and role footer match the existing web behavior.</li>
+<li>The footer is UI text, not an image modification, and zoom opens the original returned bytes.</li>
+<li>An unsupported answer or a stale request never gains images from another question/book.</li>
+<li>Existing non-streaming responses are consumed without adding a new image-generation pathway.</li>
+<li>No actual source/study-page images are included in this handoff.</li>
+</ul>
+<h2>13. Source references and verification scope</h2>
+<p>Inspected current workspace; line positions can shift:</p>
+<ul>
+<li><code>src-frontend/pages/StudentPortal.jsx:240-242,311-318,456-467,540-548,663-674</code>: theme, settings state, notice loading and board config.</li>
+<li><code>src-frontend/pages/StudentPortal.jsx:1402-1550</code>: stream metadata, generated binary requests, merge/order, loading and cancellation checks.</li>
+<li><code>src-frontend/pages/StudentPortal.jsx:3980-3995,4038-4130,4193-4223</code>: Sources card, shared study-page section, role footer, zoom viewer.</li>
+<li><code>src-frontend/utils/answerRequestFence.js</code>: request cancellation, document identity and generated/unsupported diagram suppression.</li>
+<li><code>main.py:9791-9906</code>: notice defaults, legacy handling, admin/student settings endpoints.</li>
+<li><code>main.py:7461-7528</code>: board page-config and generated binary image serving.</li>
+<li><code>main.py:7186-7190,7277-7459</code>: standard image request/response, board-mode branching, errors and sorting.</li>
+<li><code>main.py:2201-2309,2312-2415,2419-2475</code>: display selection limits, role classification, image loading and deduplication.</li>
+<li><code>main.py:6040-6076</code>: fresh non-streaming image loading and printed/physical identity distinction.</li>
+<li><code>main.py:3420-3445,3498-3517,10199-10290</code>: existing administrative board/model configuration.</li>
+<li><code>storage_service.py:264-312</code>: stable/versioned AI-image paths and unchanged-byte upload.</li>
+<li><code>phase1_parallel/ai_image_generator.py</code>: original-artwork directives, content checks, prompt routing, model/region/auth resolvers, generation entry point.</li>
+<li><code>phase1_parallel/sequential_processor.py:483-511,946-1005</code>: isolated metadata write, generation retry/upload path.</li>
+<li><code>phase1_parallel/batch_image_gen.py:596-613</code>: delayed-attempt fenced image upload.</li>
+<li><code>phase1_parallel/generated_page_metadata.py:106-218,234-379</code>: metadata derivation/persistence and document-local generated-page selection.</li>
+<li><code>page_relevance.py:537 onward</code>: existing legacy display-page relevance/polarity selector.</li>
+</ul>
+<p>Verification is against source and the exported document's rendering. This is not a production API capture or an authenticated-device test. No live student images, source PDFs, questions, admin settings, or bookmarks were fetched or changed to produce it.</p>
+
+<div class="footer">Standalone, offline-readable specification. No image assets, API requests, credentials, or scripts are included. The Markdown companion contains the same integration details.</div></main></body></html>

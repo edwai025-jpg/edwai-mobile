@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -28,7 +28,6 @@ import {
   CitationImage,
   DiagramImage,
   DisclaimerMessages,
-  PageCitation,
   Phase1CitationImage,
   QueryResponse,
   TypographySettings,
@@ -104,23 +103,39 @@ const sp = StyleSheet.create({
 });
 
 /* ─── Image Zoom Modal ───────────────────────────────────────────────────── */
-function ImageZoomModal({ visible, uri, label, onClose }: { visible: boolean; uri: string; label: string; onClose: () => void }) {
+function ImageZoomModal({ visible, uri, label, onClose, imageOnly = false }: { visible: boolean; uri: string; label?: string; onClose: () => void; imageOnly?: boolean }) {
+  const [ratio, setRatio] = useState<number | null>(null);
+  useEffect(() => {
+    if (!visible || !uri) return;
+    let active = true;
+    setRatio(null);
+    Image.getSize(uri, (w, h) => { if (active && w > 0 && h > 0) setRatio(w / h); }, () => {});
+    return () => { active = false; };
+  }, [visible, uri]);
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={zm.backdrop}>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+      <TouchableWithoutFeedback onPress={onClose} testID="image-zoom-backdrop">
+        <View style={[zm.backdrop, imageOnly && { backgroundColor: "rgba(0,0,0,0.75)" }]}>
           <View style={zm.container}>
-            <Pressable style={zm.closeBtn} onPress={onClose} hitSlop={12}>
+            <Pressable style={zm.closeBtn} onPress={onClose} hitSlop={12} testID="image-zoom-close" accessibilityRole="button" accessibilityLabel="Close">
               <Feather name="x" size={20} color="#fff" />
             </Pressable>
             <TouchableWithoutFeedback>
               <View style={zm.card}>
-                <ScrollView maximumZoomScale={4} minimumZoomScale={1} showsVerticalScrollIndicator={false} contentContainerStyle={{ alignItems: "center" }} style={{ maxHeight: "85%" as `${number}%` }}>
-                  <Image source={{ uri }} style={zm.image} resizeMode="contain" />
+                <ScrollView maximumZoomScale={4} minimumZoomScale={1} showsVerticalScrollIndicator={false} contentContainerStyle={{ alignItems: "center" }} style={{ maxHeight: imageOnly ? ("90%" as `${number}%`) : ("85%" as `${number}%`) }}>
+                  <Image
+                    source={{ uri }}
+                    style={ratio ? { width: "100%", aspectRatio: ratio } : zm.image}
+                    resizeMode="contain"
+                    accessibilityLabel={imageOnly ? "Related study page" : label}
+                    testID="image-zoom-image"
+                  />
                 </ScrollView>
-                <View style={zm.footer}>
-                  <Text style={zm.footerText}>{label}</Text>
-                </View>
+                {!imageOnly && !!label && (
+                  <View style={zm.footer}>
+                    <Text style={zm.footerText}>{label}</Text>
+                  </View>
+                )}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -131,8 +146,8 @@ function ImageZoomModal({ visible, uri, label, onClose }: { visible: boolean; ur
 }
 const zm = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", padding: 16 },
-  container: { position: "relative" },
-  closeBtn: { position: "absolute", top: -44, right: 0, zIndex: 20, backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 22, padding: 8 },
+  container: { position: "relative", width: "100%", maxWidth: 1152, alignSelf: "center", paddingTop: 44 },
+  closeBtn: { position: "absolute", top: 0, right: 0, zIndex: 20, backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 22, padding: 8 },
   card: { backgroundColor: "#fff", borderRadius: 14, overflow: "hidden" },
   image: { width: "100%", height: 420 },
   footer: { backgroundColor: "#f9fafb", borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingVertical: 10, paddingHorizontal: 14 },
@@ -176,46 +191,29 @@ const db = StyleSheet.create({
   text: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
 });
 
-/* ─── BOX 3 — Sources (page badge pills) ────────────────────────────────── */
-function SourcesPillsBox({ sources, disclaimerText, isDark }: { sources: PageCitation[]; disclaimerText?: string; isDark: boolean }) {
-  const cardBg = isDark ? "rgba(30,30,58,0.90)" : "#ffffff";
+/* ─── BOX 3 — Sources (notice only) ─────────────────────────────────────── */
+function SourcesBox({ noticeText, isDark }: { noticeText?: string; isDark: boolean }) {
+  const cardBg = isDark ? "rgba(30,30,46,0.90)" : "#ffffff";
   const cardBorder = isDark ? "rgba(102,126,234,0.30)" : "#e5e7eb";
-  const headingColor = isDark ? "#fff" : "#111827";
-  const pillBg = isDark ? "rgba(102,126,234,0.30)" : "#ffffff";
-  const pillBorder = isDark ? "rgba(102,126,234,0.40)" : "#e5e7eb";
-  const pillText = isDark ? "#d1d5db" : "#374151";
-  const disclaimerColor = isDark ? "#9ca3af" : "#6b7280";
-
-  const pageNums = Array.from(new Set(sources.map((s) => s.page))).sort((a, b) => a - b);
-
+  const headingColor = isDark ? "#ffffff" : "#111827";
+  const noticeColor = isDark ? "#9ca3af" : "#6b7280";
   return (
-    <View style={[sb.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+    <View style={[sb.card, { backgroundColor: cardBg, borderColor: cardBorder }]} testID="answer-sources-card">
       <View style={sb.headerRow}>
-        <Text style={sb.icon}>📄</Text>
+        <Feather name="file-text" size={18} color={headingColor} />
         <Text style={[sb.heading, { color: headingColor }]}>Sources</Text>
       </View>
-      {!!disclaimerText && (
-        <Text style={[sb.disclaimer, { color: disclaimerColor }]}>{disclaimerText}</Text>
+      {!!noticeText && (
+        <Text style={[sb.notice, { color: noticeColor }]} testID="answer-sources-notice">{noticeText}</Text>
       )}
-      <View style={sb.pillRow}>
-        {pageNums.map((pg) => (
-          <View key={pg} style={[sb.pill, { backgroundColor: pillBg, borderColor: pillBorder }]}>
-            <Text style={[sb.pillText, { color: pillText }]}>Page {pg}</Text>
-          </View>
-        ))}
-      </View>
     </View>
   );
 }
 const sb = StyleSheet.create({
-  card: { borderRadius: 14, borderWidth: 1, padding: 14, marginTop: 12 },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  icon: { fontSize: 16 },
-  heading: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  disclaimer: { fontSize: 12, fontStyle: "italic", lineHeight: 17, marginBottom: 8 },
-  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  pill: { borderRadius: 20, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 5 },
-  pillText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  card: { borderRadius: 12, borderWidth: 1, padding: 16, marginTop: 12 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
+  heading: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  notice: { fontSize: 12, fontStyle: "italic", lineHeight: 17, marginLeft: 28, marginBottom: 12 },
 });
 
 /* ─── BOX 4 — Images loading row ────────────────────────────────────────── */
@@ -235,42 +233,61 @@ const il = StyleSheet.create({
   text: { fontSize: 13, fontFamily: "Inter_400Regular" },
 });
 
-/* ─── BOX 4 — Phase 1 Page Citations ────────────────────────────────────── */
-function Phase1CitationsBox({
-  citations, boardPageConfig, disclaimerText, isDark,
+/* ─── BOX 4 — Shared-book Page Citations / AI Study Pages ───────────────── */
+type SharedCitation = { page: number; data: string | null; ncert_url?: string; image_role?: string };
+
+function SharedStudyImage({ uri, onPress, index }: { uri: string; onPress: () => void; index: number }) {
+  const [ratio, setRatio] = useState<number | null>(null);
+  useEffect(() => {
+    let active = true;
+    Image.getSize(uri, (w, h) => { if (active && w > 0 && h > 0) setRatio(w / h); }, () => {});
+    return () => { active = false; };
+  }, [uri]);
+  return (
+    <Pressable onPress={onPress} testID={`shared-citation-image-${index}`} accessibilityRole="imagebutton" accessibilityLabel="Related study page">
+      <Image
+        source={{ uri }}
+        style={{ width: "100%", aspectRatio: ratio ?? 0.75 }}
+        resizeMode="contain"
+        accessibilityLabel="Related study page"
+        onLoad={(e) => {
+          const src = e.nativeEvent?.source;
+          if (src?.width && src?.height) setRatio(src.width / src.height);
+        }}
+      />
+    </Pressable>
+  );
+}
+
+function SharedCitationsBox({
+  citations, generatedMode, embeddedMode, disclaimerText,
 }: {
-  citations: Phase1CitationImage[];
-  boardPageConfig?: BoardPageConfig | null;
+  citations: SharedCitation[];
+  generatedMode: boolean;
+  embeddedMode: boolean;
   disclaimerText?: string;
-  isDark: boolean;
 }) {
-  const [zoomUri, setZoomUri] = React.useState<string | null>(null);
-  const [zoomLabel, setZoomLabel] = React.useState("");
-
-  const cardBg = isDark ? "rgba(30,30,58,0.90)" : "#ffffff";
-  const cardBorder = isDark ? "rgba(102,126,234,0.30)" : "#e5e7eb";
-  const headingColor = isDark ? "#fff" : "#111827";
-
-  const isEmbedded =
-    boardPageConfig?.page_display_mode === "embedded" &&
-    citations.some((c) => !!c.ncert_url);
+  const [zoomUri, setZoomUri] = useState<string | null>(null);
+  const isEmbedded = !generatedMode && embeddedMode && citations.some((c) => !!c.ncert_url);
+  const images = citations.filter((c) => !!c.data);
 
   return (
     <>
-      <View style={[pc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+      <View style={pc.card} testID="shared-citations-card">
         <View style={pc.headerRow}>
-          <Text style={pc.icon}>{isEmbedded ? "📚" : "📖"}</Text>
-          <Text style={[pc.heading, { color: headingColor }]}>Page Citations</Text>
+          {generatedMode
+            ? <Ionicons name="color-palette-outline" size={24} color="#111827" />
+            : <Feather name="book-open" size={24} color="#111827" />}
+          <Text style={pc.heading}>{generatedMode ? "AI Study Pages" : "Page Citations"}</Text>
         </View>
 
         {!!disclaimerText && (
-          <View style={pc.contextBox}>
-            <Text style={pc.contextText}>ℹ️  {disclaimerText}</Text>
+          <View style={pc.contextBox} testID="shared-citations-notice">
+            <Text style={pc.contextText}>ℹ️ {disclaimerText}</Text>
           </View>
         )}
 
         {isEmbedded ? (
-          /* EMBEDDED MODE — NCERT links */
           <View style={pc.ncertWrap}>
             <Text style={pc.ncertTitle}>📚 NCERT Source:</Text>
             <Text style={pc.ncertDesc}>Please refer to all the listed pages and any adjacent pages for complete context.</Text>
@@ -284,39 +301,43 @@ function Phase1CitationsBox({
             </View>
           </View>
         ) : (
-          /* IMAGE MODE — original or edwai_generated (identical rendering) */
-          citations.filter((c) => !!c.data).map((c, i) => (
-            <Pressable key={i} style={pc.imgCard} onPress={() => { setZoomUri(c.data!); setZoomLabel(`Page ${c.page}`); }}>
-              <Image source={{ uri: c.data! }} style={pc.img} resizeMode="contain" />
-              <View style={pc.imgFooter}>
-                <Text style={pc.imgCaption}>Page {c.page}</Text>
-                <Feather name="zoom-in" size={11} color="#9ca3af" />
-              </View>
-            </Pressable>
-          ))
+          <View style={pc.stack}>
+            {images.map((c, i) => {
+              const direct = c.image_role === "direct_match";
+              return (
+                <View key={i} style={[pc.imgCard, { borderColor: direct ? "#93c5fd" : "#e5e7eb" }]} testID={`shared-citation-card-${i}`}>
+                  <SharedStudyImage uri={c.data!} index={i} onPress={() => setZoomUri(c.data!)} />
+                  <View style={pc.imgFooter}>
+                    <Text style={[pc.roleLabel, { color: direct ? "#1d4ed8" : "#6b7280" }]} testID={`shared-citation-role-${i}`}>
+                      {direct ? "BEST MATCH" : "NEARBY CONTEXT"}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
         )}
       </View>
-      <ImageZoomModal visible={!!zoomUri} uri={zoomUri ?? ""} label={zoomLabel} onClose={() => setZoomUri(null)} />
+      <ImageZoomModal visible={!!zoomUri} uri={zoomUri ?? ""} imageOnly onClose={() => setZoomUri(null)} />
     </>
   );
 }
 const pc = StyleSheet.create({
-  card: { borderRadius: 14, borderWidth: 1, padding: 14, marginTop: 12 },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  icon: { fontSize: 16 },
-  heading: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  contextBox: { backgroundColor: "rgba(59,130,246,0.10)", borderRadius: 8, borderWidth: 1, borderColor: "rgba(59,130,246,0.25)", padding: 10, marginBottom: 12 },
-  contextText: { fontSize: 12, color: "#3b82f6", lineHeight: 17 },
+  card: { borderRadius: 8, borderWidth: 1, borderColor: "#e5e7eb", backgroundColor: "#ffffff", padding: 24, marginTop: 12 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 },
+  heading: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#111827" },
+  contextBox: { backgroundColor: "#eff6ff", borderRadius: 8, borderWidth: 1, borderColor: "#bfdbfe", padding: 12, marginBottom: 16 },
+  contextText: { fontSize: 14, color: "#1e3a8a", lineHeight: 20 },
   ncertWrap: { backgroundColor: "#ecfdf5", borderRadius: 10, borderWidth: 2, borderColor: "#34d399", padding: 14 },
   ncertTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#065f46", marginBottom: 4 },
   ncertDesc: { fontSize: 12, color: "#047857", lineHeight: 18, marginBottom: 10 },
   ncertLinks: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   ncertBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#fff", borderRadius: 8, borderWidth: 2, borderColor: "#34d399", paddingHorizontal: 12, paddingVertical: 7 },
   ncertBtnText: { fontSize: 12, color: "#065f46", fontFamily: "Inter_600SemiBold" },
-  imgCard: { borderRadius: 10, borderWidth: 1, borderColor: "#e5e7eb", overflow: "hidden", marginTop: 10, backgroundColor: "#fff" },
-  img: { width: "100%", height: 200 },
-  imgFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#f9fafb", borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingHorizontal: 12, paddingVertical: 8 },
-  imgCaption: { fontSize: 12, color: "#6b7280", fontFamily: "Inter_500Medium" },
+  stack: { gap: 16 },
+  imgCard: { borderRadius: 8, borderWidth: 1, overflow: "hidden", backgroundColor: "#ffffff" },
+  imgFooter: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingHorizontal: 12, paddingVertical: 8 },
+  roleLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", letterSpacing: 0.3 },
 });
 
 /* ─── BOX 4 — Phase 2 Citations (own docs / YouTube) ────────────────────── */
@@ -421,12 +442,13 @@ export type AnswerCardProps = {
   question?: string;
   accessToken?: string;
   studyContext?: StudyAnswerContext | null;
+  isOwnBook?: boolean;
 };
 
 export default function AnswerCard({
   streaming, streamText, response, loading, mode,
   disclaimerMessages, boardPageConfig, typographySettings, imagesLoading,
-  question, accessToken, studyContext,
+  question, accessToken, studyContext, isOwnBook = false,
 }: AnswerCardProps) {
   const { isDark } = useTheme();
   const [fetchedTypography, setFetchedTypography] = useState<TypographySettings | null>(null);
@@ -467,21 +489,20 @@ export default function AnswerCard({
   const iconBg = isDark ? "rgba(102,126,234,0.25)" : "#ffffff";
   const labelColor = isDark ? "#ffffff" : "#111827";
 
-  /* ── Phase 1 citations: check new field + backward-compat from sources ── */
-  const phase1Citations: Phase1CitationImage[] =
-    response?.phase1_citations?.length
-      ? response.phase1_citations
-      : (response?.sources?.flatMap((s) =>
-          (s.base64_images ?? []).map((img) => ({
-            page: img.page,
-            data: img.data,
-            ncert_url: img.ncert_url,
-          }))
-        ) ?? []);
+  /* ── Shared-book citations: ONLY response.sources[0].base64_images ── */
+  const answerNotFound = !!response?.answer_not_found;
+  const generatedMode = boardPageConfig?.page_display_mode === "edwai_generated";
+  const sharedCitations: SharedCitation[] =
+    !isOwnBook && !answerNotFound
+      ? ((response?.sources?.[0]?.base64_images ?? []) as SharedCitation[])
+      : [];
+  const sharedVisible = generatedMode ? sharedCitations.filter((c) => !!c.data) : sharedCitations;
 
-  const phase2Citations = response?.citation_images ?? [];
-  const hasCitations = !streaming && (phase1Citations.length > 0 || phase2Citations.length > 0);
-  const hasDiagrams  = !streaming && (response?.diagram_images?.length ?? 0) > 0;
+  const phase2Citations = answerNotFound || !isOwnBook ? [] : (response?.citation_images ?? []);
+  const showShared   = !streaming && sharedVisible.length > 0;
+  const showPhase2   = !streaming && !showShared && phase2Citations.length > 0;
+  const diagrams     = answerNotFound || (generatedMode && !isOwnBook) ? [] : (response?.diagram_images ?? []);
+  const hasDiagrams  = !streaming && diagrams.length > 0;
 
   return (
     <>
@@ -527,28 +548,30 @@ export default function AnswerCard({
         </LinearGradient>
       )}
 
-      {/* BOX 3 — Sources (page badge pills) */}
+      {/* BOX 3 — Sources (notice only) */}
       {!streaming && (response?.sources?.length ?? 0) > 0 && (
-        <SourcesPillsBox
-          sources={response!.sources!}
-          disclaimerText={disclaimerMessages?.source_citation_text}
-          isDark={isDark}
-        />
+        <SourcesBox noticeText={disclaimerMessages?.source_citation_text} isDark={isDark} />
       )}
 
-      {/* BOX 4 — Page Citations (or loading row) */}
-      {!streaming && imagesLoading && (
+      {/* BOX 4 — Page Citations / AI Study Pages (or loading row) */}
+      {!streaming && imagesLoading && !answerNotFound && (
         <ImagesLoadingRow isDark={isDark} />
       )}
-      {hasCitations && !imagesLoading && (
-        phase1Citations.length > 0
-          ? <Phase1CitationsBox citations={phase1Citations} boardPageConfig={boardPageConfig} disclaimerText={disclaimerMessages?.page_context_text} isDark={isDark} />
-          : <Phase2CitationsBox citations={phase2Citations} isDark={isDark} />
+      {!imagesLoading && showShared && (
+        <SharedCitationsBox
+          citations={sharedVisible}
+          generatedMode={generatedMode}
+          embeddedMode={boardPageConfig?.page_display_mode === "embedded"}
+          disclaimerText={disclaimerMessages?.page_context_text}
+        />
+      )}
+      {!imagesLoading && showPhase2 && (
+        <Phase2CitationsBox citations={phase2Citations} isDark={isDark} />
       )}
 
       {/* BOX 5 — Diagrams from Textbook */}
       {hasDiagrams && (
-        <DiagramsBox diagrams={response!.diagram_images!} isDark={isDark} />
+        <DiagramsBox diagrams={diagrams} isDark={isDark} />
       )}
     </>
   );

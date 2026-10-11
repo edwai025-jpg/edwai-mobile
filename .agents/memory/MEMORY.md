@@ -11,3 +11,4 @@
 - [Question input scope](input-mode-scope.md) — Detailed PDF parity boundaries; voice capture is independent of books and answer/explanation quotas.
 - [Answer formatting parity](answer-formatting-scope.md) — One renderer, unchanged answer APIs, no notation repair or extra generation; chemistry tests must match module conditions.
 - [Recent Questions scope](recent-questions-scope.md) — UI-only bookmarks and server-owned history; terminal streaming events can precede history persistence.
+- [Sources and study pages](sources-study-pages-scope.md) — Web-handoff UI/API parity only; generated images never fall back to textbook scans.

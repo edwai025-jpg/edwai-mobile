@@ -201,11 +201,7 @@ export type Phase1Document = {
 
 export type PageCitation = {
   page: number;
-  base64_images?: {
-    page: number;
-    data: string;
-    ncert_url?: string;
-  }[];
+  base64_images?: Phase1CitationImage[];
 };
 
 export type DiagramImage = {
@@ -224,6 +220,7 @@ export type Phase1CitationImage = {
   data: string | null;
   filename?: string;
   ncert_url?: string;
+  image_role?: string;
 };
 
 export type QueryImagesResponse = {
@@ -261,6 +258,8 @@ export type ValidationResult = {
 
 export type QueryResponse = {
   answer: string;
+  /** Client-only transport marker; JSON responses already contain backend presentation data. */
+  answerTransport?: "json";
   language?: string;
   answer_language?: string;
   sources?: PageCitation[];
@@ -270,8 +269,12 @@ export type QueryResponse = {
   validation?: ValidationResult;
   cached?: boolean;
   image_source_pages?: number[];
+  image_primary_pages?: number[];
   is_visual_question?: boolean;
   document_id?: number;
+  answer_not_found?: boolean;
+  material_not_found?: boolean;
+  general_fallback?: boolean;
 };
 
 export type Flashcard = {
@@ -703,14 +706,38 @@ const api = {
     getTypographySettings: (token: string) =>
       request<TypographySettings>("/api/typography-settings", {}, token),
 
-    getDisclaimerMessages: (token: string) =>
-      request<DisclaimerMessages>("/api/disclaimer-messages", {}, token),
+    getDisclaimerMessages: (token: string, signal?: AbortSignal) =>
+      request<DisclaimerMessages>("/api/disclaimer-messages", { signal }, token),
 
-    getBoardPageConfig: (token: string, boardId: number) =>
-      request<BoardPageConfig>(`/api/boards/${boardId}/page-config`, {}, token),
+    getBoardPageConfig: (token: string, boardId: number, signal?: AbortSignal) =>
+      request<BoardPageConfig>(`/api/boards/${boardId}/page-config`, { signal }, token),
 
-    fetchQueryImages: (token: string, body: { document_id: number; pages: number[]; include_diagrams: boolean }) =>
-      request<QueryImagesResponse>("/api/query/images", { method: "POST", body: JSON.stringify(body) }, token),
+    fetchAiPage: async (token: string, documentId: number, filename: string, signal?: AbortSignal): Promise<string> => {
+      const response = await fetch(resolveUrl(`/api/ai-images/${documentId}/${filename}`), {
+        headers: { Authorization: `Bearer ${token}`, Accept: "image/png" }, signal,
+      });
+      if (!response.ok) throw new ApiError(`Could not load study page (HTTP ${response.status}).`, response.status, null);
+      const blob = await response.blob();
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        const aborted = () => {
+          reader.abort();
+          const error = new Error("Study page request cancelled");
+          error.name = "AbortError";
+          reject(error);
+        };
+        const cleanup = () => signal?.removeEventListener("abort", aborted);
+        reader.onload = () => { cleanup(); resolve(String(reader.result)); };
+        reader.onerror = () => { cleanup(); reject(new Error("Could not decode study page.")); };
+        reader.onabort = () => { cleanup(); const error = new Error("Study page request cancelled"); error.name = "AbortError"; reject(error); };
+        if (signal?.aborted) { aborted(); return; }
+        signal?.addEventListener("abort", aborted, { once: true });
+        reader.readAsDataURL(blob);
+      });
+    },
+
+    fetchQueryImages: (token: string, body: { document_id: number; pages: number[]; primary_pages?: number[]; include_diagrams: boolean }, signal?: AbortSignal) =>
+      request<QueryImagesResponse>("/api/query/images", { method: "POST", body: JSON.stringify(body), signal }, token),
   },
 
   phase2: {

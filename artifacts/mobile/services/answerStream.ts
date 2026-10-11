@@ -59,5 +59,5 @@ export async function readAnswerStream(res: Response, onChunk: (chunk: string) =
   const result = JSON.parse(raw) as QueryResponse & { cache_used?: boolean };
   if (typeof result.answer !== "string") throw new Error("The API returned an unexpected answer response.");
   if (result.answer) onChunk(result.answer);
-  return { ...result, cached: result.cached ?? result.cache_used };
+  return { ...result, cached: result.cached ?? result.cache_used, answerTransport: "json" };
 }
