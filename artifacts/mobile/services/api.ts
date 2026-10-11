@@ -283,9 +283,13 @@ export type Flashcard = {
 export type QueryHistoryItem = {
   id: number;
   question: string;
-  mode: "retrieve" | "explain";
-  created_at: string;
+  mode: string | null;
+  answer_preview?: string | null;
+  sources?: (number | null)[] | null;
+  is_bookmarked: boolean;
+  created_at: string | null;
 };
+export type BookmarkResult = { id: number; is_bookmarked: boolean };
 
 async function request<T>(
   path: string,
@@ -648,12 +652,15 @@ const api = {
       return request<Phase1Document[]>(`/api/documents?${params.toString()}`, {}, token);
     },
 
-    getQueryHistory: (token: string, documentId: number) =>
+    getQueryHistory: (token: string, documentId: number, signal?: AbortSignal) =>
       request<QueryHistoryItem[]>(
-        `/api/query-history?document_id=${documentId}`,
-        {},
+        `/api/query-history/${documentId}`,
+        { signal },
         token
       ),
+
+    toggleBookmark: (token: string, historyId: number) =>
+      request<BookmarkResult>(`/api/query-history/${historyId}/bookmark`, { method: "POST" }, token),
 
     streamQuery: (
       token: string,
@@ -746,12 +753,15 @@ const api = {
         token
       ),
 
-    getQueryHistory: (token: string, documentId: number) =>
+    getQueryHistory: (token: string, documentId: number, signal?: AbortSignal) =>
       request<QueryHistoryItem[]>(
         `/api/phase2/documents/${documentId}/query-history`,
-        {},
+        { signal },
         token
       ),
+
+    toggleBookmark: (token: string, historyId: number) =>
+      request<BookmarkResult>(`/api/phase2/history/${historyId}/bookmark`, { method: "POST" }, token),
 
     streamQuery: (
       token: string,

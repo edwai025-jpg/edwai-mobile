@@ -18,7 +18,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnswerCard from "@/components/study/AnswerCard";
-import QuestionComposer from "@/components/study/QuestionComposer";
+import QuestionComposer, { type QuestionComposerHandle } from "@/components/study/QuestionComposer";
+import RecentQuestionsPanel from "@/components/study/RecentQuestionsPanel";
+import { useRecentQuestions } from "@/hooks/useRecentQuestions";
 import { resolveStudyLanguage, type StudyAnswerContext } from "@/services/studyResources";
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { useAuth } from "@/context/auth";
@@ -27,7 +29,6 @@ import { useTheme } from "@/context/theme";
 import api, {
   ApiError,
   DocumentItem,
-  QueryHistoryItem,
   QueryResponse,
 } from "@/services/api";
 
@@ -148,37 +149,6 @@ const dc = StyleSheet.create({
 });
 
 /* ─── Recent Questions ──────────────────────────────────────────────────── */
-function RecentQuestionsPanel({ history, onSelect }: { history: QueryHistoryItem[]; onSelect: (q: string) => void }) {
-  const [open, setOpen] = useState(false);
-  if (history.length === 0) return null;
-  return (
-    <View style={rq.card}>
-      <Pressable style={rq.header} onPress={() => setOpen((v) => !v)}>
-        <Text style={rq.headerText}>🕐 Recent Questions ({history.length})</Text>
-        <Feather name={open ? "chevron-up" : "chevron-down"} size={15} color={MUTED} />
-      </Pressable>
-      {open && (
-        <ScrollView style={{ maxHeight: 160 }} showsVerticalScrollIndicator={false}>
-          {history.map((h) => (
-            <Pressable key={h.id} style={rq.row} onPress={() => { onSelect(h.question); setOpen(false); }}>
-              <Text style={rq.icon}>{h.mode === "retrieve" ? "📖" : "💡"}</Text>
-              <Text style={rq.text} numberOfLines={1}>{h.question}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
-    </View>
-  );
-}
-const rq = StyleSheet.create({
-  card: { backgroundColor: "rgba(99,71,234,0.08)", borderRadius: 10, borderWidth: 2, borderColor: "rgba(99,102,241,0.3)", marginBottom: 10 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 11 },
-  headerText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#a5b4fc" },
-  row: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: BORDER },
-  icon: { fontSize: 13 },
-  text: { flex: 1, fontSize: 13, color: "#d1d5db" },
-});
-
 /* ─── Upload Progress Bar ───────────────────────────────────────────────── */
 function UploadProgress({ progress }: { progress: number }) {
   return (
@@ -239,7 +209,14 @@ export default function OwnBooksScreen() {
   /* query */
   const [question, setQuestion] = useState("");
   const [queryMode, setQueryMode] = useState<"retrieve" | "explain">("retrieve");
-  const [history, setHistory] = useState<QueryHistoryItem[]>([]);
+  const selectionAccount = useRef(user?.id);
+  const recentQuestions = useRecentQuestions("personal", selectionAccount.current === user?.id ? selectedDoc?.id : undefined);
+  useEffect(() => {
+    if (selectionAccount.current !== user?.id) {
+      selectionAccount.current = user?.id; setSelectedDoc(null); setQuestion("");
+    }
+  }, [user?.id]);
+  const composer = useRef<QuestionComposerHandle>(null);
   const [queryLoading, setQueryLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
@@ -357,10 +334,9 @@ export default function OwnBooksScreen() {
     abortCtrl.current?.abort();
     setStudyContext(null);
     setStreaming(false); setQueryLoading(false);
-    setSelectedDoc(doc); setResponse(null); setStreamText("");
+    setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText("");
     setYtMode(doc.source_type === "youtube" ? null : "qa");
     if (!accessToken) return;
-    try { setHistory(await api.phase2.getQueryHistory(accessToken, doc.id)); } catch {}
   }, [accessToken]);
 
   /* ── query ── */
@@ -393,12 +369,7 @@ export default function OwnBooksScreen() {
       });
       setResponse(finalRes); setStreaming(false); setQueryLoading(false);
       void refreshUsage();
-      /* Add to local history immediately — server already saves it automatically */
-      setHistory((prev) => {
-        const newItem = { id: Date.now(), question: q.trim(), mode: qMode, created_at: new Date().toISOString() };
-        const deduped = prev.filter((h) => h.question.toLowerCase() !== newItem.question.toLowerCase());
-        return [newItem, ...deduped].slice(0, 20);
-      });
+      if (finalRes.answer && !finalRes.answer.startsWith("Error:")) recentQuestions.refreshAfterAnswer();
     } catch (e) {
       if (!valid()) return;
       if ((e as Error)?.name !== "AbortError") {
@@ -409,7 +380,7 @@ export default function OwnBooksScreen() {
       }
       setStreaming(false); setQueryLoading(false);
     }
-  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium]);
+  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium, recentQuestions.refreshAfterAnswer]);
 
   /* ── youtube: generate notes ── */
   const handleGenerateNotes = useCallback(() => {
@@ -635,9 +606,11 @@ export default function OwnBooksScreen() {
 
             {ytMode === "qa" || !isYoutube ? (
               <>
-                <RecentQuestionsPanel history={history} onSelect={setQuestion} />
+                <RecentQuestionsPanel key={recentQuestions.scopeKey} {...recentQuestions} phase="personal"
+                  sourceType={selectedDoc?.source_type}
+                  onSelect={q => { if (composer.current) composer.current.replaceDraft(q); else setQuestion(q); }} />
 
-                <QuestionComposer value={question} onChange={setQuestion} documentKey={`own-book:${selectedDoc!.id}`}
+                <QuestionComposer ref={composer} value={question} onChange={setQuestion} documentKey={`own-book:${selectedDoc!.id}`}
                   isDark={isDark} disabled={isQuerying} placeholder={isYoutube ? "Ask anything about this video…" : undefined} />
 
                 <View style={sc.actionRow}>

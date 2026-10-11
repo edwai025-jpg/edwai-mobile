@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { ActivityIndicator, Keyboard, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { NativeSyntheticEvent, TextInputKeyPressEventData } from "react-native";
 import Markdown from "react-native-markdown-display";
@@ -15,8 +15,9 @@ const MODES: { value: InputMode; label: string }[] = [
   { value: "normal", label: "✍️ Normal" }, { value: "transliterate", label: "🔤 Transliterate" },
   { value: "keyboard", label: "⌨️ Keyboard" }, { value: "voice", label: "🎙️ Voice" },
 ];
-type Props = { value: string; onChange: (text: string) => void; documentKey: string; isDark: boolean; disabled?: boolean; imageBusy?: boolean; tools?: React.ReactNode; placeholder?: string };
-export default function QuestionComposer({ value, onChange, documentKey, isDark, disabled, imageBusy, tools, placeholder }: Props) {
+export type QuestionComposerHandle = { replaceDraft: (text: string) => void };
+type Props = { ref?: React.Ref<QuestionComposerHandle>; value: string; onChange: (text: string) => void; documentKey: string; isDark: boolean; disabled?: boolean; imageBusy?: boolean; tools?: React.ReactNode; placeholder?: string };
+export default function QuestionComposer({ ref, value, onChange, documentKey, isDark, disabled, imageBusy, tools, placeholder }: Props) {
   const { accessToken } = useAuth();
   const input = useRef<TextInput>(null);
   const valueRef = useRef(value); valueRef.current = value;
@@ -125,6 +126,13 @@ export default function QuestionComposer({ value, onChange, documentKey, isDark,
     clearCandidates(); setKeyboardOpen(false); setMode("normal"); setEditing(false);
     setCaret(valueRef.current.length);
   }, [documentKey, clearCandidates]);
+  useImperativeHandle(ref, () => ({
+    replaceDraft(text) {
+      // Cancel synchronously, including when the selected question equals the current draft.
+      clearCandidates(); voice.cancel(); setEditing(false);
+      commit(text); setCaret(text.length, true);
+    },
+  }));
   useEffect(() => {
     if (value === emitted.current) return;
     emitted.current = value; clearCandidates(); voice.cancel(); setEditing(false); setCaret(value.length);

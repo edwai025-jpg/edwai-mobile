@@ -25,7 +25,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnswerCard from "@/components/study/AnswerCard";
 import { resolveStudyLanguage, type StudyAnswerContext } from "@/services/studyResources";
-import QuestionComposer from "@/components/study/QuestionComposer";
+import QuestionComposer, { type QuestionComposerHandle } from "@/components/study/QuestionComposer";
+import RecentQuestionsPanel from "@/components/study/RecentQuestionsPanel";
+import { useRecentQuestions } from "@/hooks/useRecentQuestions";
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
@@ -38,7 +40,6 @@ import api, {
   BoardStatus,
   DisclaimerMessages,
   Phase1Document,
-  QueryHistoryItem,
   QueryResponse,
   TypographySettings,
 } from "@/services/api";
@@ -185,60 +186,6 @@ const bp = StyleSheet.create({
   progressFill: { height: 6, backgroundColor: PRIMARY, borderRadius: 3 },
 });
 
-/* ─── Recent Questions ───────────────────────────────────────────────────── */
-function RecentQuestionsPanel({ history, onSelect }: { history: QueryHistoryItem[]; onSelect: (q: string) => void }) {
-  const { isDark } = useTheme();
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  if (history.length === 0) return null;
-  const filtered = search ? history.filter((h) => h.question.toLowerCase().includes(search.toLowerCase())) : history;
-
-  const rowTextColor = isDark ? "#d1d5db" : "#1f2937";
-  const rowBorderColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
-  const searchBg = isDark ? "#2a2a3e" : "#f3f4f6";
-  const searchBorder = isDark ? "rgba(255,255,255,0.10)" : "#d1d5db";
-  const searchColor = isDark ? "#f9fafb" : "#111827";
-
-  return (
-    <View style={rq.card}>
-      <Pressable style={rq.header} onPress={() => setOpen((v) => !v)}>
-        <Text style={rq.headerText}>🕐 Recent Questions ({history.length})</Text>
-        <Feather name={open ? "chevron-up" : "chevron-down"} size={15} color={MUTED} />
-      </Pressable>
-      {open && (
-        <View>
-          {history.length > 5 && (
-            <TextInput
-              style={[rq.search, { backgroundColor: searchBg, borderColor: searchBorder, color: searchColor }]}
-              placeholder="Search questions…"
-              placeholderTextColor={MUTED}
-              value={search}
-              onChangeText={setSearch}
-            />
-          )}
-          <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
-            {filtered.map((h) => (
-              <Pressable key={h.id} style={[rq.row, { borderTopColor: rowBorderColor }]} onPress={() => { onSelect(h.question); setOpen(false); }}>
-                <Text style={rq.modeIcon}>{h.mode === "retrieve" ? "📖" : "💡"}</Text>
-                <Text style={[rq.rowText, { color: rowTextColor }]} numberOfLines={1}>{h.question}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-    </View>
-  );
-}
-const rq = StyleSheet.create({
-  card: { backgroundColor: "rgba(99,71,234,0.08)", borderRadius: 10, borderWidth: 2, borderColor: "rgba(99,102,241,0.3)", marginBottom: 10 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 11 },
-  headerText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#a5b4fc" },
-  search: { marginHorizontal: 12, marginBottom: 6, borderRadius: 8, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13 },
-  row: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1 },
-  modeIcon: { fontSize: 13 },
-  rowText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular" },
-});
-
 /* ─── Main Screen ────────────────────────────────────────────────────────── */
 export default function TextbooksScreen() {
   const insets = useSafeAreaInsets();
@@ -272,7 +219,14 @@ export default function TextbooksScreen() {
   /* query */
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<"retrieve" | "explain">("retrieve");
-  const [history, setHistory] = useState<QueryHistoryItem[]>([]);
+  const selectionAccount = useRef(user?.id);
+  const recentQuestions = useRecentQuestions("shared", selectionAccount.current === user?.id ? selectedDoc?.id : undefined);
+  useEffect(() => {
+    if (selectionAccount.current !== user?.id) {
+      selectionAccount.current = user?.id; setSelectedDoc(null); setQuestion("");
+    }
+  }, [user?.id]);
+  const composer = useRef<QuestionComposerHandle>(null);
   const [selectionRestored, setSelectionRestored] = useState(false);
   const [queryLoading, setQueryLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
@@ -296,39 +250,36 @@ export default function TextbooksScreen() {
   const prevBoardIdRef = useRef<number | undefined | "__init__">("__init__");
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;
 
-  const P1_SELECTION_KEY = "@edwai/p1_selection";
+  const P1_SELECTION_KEY = `@edwai/p1_selection:${user?.id ?? "none"}`;
 
   /* ── Restore last selection from AsyncStorage on mount ── */
   useEffect(() => {
     if (!accessToken) return;
+    let active = true;
     AsyncStorage.getItem(P1_SELECTION_KEY).then(async (raw) => {
-      if (!raw) return;
+      if (!raw || !active) return;
       try {
-        const { cls, subject, doc, history: savedHistory } = JSON.parse(raw) as {
+        const { cls, subject, doc } = JSON.parse(raw) as {
           cls: { id: number; name: string };
           subject: string;
           doc: Phase1Document;
-          history?: QueryHistoryItem[];
         };
+        const [availableSubjects, availableDocs] = await Promise.all([
+          api.study.getAvailableSubjects(accessToken, cls.id),
+          api.study.getDocuments(accessToken, cls.id, subject),
+        ]);
+        if (!active) return;
+        const authorizedDoc = availableDocs.find(item => item.id === doc.id);
+        if (!authorizedDoc) return;
         setSelectedClass(cls);
         setSelectedSubject(subject);
-        setSelectedDoc(doc);
+        setSelectedDoc(authorizedDoc);
         setSelectionRestored(true);
-        /* Restore saved history immediately — works even when server is unreachable */
-        if (savedHistory && savedHistory.length > 0) {
-          setHistory(savedHistory);
-        }
-        /* Also try fetching from server — updates with any newer entries */
-        api.study.getQueryHistory(accessToken, doc.id).then((serverHistory) => {
-          if (serverHistory.length > 0) setHistory(serverHistory);
-        }).catch(() => {});
-        /* Silently reload subjects + docs so the dropdowns are populated */
-        api.study.getAvailableSubjects(accessToken, cls.id).then(setSubjects).catch(() => {});
-        api.study.getDocuments(accessToken, cls.id, subject).then(setDocuments).catch(() => {});
+        setSubjects(availableSubjects); setDocuments(availableDocs);
       } catch {}
     }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
+    return () => { active = false; };
+  }, [accessToken, P1_SELECTION_KEY]);
 
   /* ── Session setup: typography + disclaimer messages ── */
   useEffect(() => {
@@ -437,13 +388,12 @@ export default function TextbooksScreen() {
     setStreaming(false); setQueryLoading(false); setImagesLoading(false);
     setSelectedDoc(doc); setResponse(null); setStreamText("");
     if (!accessToken) return;
-    try { setHistory(await api.study.getQueryHistory(accessToken, doc.id)); } catch {}
-    /* Persist selection so history survives app restarts */
+    /* Persist only the authorized picker selection, never question history. */
     AsyncStorage.setItem(
-      "@edwai/p1_selection",
+      P1_SELECTION_KEY,
       JSON.stringify({ cls: selectedClass, subject: selectedSubject, doc })
     ).catch(() => {});
-  }, [accessToken, selectedClass, selectedSubject]);
+  }, [accessToken, selectedClass, selectedSubject, P1_SELECTION_KEY]);
 
   /* ── query ── */
   const handleQuery = useCallback(async (qMode: "retrieve" | "explain") => {
@@ -497,21 +447,7 @@ export default function TextbooksScreen() {
           finally { if (valid()) setImagesLoading(false); }
         }, 300);
       }
-      /* Add to local history immediately and persist to AsyncStorage */
-      setHistory((prev) => {
-        const newItem = { id: Date.now(), question: question.trim(), mode: qMode, created_at: new Date().toISOString() };
-        const deduped = prev.filter((h) => h.question.toLowerCase() !== newItem.question.toLowerCase());
-        const updated = [newItem, ...deduped].slice(0, 25);
-        /* Persist updated history so it survives app restarts */
-        AsyncStorage.getItem(P1_SELECTION_KEY).then((raw) => {
-          if (!raw) return;
-          try {
-            const saved = JSON.parse(raw);
-            AsyncStorage.setItem(P1_SELECTION_KEY, JSON.stringify({ ...saved, history: updated })).catch(() => {});
-          } catch {}
-        }).catch(() => {});
-        return updated;
-      });
+      if (finalRes.answer && !finalRes.answer.startsWith("Error:")) recentQuestions.refreshAfterAnswer();
       /* Refresh usage after each query */
       void refreshUsage();
     } catch (e) {
@@ -524,7 +460,7 @@ export default function TextbooksScreen() {
       }
       setStreaming(false); setQueryLoading(false);
     }
-  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium]);
+  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium, recentQuestions.refreshAfterAnswer]);
 
   /* ── image / OCR ── */
   const handleImageCapture = useCallback(async (fromCamera: boolean) => {
@@ -662,9 +598,11 @@ export default function TextbooksScreen() {
               </View>
             </View>
 
-            <RecentQuestionsPanel history={history} onSelect={setQuestion} />
+            <RecentQuestionsPanel key={recentQuestions.scopeKey} {...recentQuestions} phase="shared"
+              onSelect={q => { if (composer.current) composer.current.replaceDraft(q); else setQuestion(q); }} />
 
             <QuestionComposer
+              ref={composer}
               value={question} onChange={setQuestion} documentKey={`textbook:${selectedDoc?.id ?? "none"}`} isDark={isDark}
               disabled={isQuerying} imageBusy={ocrLoading}
               tools={<>

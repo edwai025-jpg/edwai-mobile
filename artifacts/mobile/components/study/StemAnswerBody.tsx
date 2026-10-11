@@ -5,8 +5,8 @@ import type { TypographySettings } from "@/services/api";
 import { formatStem, stemStyles } from "@/services/stemFormatting";
 import { stemDocument } from "@/services/stemDocument";
 
-type Props = { content: string; isDark: boolean; typography?: TypographySettings | null; streaming?: boolean };
-export default function StemAnswerBody({ content, isDark, typography, streaming }: Props) {
+type Props = { content: string; isDark: boolean; typography?: TypographySettings | null; streaming?: boolean; compact?: boolean };
+export default function StemAnswerBody({ content, isDark, typography, streaming, compact }: Props) {
   const id = useId(), { fontScale } = useWindowDimensions();
   const [height, setHeight] = useState(40), [bridgeFailed, setBridgeFailed] = useState(false);
   const [displayContent, setDisplayContent] = useState(content);
@@ -26,7 +26,9 @@ export default function StemAnswerBody({ content, isDark, typography, streaming 
     try { return { ...formatStem(displayContent), failed: false }; }
     catch { return { html: "", incomplete: false, failed: true }; }
   }, [displayContent]);
-  const css = useMemo(() => stemStyles(isDark, typography, fontScale), [isDark, typography, fontScale]);
+  const css = useMemo(() => stemStyles(isDark, typography, fontScale) + (compact
+    ? `#answer{font-size:${14 * Math.max(1, fontScale)}px;padding:0;color:${isDark ? "#c7d2fe" : "#3730a3"}}p{margin:0 0 2px}.katex-display{margin:2px 0}h1,h2,h3{font-size:1em;margin:2px 0}`
+    : ""), [isDark, typography, fontScale, compact]);
   if (lastContent.current !== displayContent + css) { revision.current++; lastContent.current = displayContent + css; }
   const payload = { html: formatted.html, css, revision: revision.current, id };
   const latest = useRef(payload); latest.current = payload;

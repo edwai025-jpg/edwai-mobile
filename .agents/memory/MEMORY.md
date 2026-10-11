@@ -10,3 +10,4 @@
 - [Profile completion contract](completion-contracts.md) — Required order and full onboarding scope; preserve server completion truth and non-idempotent request limitations.
 - [Question input scope](input-mode-scope.md) — Detailed PDF parity boundaries; voice capture is independent of books and answer/explanation quotas.
 - [Answer formatting parity](answer-formatting-scope.md) — One renderer, unchanged answer APIs, no notation repair or extra generation; chemistry tests must match module conditions.
+- [Recent Questions scope](recent-questions-scope.md) — UI-only bookmarks and server-owned history; terminal streaming events can precede history persistence.

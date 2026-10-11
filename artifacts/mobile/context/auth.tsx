@@ -104,6 +104,7 @@ type AuthState = {
   logout: (options?: { localOnly?: boolean }) => Promise<void>;
   updateUser: (updates: Partial<UserProfile>) => Promise<void>;
   refreshUser: (options?: { throwOnError?: boolean }) => Promise<void>;
+  runAuthenticatedRequest: <T>(operation: (token: string) => Promise<T>) => Promise<T>;
   setHasPhoto: (v: boolean | null) => void;
   probeHasPhoto: () => Promise<void>;
 };
@@ -494,6 +495,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         updateUser,
         refreshUser,
+        runAuthenticatedRequest: runProfileRequest,
         setHasPhoto,
         probeHasPhoto,
       }}

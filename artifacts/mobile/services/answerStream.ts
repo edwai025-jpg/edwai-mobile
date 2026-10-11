@@ -40,7 +40,9 @@ export async function readAnswerStream(res: Response, onChunk: (chunk: string) =
   if (reader) {
     const decoder = new TextDecoder();
     try {
-      while (!complete) {
+      // A done event can precede the backend's history write. Let the response
+      // close normally instead of cancelling the server while it is persisting.
+      while (true) {
         checkAbort();
         const { done, value } = await reader.read();
         checkAbort();
@@ -48,7 +50,7 @@ export async function readAnswerStream(res: Response, onChunk: (chunk: string) =
         ingest(decoder.decode(value, { stream: true }));
       }
     } finally {
-      if (complete || signal?.aborted) await reader.cancel().catch(() => {});
+      if (signal?.aborted) await reader.cancel().catch(() => {});
       reader.releaseLock();
     }
   } else { checkAbort(); ingest(await res.text()); checkAbort(); }

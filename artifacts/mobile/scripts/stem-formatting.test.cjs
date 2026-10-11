@@ -120,10 +120,22 @@ test("a token callback runs before the stream finishes", async () => {
   controller.enqueue(new TextEncoder().encode('data: {"chunk":"first "}\n\n'));
   assert.equal(await arrived, "first ");
   controller.enqueue(new TextEncoder().encode('data: {"answer":"final","document_id":12,"image_source_pages":[3]}\n\ndata: [DONE]\n\n'));
+  controller.close();
   const done = await result;
   assert.equal(done.answer, "final");
   assert.equal(done.document_id, 12);
   assert.equal(done.image_source_pages[0], 3);
+});
+test("terminal done does not cancel the stream before server-side history persistence", async () => {
+  let controller, cancelled = false, resolved = false;
+  const stream = new ReadableStream({ start(value) { controller = value; }, cancel() { cancelled = true; } });
+  const answer = readAnswerStream(new Response(stream), () => {}).then(result => { resolved = true; return result; });
+  controller.enqueue(new TextEncoder().encode('data: {"type":"done","answer":"saved"}\n\n'));
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(resolved, false);
+  assert.equal(cancelled, false);
+  controller.close();
+  assert.equal((await answer).answer, "saved");
 });
 test("EOF, malformed lines, terminal stream errors, and buffered native responses", async () => {
   const chunks = [];

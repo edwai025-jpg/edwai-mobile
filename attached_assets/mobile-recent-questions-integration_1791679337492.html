@@ -1,0 +1,715 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>EDUwAI Recent Questions — Mobile UI and API Handoff</title><style>html{color-scheme:light;scroll-behavior:smooth}*{box-sizing:border-box}body{margin:0;background:#f4f6fc;color:#202b43;font:15px/1.7 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1100px;margin:32px auto;background:white;padding:40px 48px;border:1px solid #dfe4f2;border-radius:16px;box-shadow:0 8px 30px #263b6b0a}header{border-bottom:1px solid #e3e7f1;padding-bottom:22px;margin-bottom:26px}.eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#667085;font-weight:700}.badge{display:inline-block;margin:12px 6px 12px 0;padding:5px 12px;border-radius:18px;background:#edf0ff;color:#4338ca;font-size:12px;font-weight:700}.banner{padding:16px 18px;border:1px solid #b9dec7;border-radius:10px;background:#effaf2;color:#195b32;font-weight:600}figure{margin:22px 0 0}figure img{display:block;width:100%;height:auto;border:1px solid #dce2f5;border-radius:10px}figcaption{font-size:12px;color:#667085;margin-top:7px}h1{font-size:32px;line-height:1.2;letter-spacing:-.025em;color:#24104f}h2{font-size:23px;line-height:1.35;margin-top:42px;padding-top:16px;border-top:1px solid #e5e8f0;color:#24104f}h3{font-size:18px;margin-top:26px;color:#4338ca}p{margin:14px 0}a{color:#4338ca}li{margin:5px 0}strong{color:#172b4d}code{font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;background:#eef1f8;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{padding:18px;background:#16213b;color:#f1f4ff;border-radius:10px;overflow:auto;line-height:1.6}pre code{padding:0;background:transparent;color:inherit;overflow-wrap:normal}table{display:block;max-width:100%;overflow-x:auto;border-collapse:collapse;font-size:13px;margin:20px 0}th,td{padding:11px 13px;border:1px solid #dce2ed;text-align:left;vertical-align:top;min-width:140px}th{background:#eef1ff;color:#302777;font-weight:700}tr:nth-child(even) td{background:#f9faff}blockquote{padding:10px 18px;border-left:4px solid #667eea;background:#f3f5ff;margin:18px 0}.footer{margin-top:36px;padding-top:18px;border-top:1px solid #dfe4f2;color:#667085;font-size:12px}@media(max-width:700px){body{font-size:14px}main{margin:0;border:0;border-radius:0;padding:24px 18px}h1{font-size:26px}h2{font-size:20px}th,td{padding:9px;min-width:130px}}@media print{body{background:white}main{border:0;box-shadow:none;margin:0;padding:0;max-width:none}h2,h3{break-after:avoid}pre,figure,tr{break-inside:avoid}table{display:table;width:100%;font-size:10px}th,td{min-width:0}code{font-size:10px}h1{font-size:26px}}</style></head><body><main><header><div class="eyebrow">EDUwAI · Mobile developer handoff</div><span class="badge">UI only</span><span class="badge">Existing authenticated APIs</span><span class="badge">No new backend</span><div class="banner">The existing EDUwAI backend owns question storage, the 100-record limit, automatic eviction, and bookmark enforcement. Mobile only recreates the interface and calls these APIs.</div><figure><img src="data:image/png;base64,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" alt="User-provided reference: expanded Recent Questions panel with one question and a tag-shaped bookmark control"><figcaption>Supplied web reference. The tag control toggles a bookmark; it is not a custom-tag system.</figcaption></figure></header><h1>EDUwAI Recent Questions — Mobile UI and API Handoff</h1>
+<p>Source-based handoff for the existing EDUwAI web implementation. All examples use fictional IDs and data. No web application, backend, database, or deployment changes are required.</p>
+<h2>1. Non-negotiable implementation boundary</h2>
+<p><strong>Build the mobile UI only. Reuse the existing EDUwAI backend and authenticated API client.</strong></p>
+<p>The existing web-app backend is the shared system of record for web and mobile. It already stores recent questions, applies the <strong>100-record limit per user and book</strong>, automatically deletes older <strong>unbookmarked</strong> history entries when inserting new records beyond the cap, and enforces <strong>50 bookmarks per user and book</strong>.</p>
+<p>Do not build another server, database, scheduler, retention job, custom-tag service, or history-write API. Do not implement the 100-record eviction algorithm in mobile storage. Mobile must read the server's history and request bookmark toggles; it must not independently decide which persisted records to delete.</p>
+<table>
+<thead>
+<tr>
+<th>Responsibility</th>
+<th>Existing backend</th>
+<th>Mobile UI</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Persist questions after answers</td>
+<td>Yes</td>
+<td>No separate history write</td>
+</tr>
+<tr>
+<td>Enforce 100 recent records</td>
+<td>Yes</td>
+<td>Display returned records</td>
+</tr>
+<tr>
+<td>Automatically evict oldest unbookmarked records</td>
+<td>Yes</td>
+<td>No deletion job or pruning</td>
+</tr>
+<tr>
+<td>Enforce 50 bookmarks</td>
+<td>Yes</td>
+<td>Display counts and server feedback</td>
+</tr>
+<tr>
+<td>Scope data to signed-in user and book</td>
+<td>Yes</td>
+<td>Pass the selected book ID and valid authentication</td>
+</tr>
+<tr>
+<td>Store bookmark status</td>
+<td>Yes</td>
+<td>Call toggle API and use returned boolean</td>
+</tr>
+<tr>
+<td>Search current history</td>
+<td>No separate search endpoint</td>
+<td>Filter loaded question text locally</td>
+</tr>
+<tr>
+<td>Expand/collapse, icons, labels, colors</td>
+<td>No</td>
+<td>Replicate web UI</td>
+</tr>
+<tr>
+<td>Reuse a question</td>
+<td>No special replay endpoint</td>
+<td>Populate editor; submit only on a later explicit action</td>
+</tr>
+</tbody>
+</table>
+<p>The numbered history limits are not billing/question-generation quotas. Reusing a draft is not submitting a question.</p>
+<h2>2. What “tagging” actually means</h2>
+<p>The right-hand <strong>tag icon</strong> in the supplied screenshot is the control for a <strong>boolean bookmark</strong>, represented by <code>is_bookmarked</code>.</p>
+<ul>
+<li>Unbookmarked row: tag icon <code>🏷️</code>.</li>
+<li>Bookmarked row: bookmark icon <code>🔖</code>, amber row treatment, and a header bookmark-count badge.</li>
+<li>Tapping toggles the bookmark through the existing backend.</li>
+<li>Bookmarking moves the item into the bookmarked-first group.</li>
+<li>Removing a bookmark makes the record eligible for normal server-side eviction on later insertions.</li>
+<li>There are <strong>no custom tag names, categories, colors, multiple tags per question, tag IDs, or tag CRUD endpoints</strong> in this feature.</li>
+</ul>
+<p>Do not interpret the tag icon as a request to implement a new tagging backend.</p>
+<h2>3. Configuration and state</h2>
+<p>These values are currently hardcoded in the inspected backend/frontend, not fetched from a Recent Questions settings API. The mobile UI can use matching display constants; the backend remains authoritative for enforcement.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Existing value / behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>History cap and GET limit</td>
+<td>100 records, scoped to user + document, including bookmarks</td>
+</tr>
+<tr>
+<td>Bookmark cap</td>
+<td>50, scoped to user + document</td>
+</tr>
+<tr>
+<td>Bookmark warning</td>
+<td>Show when loaded bookmarked count is at least 40</td>
+</tr>
+<tr>
+<td>Search visibility</td>
+<td>Show input when loaded history has more than 5 records</td>
+</tr>
+<tr>
+<td>Search rule</td>
+<td>Case-insensitive substring match against <code>question</code>, not answer preview</td>
+</tr>
+<tr>
+<td>API ordering</td>
+<td>Newest 100 first selected, then bookmarks grouped before unbookmarked items; descending creation time inside each group</td>
+</tr>
+<tr>
+<td>Local reorder after toggle</td>
+<td>Stable partition current list into bookmarked then unbookmarked; no new local timestamp</td>
+</tr>
+<tr>
+<td>Header total</td>
+<td>Loaded array length, not filtered result count</td>
+</tr>
+<tr>
+<td>Bookmark badge</td>
+<td>Show only when loaded bookmark count is greater than zero</td>
+</tr>
+<tr>
+<td>Remaining count</td>
+<td><code>50 - loadedBookmarkCount</code></td>
+</tr>
+<tr>
+<td>Initial expansion</td>
+<td>Collapsed; shared-book and personal-book panels have separate state</td>
+</tr>
+<tr>
+<td>Empty history</td>
+<td>Panel is not displayed</td>
+</tr>
+<tr>
+<td>Empty search results</td>
+<td>Show “No matching questions”</td>
+</tr>
+<tr>
+<td>Search placeholder</td>
+<td>“Search questions...”</td>
+</tr>
+<tr>
+<td>List viewport on web</td>
+<td>Maximum height 192 px; vertical scrolling</td>
+</tr>
+<tr>
+<td>Bookmark cap label</td>
+<td>“Bookmark limit reached (50/50)”</td>
+</tr>
+<tr>
+<td>Near-cap label</td>
+<td>“Only N bookmark(s) left”, with singular/plural matching N</td>
+</tr>
+</tbody>
+</table>
+<p>There is no history pagination, cursor, offset, configurable limit parameter, server-side search parameter, or history-settings endpoint on these routes. Do not invent them.</p>
+<h2>4. Two namespaces: shared books and personal resources</h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Shared textbooks / institution books — Phase 1</th>
+<th>Personal PDFs / YouTube — Phase 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Book identifier</td>
+<td><code>Document.id</code></td>
+<td><code>Phase2Document.id</code></td>
+</tr>
+<tr>
+<td>History identifier</td>
+<td><code>UserQueryHistory.id</code></td>
+<td><code>Phase2QueryHistory.id</code></td>
+</tr>
+<tr>
+<td>History API</td>
+<td><code>/api/query-history/{document_id}</code></td>
+<td><code>/api/phase2/documents/{document_id}/query-history</code></td>
+</tr>
+<tr>
+<td>Bookmark API</td>
+<td><code>/api/query-history/{history_id}/bookmark</code></td>
+<td><code>/api/phase2/history/{history_id}/bookmark</code></td>
+</tr>
+<tr>
+<td>History storage</td>
+<td><code>user_query_history</code></td>
+<td><code>phase2_query_history</code></td>
+</tr>
+<tr>
+<td>History sources field</td>
+<td>Present</td>
+<td>Not returned / not in this history table</td>
+</tr>
+<tr>
+<td>Left row icon</td>
+<td><code>retrieve</code>: book <code>📖</code>; other mode: bulb <code>💡</code></td>
+<td>YouTube: movie <code>🎬</code>; otherwise PDF <code>📄</code></td>
+</tr>
+</tbody>
+</table>
+<p>A document ID identifies a book, while a history ID identifies a row. <strong>Never substitute one for the other.</strong> The phases have independent ID spaces; identical numeric IDs do not mean the same book or question.</p>
+<p>Use the mobile app's existing authorized book selection. Existing list APIs are:</p>
+<ul>
+<li><code>GET /api/documents</code>: optional <code>board_id</code>, <code>class_id</code>, <code>medium_id</code>, and <code>subject</code> filters. The web calls it with selected class and subject. The backend applies processed-book, profile, and organization visibility rules. Records include an <code>id</code>, <code>title</code>, and education metadata.</li>
+<li><code>GET /api/phase2/documents</code>: the signed-in user's personal resources, newest first. Records include <code>id</code>, <code>title</code>, <code>book_type</code>, <code>source_type</code>, <code>youtube_url</code>, <code>file_size_bytes</code>, <code>page_count</code>, <code>processing_status</code>, <code>processing_progress</code>, <code>is_ready</code>, <code>created_at</code>, and <code>last_queried_at</code>.</li>
+<li><code>GET /api/phase2/documents/{document_id}</code>: existing personal-document status/detail lookup.</li>
+</ul>
+<p>Use the ID from the correct list. Do not query histories using arbitrary IDs discovered outside the user's authorized book picker.</p>
+<h2>5. Authentication and base URL</h2>
+<p>Reuse the mobile application's <strong>existing EDUwAI API origin and login/token refresh flow</strong>. Examples use <code>&lt;API_ORIGIN&gt;</code> as a placeholder for that configured origin, with <code>/api</code> included once in the path.</p>
+<p>All four history/bookmark routes require an access token:</p>
+<pre><code class="language-http">Authorization: Bearer &lt;EXISTING_ACCESS_TOKEN&gt;
+Accept: application/json
+</code></pre>
+<p>The backend resolves the user from the token. Do not send <code>user_id</code>, credentials, or database connection information. Do not introduce new authentication or ask the user to sign in separately for history.</p>
+<p>The web Axios client uses the configured API base, adds a bearer token, and uses its existing refresh flow; it also supplies organization-subdomain context where applicable. Mobile should reuse its established organization context rather than derive an organization from a development hostname.</p>
+<p>Expired/invalid credentials: use the existing refresh/re-login behavior and then retry a safe GET. Do not blindly replay a bookmark toggle after an ambiguous network failure: it may already have succeeded and a second POST would reverse it.</p>
+<h2>6. History API contracts</h2>
+<h3>Shared-book history</h3>
+<pre><code class="language-http">GET &lt;API_ORIGIN&gt;/api/query-history/42
+Authorization: Bearer &lt;EXISTING_ACCESS_TOKEN&gt;
+</code></pre>
+<p>Successful response is a <strong>bare array</strong>, not a wrapper with <code>items</code>:</p>
+<pre><code class="language-json">[
+  {
+    &quot;id&quot;: 701,
+    &quot;question&quot;: &quot;Explain the difference between reflection and refraction of light rays?&quot;,
+    &quot;mode&quot;: &quot;retrieve&quot;,
+    &quot;answer_preview&quot;: &quot;Reflection is the return of light into the same medium...&quot;,
+    &quot;sources&quot;: [8, 9],
+    &quot;is_bookmarked&quot;: true,
+    &quot;created_at&quot;: &quot;2026-10-10T12:30:00&quot;
+  }
+]
+</code></pre>
+<h3>Personal-book / video history</h3>
+<pre><code class="language-http">GET &lt;API_ORIGIN&gt;/api/phase2/documents/104/query-history
+Authorization: Bearer &lt;EXISTING_ACCESS_TOKEN&gt;
+</code></pre>
+<pre><code class="language-json">[
+  {
+    &quot;id&quot;: 1501,
+    &quot;question&quot;: &quot;What happens when light enters water?&quot;,
+    &quot;mode&quot;: &quot;explain&quot;,
+    &quot;answer_preview&quot;: &quot;The direction of light can change as it passes between media...&quot;,
+    &quot;is_bookmarked&quot;: false,
+    &quot;created_at&quot;: &quot;2026-10-10T12:31:00&quot;
+  }
+]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Meaning / handling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>integer</td>
+<td>History row ID used for bookmark POST</td>
+</tr>
+<tr>
+<td><code>question</code></td>
+<td>string</td>
+<td>Original stored question text; preserve notation and Unicode</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td>string or null for older records</td>
+<td>Saved answer mode; not the keyboard/input mode</td>
+</tr>
+<tr>
+<td><code>answer_preview</code></td>
+<td>string, potentially null in legacy data</td>
+<td>Short preview, not a full saved-answer retrieval contract</td>
+</tr>
+<tr>
+<td><code>sources</code></td>
+<td>JSON page list, potentially null</td>
+<td>Phase 1 only; derived page values can include nulls; not full citation objects</td>
+</tr>
+<tr>
+<td><code>is_bookmarked</code></td>
+<td>boolean</td>
+<td>Backend's saved bookmark status</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>ISO timestamp string or null</td>
+<td>Existing UTC convention; current code uses naive <code>datetime.utcnow()</code> and <code>isoformat()</code>, so examples have no <code>Z</code> suffix</td>
+</tr>
+</tbody>
+</table>
+<p>An empty array is valid. There is no document ID in each history row; retain the phase and document context from the request.</p>
+<p>The shared-book handler checks document existence and filters history by current user and document. It does not independently reproduce the book list's organization-visibility checks. The personal handler additionally verifies document ownership. Do not describe both handlers as having identical access checks.</p>
+<h2>7. Bookmark API contracts</h2>
+<h3>Shared-book bookmark toggle</h3>
+<pre><code class="language-http">POST &lt;API_ORIGIN&gt;/api/query-history/701/bookmark
+Authorization: Bearer &lt;EXISTING_ACCESS_TOKEN&gt;
+</code></pre>
+<h3>Personal-book bookmark toggle</h3>
+<pre><code class="language-http">POST &lt;API_ORIGIN&gt;/api/phase2/history/1501/bookmark
+Authorization: Bearer &lt;EXISTING_ACCESS_TOKEN&gt;
+</code></pre>
+<p>No JSON body is required. Do not send a desired boolean; these are <strong>toggle endpoints</strong>, not “set bookmark” endpoints.</p>
+<p>Both return:</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: 701,
+  &quot;is_bookmarked&quot;: true
+}
+</code></pre>
+<p>The <code>id</code> above is illustrative; the personal route returns its own requested history ID.</p>
+<p>Apply the returned status to the matching row, then group bookmarked rows before unbookmarked rows. Stop event propagation so tapping the tag does not select the question.</p>
+<p>The backend checks row ownership and counts bookmarks for that user and row's document. At 50, adding another bookmark fails; removing an existing bookmark is still allowed. The web gives an unbookmarked icon a not-allowed appearance at the cap but does not actually disable its button; the backend handles the rejection.</p>
+<h3>Errors</h3>
+<table>
+<thead>
+<tr>
+<th>Route / condition</th>
+<th>Status</th>
+<th>Current detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET history: missing document; personal document not owned</td>
+<td>404</td>
+<td><code>Document not found</code></td>
+</tr>
+<tr>
+<td>Bookmark: missing row or row not owned</td>
+<td>404</td>
+<td><code>History entry not found</code></td>
+</tr>
+<tr>
+<td>Bookmark: adding above cap</td>
+<td>409</td>
+<td><code>Bookmark limit reached (50 per book)</code></td>
+</tr>
+<tr>
+<td>Invalid/expired access token</td>
+<td>401</td>
+<td>Existing authentication error; use existing auth flow</td>
+</tr>
+<tr>
+<td>Non-integer path IDs</td>
+<td>422</td>
+<td>FastAPI validation details</td>
+</tr>
+<tr>
+<td>Network/server failure</td>
+<td>No response or 5xx</td>
+<td>Not a success; preserve acknowledged state and offer retry/refetch</td>
+</tr>
+</tbody>
+</table>
+<p>Error responses normally use <code>{&quot;detail&quot;: ...}</code>. The web's 409 alert says: “You've reached the 50 bookmark limit for this book.” Other bookmark failures are not surfaced by this handler; history-load failures are only logged. These are existing web limitations, not evidence of a successful write.</p>
+<p>For mobile, an in-flight flag per row prevents accidental repeated taps. If a POST response is lost, refetch history to reconcile status rather than blindly toggling again. This is UI/request handling, not a new backend requirement.</p>
+<h2>8. Server storage and automatic deletion</h2>
+<h3>Shared-book history table: <code>user_query_history</code></h3>
+<ul>
+<li><code>id</code>: integer primary key.</li>
+<li><code>user_id</code>: required integer foreign key to <code>users.id</code>, indexed, declared <code>ON DELETE CASCADE</code>.</li>
+<li><code>document_id</code>: required integer foreign key to <code>documents.id</code>, indexed, declared <code>ON DELETE CASCADE</code>.</li>
+<li><code>question_text</code>: required text.</li>
+<li><code>mode</code>: string length 20.</li>
+<li><code>answer_preview</code>: string length 300; current save helper stores the first <strong>250</strong> answer characters without adding an ellipsis.</li>
+<li><code>sources</code>: JSON; extracted page numbers/values, not stored full source objects.</li>
+<li><code>is_bookmarked</code>: required boolean, default/server default false.</li>
+<li><code>created_at</code>: datetime, default UTC.</li>
+<li>Composite index on <code>(user_id, document_id, created_at)</code>.</li>
+</ul>
+<h3>Personal history table: <code>phase2_query_history</code></h3>
+<ul>
+<li>Equivalent integer primary key and required indexed user/document foreign keys, with declared cascading deletion.</li>
+<li>Parent document table is <code>phase2_documents</code>.</li>
+<li><code>question_text</code>: required text.</li>
+<li><code>mode</code>: nullable string length 20.</li>
+<li><code>answer_preview</code>: nullable string length 300; text over 300 characters becomes first <strong>297</strong> characters plus <code>...</code>; otherwise unchanged.</li>
+<li><code>is_bookmarked</code>: required boolean, default/server default false.</li>
+<li><code>created_at</code>: datetime, default UTC.</li>
+<li>Composite index on <code>(user_id, document_id, created_at)</code>.</li>
+<li>No <code>sources</code> column in this recent-history model.</li>
+</ul>
+<p>History is relational backend data, not an image/PDF in object storage, not a vector index, and not browser-local storage. PDF/media storage and full query audit records are separate features. The mobile app does not need database credentials or GCS storage APIs for Recent Questions.</p>
+<h3>Retention algorithm — backend already owns it</h3>
+<p>On saving a new distinct history record:</p>
+<ol>
+<li>Insert the record for the authenticated user and selected document.</li>
+<li>Count that user's history records for that document.</li>
+<li>If the count exceeds 100, select the oldest <strong>unbookmarked</strong> records, limited to the excess count.</li>
+<li>Delete those records and commit.</li>
+</ol>
+<p>This is insertion-triggered cleanup, not a daily scheduler or age-based TTL. The 100 cap includes bookmarked records; it is not “100 recent plus 50 bookmarks.” Bookmarks are preserved during normal eviction. Unbookmarking alone does not immediately delete the row.</p>
+<p>History GET returns at most the newest 100 records and does not run cleanup. Under ordinary sequential writes and the existing 50-bookmark cap, insertion cleanup retains up to 100. The code does not expose a transactional concurrency guarantee or a live retention-settings endpoint; mobile must not invent one.</p>
+<p>The schemas declare history cascading deletion with parent users/documents. Personal document deletion uses the existing backend deletion flow. Mobile must not add a separate history-cleanup API or retention process. No individual history-edit/delete or bulk-clear route is provided by this feature.</p>
+<h3>Duplicate-handling differences</h3>
+<table>
+<thead>
+<tr>
+<th>Behavior</th>
+<th>Shared books</th>
+<th>Personal resources</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Duplicate lookup</td>
+<td>Exact stored text versus <code>question.strip()</code></td>
+<td>Exact stored text versus <code>question.strip()</code></td>
+</tr>
+<tr>
+<td>New stored question</td>
+<td>Incoming question unchanged</td>
+<td>Trimmed question</td>
+</tr>
+<tr>
+<td>When duplicate found</td>
+<td>Return without changing timestamp, mode, or preview</td>
+<td>Update timestamp, mode, and preview; keep ID and bookmark</td>
+</tr>
+<tr>
+<td>Duplicate moves to most recent</td>
+<td>No</td>
+<td>Yes, on next fetch because timestamp changes</td>
+</tr>
+<tr>
+<td>Case/notation normalization</td>
+<td>None beyond lookup trimming</td>
+<td>None beyond trimming</td>
+</tr>
+</tbody>
+</table>
+<p>The web trims query text at submission, so normal web submissions generally avoid the shared-book raw-storage versus trimmed-lookup mismatch. Do not redesign mobile draft text normalization; reuse the existing submission boundary.</p>
+<p>Old comments mentioning 25 or 20 retained entries are stale: executable save/GET logic uses <strong>100</strong>. Do not copy those comments as configuration.</p>
+<h2>9. How records are created — reuse existing question APIs</h2>
+<p>Mobile does not call an “insert history” endpoint. Successful answers from the existing query APIs invoke the backend history helpers.</p>
+<table>
+<thead>
+<tr>
+<th>Flow</th>
+<th>Existing POST route</th>
+<th>Request JSON</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shared book, normal answer</td>
+<td><code>/api/query</code></td>
+<td><code>document_id</code>, <code>question</code>, <code>mode</code>; optional <code>top_k</code></td>
+</tr>
+<tr>
+<td>Shared book, streaming</td>
+<td><code>/api/query/stream</code></td>
+<td>Same shared-book query fields</td>
+</tr>
+<tr>
+<td>Personal resource, normal answer</td>
+<td><code>/api/phase2/documents/{document_id}/query</code></td>
+<td><code>question</code>, <code>mode</code></td>
+</tr>
+<tr>
+<td>Personal resource, streaming</td>
+<td><code>/api/phase2/documents/{document_id}/query/stream</code></td>
+<td>Same personal query fields</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-json">{
+  &quot;document_id&quot;: 42,
+  &quot;question&quot;: &quot;Explain the difference between reflection and refraction of light rays?&quot;,
+  &quot;mode&quot;: &quot;retrieve&quot;
+}
+</code></pre>
+<p>For personal resources, omit <code>document_id</code> from the JSON; it is in the URL. Both request models default <code>mode</code> to <code>retrieve</code>. The existing UI distinguishes <code>retrieve</code> from explanatory modes; the history API returns the saved string rather than a new mode configuration.</p>
+<p>Reuse the mobile application's already implemented answer/query client. These routes can incur existing question quota usage; <strong>history loading and bookmarking do not themselves submit another answer query</strong>.</p>
+<p>Shared-book history writes also occur in shared-cache and teacher-curated answer branches. Personal non-streaming and streaming answers save recent history. Backend history-write exceptions can be caught/logged, so a successful answer does not provide a separate guaranteed “history committed” acknowledgment.</p>
+<p><strong>Streaming timing:</strong> the inspected shared and personal streaming paths can emit the <code>done</code> event before completing history persistence. A GET immediately on <code>done</code> can briefly return the old list. Refresh at stream completion/closure, and reconcile with a bounded additional GET when needed. Do not create a mobile history entry locally as a substitute for a server write, and do not resubmit the question to fix history.</p>
+<p>For query-specific errors such as quota exceeded or a personal document not ready, retain the mobile app's existing query error handling. No changes to transcription, query generation, retrieval, or quotas are needed for this feature.</p>
+<h2>10. Web lifecycle and mobile parity</h2>
+<h3>Loading and refreshing</h3>
+<ul>
+<li>Shared-book panel: fetch history when the selected shared document changes while using shared books; clear the shared list when there is no active shared document.</li>
+<li>Personal-resource panel: on selected personal document ID change, clear editor/answer-related display, collapse personal history, clear personal search, and fetch that document's history or clear it when deselected.</li>
+<li>After receiving an answer's streaming <code>done</code>, the web fetches the matching phase's history.</li>
+<li>Shared-book streaming also fetches after its read loop completes.</li>
+<li>Non-streaming fallback refreshes shared-book history; the inspected fallback does <strong>not</strong> explicitly refresh personal history. This is a parity caveat, not a request to change the web backend.</li>
+<li>Bookmark responses update the loaded list locally without a GET in the normal acknowledged path.</li>
+<li>There is no push subscription, periodic history poll, or automatic cross-device synchronization channel in this panel. Refetch retrieves shared backend state.</li>
+</ul>
+<p>Mobile should key UI data/request context by <code>(signed-in user, phase, document ID)</code> and ignore responses for a book/account no longer selected. Clear account-scoped history when signing out. These are mobile UI safeguards, not another persistence layer.</p>
+<h3>Selecting a recent question</h3>
+<p>The web row handler:</p>
+<ol>
+<li>Invalidates/cancels pending voice-transcription work.</li>
+<li>Copies <code>history.question</code> into the question editor.</li>
+<li>Sets voice-preview-ready and voice-editing flags to false.</li>
+<li>Collapses the matching history panel.</li>
+<li>Clears that panel's search text.</li>
+</ol>
+<p>It <strong>does not</strong> restore <code>history.mode</code>, auto-submit the question, retrieve a full old answer, or replace the currently displayed answer in this row handler. Let the user edit the question and choose an existing answer action normally.</p>
+<h3>Filtering and bookmark sorting</h3>
+<p>Search only the already loaded history array:</p>
+<pre><code class="language-text">include row if search is empty
+or lowerCase(row.question) contains lowerCase(search)
+</code></pre>
+<p>Search does not change the header total or bookmark counts. After an acknowledged toggle, replace the matching row's <code>is_bookmarked</code> with the response value and stable-partition the current list into bookmarked/unbookmarked groups.</p>
+<p>The local reorder does not re-sort each group by timestamp; a later GET restores the backend's descending-time ordering. Mobile should distinguish this current web behavior from a claim that every local reorder is globally timestamp-sorted.</p>
+<h2>11. UI appearance and notation</h2>
+<p>The provided screenshot shows the light-theme expanded panel above the question editor. The source is authoritative for conditions and interactions.</p>
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Web geometry / type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Outer panel</td>
+<td>12 px corner radius; 2 px border; 16 px bottom margin</td>
+</tr>
+<tr>
+<td>Header</td>
+<td>Full width; horizontal flex; padding 16 px horizontally / 10 px vertically; 14 px text; weight 600</td>
+</tr>
+<tr>
+<td>Header content</td>
+<td>Clock icon, <code>Recent Questions (N)</code>, optional bookmark-count badge; chevron rotates 180 degrees when expanded</td>
+</tr>
+<tr>
+<td>Expanded body</td>
+<td>Top border; padding 16 px horizontally / 12 px bottom</td>
+</tr>
+<tr>
+<td>Search</td>
+<td>14 px text; 8 px radius; 1 px border; padding 12 px horizontally / 6 px vertically</td>
+</tr>
+<tr>
+<td>List</td>
+<td>192 px maximum height; scroll; 2 px inter-row spacing; 8 px top margin</td>
+</tr>
+<tr>
+<td>Row</td>
+<td>8 px radius; flex; 4 px gap; 14 px text</td>
+</tr>
+<tr>
+<td>Question target</td>
+<td>Flexible width; left-aligned; padding 12 px horizontally / 8 px vertically</td>
+</tr>
+<tr>
+<td>Mode/source icon</td>
+<td>12 px; no shrinking; 8 px gap before text</td>
+</tr>
+<tr>
+<td>Bookmark target</td>
+<td>Non-shrinking; padding 8 px; separate tap handler</td>
+</tr>
+</tbody>
+</table>
+<h3>Theme color tokens</h3>
+<table>
+<thead>
+<tr>
+<th>Usage</th>
+<th>Light</th>
+<th>Dark / web “primary” theme</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Panel border</td>
+<td>Indigo 200 <code>#c7d2fe</code></td>
+<td>Indigo 500 <code>#6366f1</code>, 40% opacity</td>
+</tr>
+<tr>
+<td>Panel background</td>
+<td>Indigo 50 <code>#eef2ff</code></td>
+<td>Indigo 950 <code>#1e1b4b</code>, 50% opacity</td>
+</tr>
+<tr>
+<td>Header text</td>
+<td>Indigo 700 <code>#4338ca</code></td>
+<td>Indigo 300 <code>#a5b4fc</code></td>
+</tr>
+<tr>
+<td>Header hover text</td>
+<td>Indigo 900 <code>#312e81</code></td>
+<td>Indigo 100 <code>#e0e7ff</code></td>
+</tr>
+<tr>
+<td>Body separator</td>
+<td>Indigo 200</td>
+<td>Indigo 500, 20% opacity</td>
+</tr>
+<tr>
+<td>Question text</td>
+<td>Indigo 800 <code>#3730a3</code></td>
+<td>Indigo 200</td>
+</tr>
+<tr>
+<td>Question hover text</td>
+<td>Indigo 900</td>
+<td>Indigo 50</td>
+</tr>
+<tr>
+<td>Row hover</td>
+<td>Indigo 100</td>
+<td>Indigo 500, 25% opacity</td>
+</tr>
+<tr>
+<td>Bookmarked row</td>
+<td>Amber 50 <code>#fffbeb</code></td>
+<td>Amber 500 <code>#f59e0b</code>, 10% opacity</td>
+</tr>
+<tr>
+<td>Bookmarked icon</td>
+<td>Amber 400 <code>#fbbf24</code></td>
+<td>Same; hover Amber 300 <code>#fcd34d</code></td>
+</tr>
+<tr>
+<td>Unbookmarked icon</td>
+<td>Indigo 300</td>
+<td>Indigo 600 <code>#4f46e5</code>; hover Amber 400</td>
+</tr>
+<tr>
+<td>Bookmark badge</td>
+<td>Amber 100 <code>#fef3c7</code> / Amber 700 <code>#b45309</code> text</td>
+<td>Amber 500, 20% opacity / Amber 300 text</td>
+</tr>
+<tr>
+<td>Warning</td>
+<td>Amber 50 / Amber 700</td>
+<td>Amber 500, 15% opacity / Amber 300</td>
+</tr>
+<tr>
+<td>Search background</td>
+<td>White</td>
+<td>Indigo 900, 40% opacity</td>
+</tr>
+<tr>
+<td>Search border</td>
+<td>Indigo 200</td>
+<td>Indigo 500, 30% opacity</td>
+</tr>
+<tr>
+<td>Search text</td>
+<td>Indigo 900</td>
+<td>Indigo 100</td>
+</tr>
+<tr>
+<td>Search placeholder</td>
+<td>Indigo 300</td>
+<td>Indigo 400 <code>#818cf8</code></td>
+</tr>
+<tr>
+<td>Search focus ring</td>
+<td>Indigo 400</td>
+<td>Indigo 400</td>
+</tr>
+</tbody>
+</table>
+<p>Do not depend on hover-only messaging on touch devices. Use existing native components and rendering support; no new backend or mandatory library replacement is implied.</p>
+<p>Question labels use the web's compact <code>StemMarkdownRenderer</code>: Markdown/GFM, math support, KaTeX/mhchem, preservation of Unicode, conversion of <code>\(...\)</code> and <code>\[...\]</code> delimiters for rendering, and a raw-text fallback if notation cannot be formatted. Use the mobile app's existing STEM/Markdown renderer, with compact wrapping rather than showing raw commands or assuming all questions are English/plain text. This renderer conversion is presentation-only; do not overwrite the canonical stored question.</p>
+<h2>12. Mobile implementation checklist</h2>
+<ul>
+<li>Use the existing authenticated API client; no new backend, DB, history-write route, or deletion job.</li>
+<li>Load the correct phase's history for the selected book ID.</li>
+<li>Display a collapsed panel only for non-empty history; support expansion and bounded scrolling.</li>
+<li>Preserve mode/source icons, bookmark treatment, total count, and search threshold.</li>
+<li>Render mathematical notation and multilingual question text through the existing mobile renderer.</li>
+<li>Keep row selection separate from bookmark toggling.</li>
+<li>On question selection, populate the editor only; do not generate or fetch an answer automatically.</li>
+<li>Treat server bookmark responses and 409 errors as authoritative; keep removal available at the cap.</li>
+<li>Let the server apply the 100-record limit and evict older unbookmarked entries.</li>
+<li>Refresh after answer completion; account for streaming persistence timing without another answer submission.</li>
+<li>Use account/phase/book-scoped UI state and reconcile ambiguous toggle failures with GET.</li>
+</ul>
+<h3>Acceptance scenarios</h3>
+<ol>
+<li>Shared-book history and personal-resource history load from different route families and never mix.</li>
+<li>Empty history hides the panel; six records show search; search changes rows but not the total.</li>
+<li>Bookmark/unbookmark uses the history ID, applies the returned boolean, and changes the icon/group.</li>
+<li>At 50 bookmarks, the server rejects a new one with 409, but unbookmarking still works.</li>
+<li>Selecting a question fills the editor, cancels stale voice work, collapses history, and sends no answer request.</li>
+<li>After the backend stores the 101st distinct question, the next GET reflects server eviction of an old unbookmarked record; mobile performs no deletion.</li>
+<li>Repeating a question has the phase-specific duplicate behavior described above.</li>
+<li>Switching books/accounts while a request is pending does not display the wrong history.</li>
+<li>Stream completion followed by history refresh does not fabricate a record before the backend returns it.</li>
+</ol>
+<h2>13. Source references and verification scope</h2>
+<p>Source references for the inspected workspace; line positions may change in future revisions:</p>
+<ul>
+<li><code>src-frontend/pages/StudentPortal.jsx:293-302,528-592,1224-1242,1348-1368,1424-1435,1568-1600,3349-3537</code>: state, routes, query completion, selection, search, bookmarks, and panel UI.</li>
+<li><code>src-frontend/services/api.js</code>: configured API client, bearer-token injection, organization context, and authentication retry behavior.</li>
+<li><code>src-frontend/config.js</code>: existing API base selection; reuse the mobile app's configured production origin.</li>
+<li><code>src-frontend/components/StemMarkdownRenderer.jsx</code>: compact question renderer and notation fallback.</li>
+<li><code>src-frontend/index.css:255-263</code>: compact paragraph/minimum-width rules.</li>
+<li><code>main.py:2947-2952,4668-4748,5032-5076,7597-7656</code>: shared-book query model, book list, retention/dedup helper, history GET and bookmark POST.</li>
+<li><code>main.py</code>: normal/streaming query history writes, including cached and teacher-curated answers.</li>
+<li><code>database.py:711-726</code>: shared-book history schema and index.</li>
+<li><code>auth.py:328-346</code>: authenticated user resolution.</li>
+<li><code>phase2/routes.py:43-90,94-137,170-197,818-879,882-932</code>: personal query models, history save helper, book list, history/bookmark APIs, and existing document deletion.</li>
+<li><code>phase2/routes.py:768-814</code>: streaming <code>done</code> and subsequent persistence sequence.</li>
+<li><code>phase2/models.py:100-118</code>: personal-history schema and index.</li>
+<li><code>tailwind.config.js</code>: current frontend styling setup.</li>
+</ul>
+<p>This handoff is extracted from source, not from live production user records. No live history was exported, no questions/bookmarks were written, and no authenticated mobile/device session was exercised to generate this document. Sample responses illustrate the contract; they are not production API captures.</p>
+
+<div class="footer">Standalone, offline-readable handoff. No API requests or authentication are performed by this document. Markdown companion contains the same integration specification.</div></main></body></html>
