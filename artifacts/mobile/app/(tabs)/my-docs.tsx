@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { LinearGradient } from "expo-linear-gradient";
+import { usePathname } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -107,9 +108,10 @@ const dm = StyleSheet.create({
 /* ─── Doc Card ──────────────────────────────────────────────────────────── */
 function DocCard({ doc, selected, onSelect, onDelete }: { doc: DocumentItem; selected: boolean; onSelect: () => void; onDelete: () => void }) {
   const isProcessing = doc.processing_status === "processing" || doc.processing_status === "uploaded";
+  const canSelect = doc.processing_status === "completed";
   const statusColor = STATUS_COLOR[doc.processing_status];
   return (
-    <Pressable style={[dc.card, selected && dc.cardSelected, !doc.is_ready && dc.cardDim]} onPress={doc.is_ready ? onSelect : undefined}>
+    <Pressable testID={`personal-resource-${doc.id}`} accessibilityState={{ disabled: !canSelect, selected }} style={[dc.card, selected && dc.cardSelected, !canSelect && dc.cardDim]} onPress={canSelect ? onSelect : undefined}>
       <View style={dc.row}>
         <View style={dc.iconWrap}><Text style={{ fontSize: 22 }}>{doc.source_type === "youtube" ? "🎬" : "📄"}</Text></View>
         <View style={{ flex: 1 }}>
@@ -171,6 +173,10 @@ const up = StyleSheet.create({
 /* ─── Main Screen ───────────────────────────────────────────────────────── */
 export default function OwnBooksScreen() {
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
+  const location = useRef(pathname);
+  location.current = pathname;
+  const documentEpoch = useRef(0);
   const { accessToken, logout, user } = useAuth();
   const { disclaimerMessages } = useSourceSettings(false);
   const { isDark, toggleTheme } = useTheme();
@@ -184,6 +190,8 @@ export default function OwnBooksScreen() {
   }, [logout]);
 
   const [activeTab, setActiveTab] = useState<"pdf" | "youtube">("pdf");
+  const resourceTab = useRef(activeTab);
+  resourceTab.current = activeTab;
 
   /* documents */
   const [docs, setDocs] = useState<DocumentItem[]>([]);
@@ -235,10 +243,38 @@ export default function OwnBooksScreen() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const onDocSelect = useCallback((doc: DocumentItem | null, fromPolling = false) => {
+    if (doc && (fromPolling ? !doc.is_ready : doc.processing_status !== "completed")) return;
+    abortCtrl.current?.abort();
+    setStudyContext(null); setStreaming(false); setQueryLoading(false);
+    setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText("");
+    setYtMode(null);
+  }, []);
+
+  useEffect(() => {
+    if (pathname === "/") onDocSelect(null);
+  }, [pathname, onDocSelect]);
+
+  useEffect(() => {
+    documentEpoch.current++;
+    return () => { documentEpoch.current++; };
+  }, [user?.id]);
+
+  const changeResourceTab = useCallback((tab: "pdf" | "youtube") => {
+    resourceTab.current = tab;
+    setActiveTab(tab);
+    if (selectedDoc && (selectedDoc.source_type === "youtube" ? "youtube" : "pdf") !== tab) onDocSelect(null);
+  }, [selectedDoc, onDocSelect]);
+
   /* ── load docs ── */
   const loadDocs = useCallback(async () => {
     if (!accessToken) return null;
-    try { const list = await api.phase2.listDocuments(accessToken); setDocs(list); return list; } catch { return null; }
+    const epoch = documentEpoch.current;
+    try {
+      const list = await api.phase2.listDocuments(accessToken);
+      if (epoch !== documentEpoch.current) return null;
+      setDocs(list); return list;
+    } catch { return null; }
   }, [accessToken]);
 
   useEffect(() => {
@@ -252,6 +288,13 @@ export default function OwnBooksScreen() {
       pollRef.current = setInterval(async () => {
         const list = await loadDocs();
         if (!list) return;
+        // Selection follows a processing-to-ready polling result, never the upload itself.
+        const ready = list.find(doc =>
+          doc.is_ready &&
+          docs.some(previous => previous.id === doc.id && !previous.is_ready && (previous.processing_status === "processing" || previous.processing_status === "uploaded")) &&
+          (doc.source_type === "youtube" ? "youtube" : "pdf") === resourceTab.current
+        );
+        if (ready && location.current === "/my-docs") onDocSelect(ready, true);
         if (!list.some((d) => d.processing_status === "processing" || d.processing_status === "uploaded")) {
           if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         }
@@ -259,7 +302,7 @@ export default function OwnBooksScreen() {
     }
     if (!hasProcessing && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
-  }, [docs, loadDocs]);
+  }, [docs, loadDocs, onDocSelect]);
 
   /* ── pick PDF ── */
   const handlePickPdf = useCallback(async () => {
@@ -331,16 +374,6 @@ export default function OwnBooksScreen() {
     } finally { setDeleting(false); }
   }, [deleteTarget, accessToken, selectedDoc]);
 
-  /* ── select doc ── */
-  const onDocSelect = useCallback(async (doc: DocumentItem) => {
-    abortCtrl.current?.abort();
-    setStudyContext(null);
-    setStreaming(false); setQueryLoading(false);
-    setSelectedDoc(doc); setQuestion(""); setResponse(null); setStreamText("");
-    setYtMode(doc.source_type === "youtube" ? null : "qa");
-    if (!accessToken) return;
-  }, [accessToken]);
-
   /* ── query ── */
   const handleQuery = useCallback(async (qMode: "retrieve" | "explain", overrideQuestion?: string) => {
     const q = overrideQuestion ?? question;
@@ -396,7 +429,7 @@ export default function OwnBooksScreen() {
   const ytDocs = docs.filter((d) => d.source_type === "youtube");
   const displayDocs = activeTab === "pdf" ? pdfDocs : ytDocs;
   const isYoutube = selectedDoc?.source_type === "youtube";
-  const showQAInterface = selectedDoc && selectedDoc.is_ready && (!isYoutube || ytMode !== null);
+  const showQAInterface = Boolean(selectedDoc && (!isYoutube || ytMode !== null));
 
   return (
     <LinearGradient
@@ -419,10 +452,10 @@ export default function OwnBooksScreen() {
         {/* ─── PDF / YOUTUBE TABS ─── */}
         <View style={sc.card}>
           <View style={sc.subTabRow}>
-            <Pressable style={[sc.subTab, activeTab === "pdf" && sc.subTabActive]} onPress={() => setActiveTab("pdf")}>
+            <Pressable style={[sc.subTab, activeTab === "pdf" && sc.subTabActive]} onPress={() => changeResourceTab("pdf")}>
               <Text style={activeTab === "pdf" ? sc.subTabTextActive : sc.subTabText}>📄 PDF Books</Text>
             </Pressable>
-            <Pressable style={[sc.subTab, activeTab === "youtube" && sc.subTabActive]} onPress={() => setActiveTab("youtube")}>
+            <Pressable style={[sc.subTab, activeTab === "youtube" && sc.subTabActive]} onPress={() => changeResourceTab("youtube")}>
               <Text style={activeTab === "youtube" ? sc.subTabTextActive : sc.subTabText}>🎬 YouTube Videos</Text>
             </Pressable>
           </View>
@@ -555,12 +588,7 @@ export default function OwnBooksScreen() {
         </View>
 
         {/* ─── YOUTUBE MODE PICKER (6f) ─── */}
-        {!selectedDoc && <View style={sc.card}>
-          <Text style={sc.cardTitle}>Ask a Question</Text>
-          <Text style={sc.cardSubtitle}>Select a ready book before submitting. You can type or record your question first.</Text>
-          <QuestionComposer value={question} onChange={setQuestion} documentKey="own-book:none" isDark={isDark} disabled={isQuerying} />
-        </View>}
-        {selectedDoc && selectedDoc.is_ready && isYoutube && ytMode === null && (
+        {selectedDoc && isYoutube && ytMode === null && (
           <View style={sc.card}>
             <Text style={sc.cardTitle}>🎬 How do you want to use this video?</Text>
             <Text style={{ fontSize: 13, color: MUTED, marginBottom: 16, lineHeight: 18 }}>
@@ -583,7 +611,7 @@ export default function OwnBooksScreen() {
 
         {/* ─── QUESTION INTERFACE ─── */}
         {showQAInterface && (
-          <View style={sc.card}>
+          <View testID="personal-question-section" style={sc.card}>
             <View style={sc.qHeader}>
               <View style={sc.qIconBox}><Text style={{ fontSize: 18 }}>💬</Text></View>
               <View style={{ flex: 1 }}>

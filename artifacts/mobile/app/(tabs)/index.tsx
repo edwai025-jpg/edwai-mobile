@@ -1,8 +1,7 @@
 import { platformShadow } from "@/constants/shadow";
 import { Feather, Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -52,7 +51,7 @@ const MUTED = "#9ca3af";
 
 /* ─── Picker ─────────────────────────────────────────────────────────────── */
 function DarkPicker({
-  label, options, selected, onSelect, disabled, placeholder, loading,
+  label, options, selected, onSelect, disabled, placeholder, loading, onClear,
 }: {
   label: string;
   options: { id: string | number; name: string }[];
@@ -61,6 +60,7 @@ function DarkPicker({
   disabled?: boolean;
   placeholder: string;
   loading?: boolean;
+  onClear?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const { isDark } = useTheme();
@@ -81,6 +81,11 @@ function DarkPicker({
       {open && (
         <View style={[dp.dropdown, { backgroundColor: inputBg, borderColor: borderCol }]}>
           <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: 164 }}>
+            {onClear && (
+              <Pressable style={[dp.option, { borderBottomColor: borderCol }]} onPress={() => { onClear(); setOpen(false); }}>
+                <Text style={[dp.optText, { color: MUTED }]}>{placeholder}</Text>
+              </Pressable>
+            )}
             {options.map((opt) => (
               <Pressable key={String(opt.id)} style={[dp.option, { borderBottomColor: borderCol }, String(opt.id) === String(selected) && dp.optSel]} onPress={() => { onSelect(opt); setOpen(false); }}>
                 <Text style={[dp.optText, { color: textCol }, String(opt.id) === String(selected) && dp.optTextSel]}>{opt.name}</Text>
@@ -189,6 +194,8 @@ const bp = StyleSheet.create({
 /* ─── Main Screen ────────────────────────────────────────────────────────── */
 export default function TextbooksScreen() {
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
+  const catalogRequest = useRef(0);
   const { accessToken, user, logout, runAuthenticatedRequest } = useAuth();
   const { disclaimerMessages, boardPageConfig, pendingBoard } = useSourceSettings(true);
 
@@ -226,7 +233,6 @@ export default function TextbooksScreen() {
     }
   }, [user?.id]);
   const composer = useRef<QuestionComposerHandle>(null);
-  const [selectionRestored, setSelectionRestored] = useState(false);
   const [queryLoading, setQueryLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
@@ -249,36 +255,20 @@ export default function TextbooksScreen() {
   const prevBoardIdRef = useRef<number | undefined | "__init__">("__init__");
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;
 
-  const P1_SELECTION_KEY = `@edwai/p1_selection:${user?.id ?? "none"}`;
-
-  /* ── Restore last selection from AsyncStorage on mount ── */
+  /* Start without a source; entering Own Books clears the academic selection. */
   useEffect(() => {
-    if (!accessToken) return;
-    let active = true;
-    AsyncStorage.getItem(P1_SELECTION_KEY).then(async (raw) => {
-      if (!raw || !active) return;
-      try {
-        const { cls, subject, doc } = JSON.parse(raw) as {
-          cls: { id: number; name: string };
-          subject: string;
-          doc: Phase1Document;
-        };
-        const [availableSubjects, availableDocs] = await Promise.all([
-          api.study.getAvailableSubjects(accessToken, cls.id),
-          api.study.getDocuments(accessToken, cls.id, subject),
-        ]);
-        if (!active) return;
-        const authorizedDoc = availableDocs.find(item => item.id === doc.id);
-        if (!authorizedDoc) return;
-        setSelectedClass(cls);
-        setSelectedSubject(subject);
-        setSelectedDoc(authorizedDoc);
-        setSelectionRestored(true);
-        setSubjects(availableSubjects); setDocuments(availableDocs);
-      } catch {}
-    }).catch(() => {});
-    return () => { active = false; };
-  }, [accessToken, P1_SELECTION_KEY]);
+    if (pathname !== "/my-docs") return;
+    catalogRequest.current++;
+    abortCtrl.current?.abort();
+    setSelectedDoc(null); setDocsLoading(false);
+    setResponse(null); setStudyContext(null); setStreamText("");
+    setStreaming(false); setQueryLoading(false); setImagesLoading(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    catalogRequest.current++;
+    return () => { catalogRequest.current++; };
+  }, [user?.id, boardId]);
 
   /* ── Session setup: typography + disclaimer messages ── */
   useEffect(() => {
@@ -356,36 +346,47 @@ export default function TextbooksScreen() {
 
   /* ── class select: load subjects via dedicated endpoint ── */
   const onClassSelect = useCallback(async (cls: { id: number; name: string }) => {
+    const request = ++catalogRequest.current;
+    abortCtrl.current?.abort();
     setSelectedClass(cls); setSelectedSubject(null); setSelectedDoc(null); setSubjects([]); setDocuments([]);
     if (!accessToken) return;
     setDocsLoading(true);
     try {
       const subjs = await api.study.getAvailableSubjects(accessToken, cls.id);
+      if (request !== catalogRequest.current) return;
       setSubjects(subjs);
-    } catch {} finally { setDocsLoading(false); }
+      if (subjs.length === 1) {
+        setSelectedSubject(subjs[0]);
+        const books = await api.study.getDocuments(accessToken, cls.id, subjs[0]);
+        if (request !== catalogRequest.current) return;
+        setDocuments(books);
+        if (books.length === 1) setSelectedDoc(books[0]);
+      }
+    } catch {} finally { if (request === catalogRequest.current) setDocsLoading(false); }
   }, [accessToken]);
 
   /* ── subject select: load documents — server applies board+medium from profile ── */
   const onSubjectSelect = useCallback(async (subj: string) => {
+    const request = ++catalogRequest.current;
+    abortCtrl.current?.abort();
     setSelectedSubject(subj); setSelectedDoc(null); setDocuments([]);
     if (!accessToken || !selectedClass) return;
     setDocsLoading(true);
-    try { setDocuments(await api.study.getDocuments(accessToken, selectedClass.id, subj)); }
-    catch {} finally { setDocsLoading(false); }
+    try {
+      const books = await api.study.getDocuments(accessToken, selectedClass.id, subj);
+      if (request !== catalogRequest.current) return;
+      setDocuments(books);
+      if (books.length === 1) setSelectedDoc(books[0]);
+    } catch {} finally { if (request === catalogRequest.current) setDocsLoading(false); }
   }, [accessToken, selectedClass]);
 
-  const onDocSelect = useCallback(async (doc: Phase1Document) => {
+  const onDocSelect = useCallback((doc: Phase1Document | null) => {
+    catalogRequest.current++;
     abortCtrl.current?.abort();
     setStudyContext(null);
     setStreaming(false); setQueryLoading(false); setImagesLoading(false);
     setSelectedDoc(doc); setResponse(null); setStreamText("");
-    if (!accessToken) return;
-    /* Persist only the authorized picker selection, never question history. */
-    AsyncStorage.setItem(
-      P1_SELECTION_KEY,
-      JSON.stringify({ cls: selectedClass, subject: selectedSubject, doc })
-    ).catch(() => {});
-  }, [accessToken, selectedClass, selectedSubject, P1_SELECTION_KEY]);
+  }, []);
 
   /* ── query ── */
   const handleQuery = useCallback(async (qMode: "retrieve" | "explain") => {
@@ -551,7 +552,7 @@ export default function TextbooksScreen() {
             <Text style={[sc.cardTitle, { color: textCol }]}>📖 Select Your Textbook</Text>
             <DarkPicker label="Class / Year" options={classes} selected={selectedClass?.id ?? null} onSelect={(v) => onClassSelect({ id: v.id as number, name: v.name })} placeholder="Select Class" loading={classesLoading} disabled={classes.length === 0 && !classesLoading} />
             <DarkPicker label="Subject" options={subjects.map((s) => ({ id: s, name: s }))} selected={selectedSubject} onSelect={(v) => onSubjectSelect(v.name)} placeholder="Select Subject" disabled={!selectedClass || subjects.length === 0} loading={docsLoading && !!selectedClass && !selectedSubject} />
-            <DarkPicker label="Textbook" options={documents.map((d) => ({ id: d.id, name: d.title }))} selected={selectedDoc?.id ?? null} onSelect={(v) => { const d = documents.find((x) => x.id === v.id); if (d) onDocSelect(d); }} placeholder="Select Textbook" disabled={!selectedSubject || documents.length === 0} loading={docsLoading && !!selectedSubject && !selectedDoc} />
+            <DarkPicker label="Textbook" options={documents.map((d) => ({ id: d.id, name: d.title }))} selected={selectedDoc?.id ?? null} onSelect={(v) => { const d = documents.find((x) => x.id === v.id); if (d) onDocSelect(d); }} onClear={() => onDocSelect(null)} placeholder="Select Textbook" disabled={!selectedSubject || documents.length === 0} loading={docsLoading && !!selectedSubject && !selectedDoc} />
             {!selectedClass && classes.length > 0 && (
               <View style={sc.hint}><Text style={sc.hintText}>👆 Select a class to see available subjects</Text></View>
             )}
@@ -575,7 +576,7 @@ export default function TextbooksScreen() {
         )}
 
         {/* ─── QUESTION INTERFACE ─── */}
-        <View style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+        {selectedDoc && <View testID="academic-question-section" style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <View style={sc.qHeader}>
               <View style={[sc.qIconBox, !isDark && { backgroundColor: "rgba(102,126,234,0.10)" }]}><Text style={{ fontSize: 18 }}>💬</Text></View>
               <View style={{ flex: 1 }}>
@@ -621,7 +622,7 @@ export default function TextbooksScreen() {
                 {isQuerying && mode === "explain" ? <ActivityIndicator size="small" color="#fff" /> : <Text style={sc.actionBtnText}>💡 Learn Concept</Text>}
               </Pressable>
             </View>
-        </View>
+        </View>}
 
         {/* ─── ANSWER ─── */}
         {(queryLoading || streaming || response) && (

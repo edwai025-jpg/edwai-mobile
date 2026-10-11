@@ -1,0 +1,61 @@
+Here is the exact existing web rule to pass to the mobile developer. No web changes or files were created.
+
+1. Exact question-box visibility condition
+From src-frontend/pages/StudentPortal.jsx:
+
+const showQuestionInterface = Boolean(
+  document ||
+  (
+    useOwnBook &&
+    selectedPersonalDoc &&
+    (
+      selectedPersonalDoc.source_type !== 'youtube' ||
+      youtubeInteractionMode !== null
+    )
+  )
+);
+This controls the whole “Ask Your Question” section, not just whether the input is enabled.
+
+2. Academic / Phase 1
+Show the question section only when an academic book/source object is selected (document is present).
+
+State	Question section
+No academic source selected	Hidden
+Class/subject selected, but no source selected	Hidden
+Academic source selected	Visible
+Important details:
+
+Changing class or subject clears document, hiding the section until a source is selected again.
+Choosing the empty “Select Source” option also clears the selection.
+The web automatically selects the subject when exactly one subject is available, and automatically selects the source when exactly one book is available. Therefore, an explicit manual tap is not always required.
+The visibility expression does not separately check class or subject. It relies on the selected document and those selection/reset rules.
+3. Phase 2 / Own Books
+For a personal PDF, show the question section only when Own Books mode is active and a personal document is selected.
+
+useOwnBook && selectedPersonalDoc
+Selection/readiness behavior:
+
+Personal resource cards can be selected only when:
+
+doc.processing_status === 'completed'
+Uploading a file alone does not select it for questions.
+
+When upload-status polling returns is_ready: true, the web automatically selects that resource.
+
+Deleting the currently selected resource clears the selection and hides the question section.
+
+Phase 2 does not require an academic subject selection.
+
+For a personal YouTube resource, there is one additional condition:
+
+youtubeInteractionMode !== null
+Selecting the video alone does not show the question section. The user must first choose Generate Notes ('notes') or Ask Questions ('qa').
+
+4. Keep the same selection resets on mobile
+The exact expression depends on these existing web resets:
+
+Switching to Own Books clears the academic document.
+Switching to Curated Content clears selectedPersonalDoc.
+Changing the selected personal resource resets youtubeInteractionMode to null.
+Switching PDF/YouTube tabs clears a selected personal resource if it belongs to the other resource type.
+Mobile handoff: Start both document selections as empty. Hide the entire question section until the condition above is satisfied, and preserve the web’s automatic-selection and reset behavior. Do not show it merely because a mode, class, subject, or upload has been chosen.
