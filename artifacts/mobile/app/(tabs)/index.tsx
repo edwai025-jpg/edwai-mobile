@@ -35,6 +35,7 @@ import { useAuth } from "@/context/auth";
 import { useBannerUsage } from "@/hooks/useBannerUsage";
 import { useTheme } from "@/context/theme";
 import { pickStudyImage } from "@/services/studyImageCapture";
+import { academicClassName, initialAcademicClass, isInstituteStudent } from "@/services/academicClassSelection";
 import api, {
   ApiError,
   BoardStatus,
@@ -252,7 +253,10 @@ export default function TextbooksScreen() {
     return () => abortCtrl.current?.abort();
   }, [user?.id, user?.boardId, selectedDoc?.id]);
   const boardId = user?.boardId;
-  const prevBoardIdRef = useRef<number | undefined | "__init__">("__init__");
+  const instituteStudent = isInstituteStudent(user);
+  const classScope = JSON.stringify([user?.id, boardId, user?.orgRole, user?.orgId]);
+  const initialClassChosen = useRef(false);
+  const loadedClassesScope = useRef<string | null>(null);
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;
 
   /* Start without a source; entering Own Books clears the academic selection. */
@@ -264,11 +268,6 @@ export default function TextbooksScreen() {
     setResponse(null); setStudyContext(null); setStreamText("");
     setStreaming(false); setQueryLoading(false); setImagesLoading(false);
   }, [pathname]);
-
-  useEffect(() => {
-    catalogRequest.current++;
-    return () => { catalogRequest.current++; };
-  }, [user?.id, boardId]);
 
   /* ── Session setup: typography + disclaimer messages ── */
   useEffect(() => {
@@ -305,14 +304,11 @@ export default function TextbooksScreen() {
     loadBoardStatus();
   }, [accessToken, boardId]);
 
-  /* Reset all book selections when the user CHANGES board (skip initial mount) */
+  /* Never retain or combine class lists from another board, account, or institute. */
   useEffect(() => {
-    if (prevBoardIdRef.current === "__init__") {
-      prevBoardIdRef.current = boardId;
-      return;
-    }
-    if (prevBoardIdRef.current === boardId) return;
-    prevBoardIdRef.current = boardId;
+    catalogRequest.current++;
+    initialClassChosen.current = false;
+    loadedClassesScope.current = null;
     setSelectedClass(null);
     setSelectedSubject(null);
     setSelectedDoc(null);
@@ -321,7 +317,8 @@ export default function TextbooksScreen() {
     setClasses([]);
     setResponse(null);
     setStreamText("");
-  }, [boardId]);
+    return () => { catalogRequest.current++; };
+  }, [classScope]);
 
   useEffect(() => {
     if (boardStatus?.processing_status !== "in_progress") return;
@@ -336,16 +333,24 @@ export default function TextbooksScreen() {
     return () => clearInterval(t);
   }, [boardStatus?.processing_status, accessToken]);
 
-  /* Load available classes — server applies board_id from saved profile automatically */
+  /* The existing endpoint owns board/org scope; keep every returned class. */
   useEffect(() => {
-    if (!accessToken || !boardId) return;
+    if (!accessToken || (!boardId && !instituteStudent)) return;
     if (boardStatus?.processing_status === "in_progress") return;
+    let active = true;
+    loadedClassesScope.current = null;
     setClassesLoading(true);
-    api.study.getAvailableClasses(accessToken).then(setClasses).catch(() => {}).finally(() => setClassesLoading(false));
-  }, [accessToken, boardId, boardStatus?.processing_status]);
+    api.study.getAvailableClasses(accessToken).then(list => {
+      if (!active) return;
+      loadedClassesScope.current = classScope;
+      setClasses(list);
+    }).catch(() => {}).finally(() => { if (active) setClassesLoading(false); });
+    return () => { active = false; };
+  }, [accessToken, classScope, instituteStudent, boardStatus?.processing_status]);
 
   /* ── class select: load subjects via dedicated endpoint ── */
   const onClassSelect = useCallback(async (cls: { id: number; name: string }) => {
+    initialClassChosen.current = true;
     const request = ++catalogRequest.current;
     abortCtrl.current?.abort();
     setSelectedClass(cls); setSelectedSubject(null); setSelectedDoc(null); setSubjects([]); setDocuments([]);
@@ -364,6 +369,15 @@ export default function TextbooksScreen() {
       }
     } catch {} finally { if (request === catalogRequest.current) setDocsLoading(false); }
   }, [accessToken]);
+
+  /* One-time profile default: wait for both profile and the scoped API list.
+     A deliberate choice (including another grade) must never be overwritten. */
+  useEffect(() => {
+    if (pathname !== "/" || classesLoading || initialClassChosen.current || loadedClassesScope.current !== classScope) return;
+    if (boardStatusLoading || (boardStatus?.is_restricted && boardStatus.processing_status !== "completed")) return;
+    const cls = initialAcademicClass(classes, user);
+    if (cls) void onClassSelect(cls);
+  }, [classes, classesLoading, classScope, user?.classId, user?.className, user?.orgRole, user?.orgId, pathname, onClassSelect, boardStatusLoading, boardStatus?.is_restricted, boardStatus?.processing_status]);
 
   /* ── subject select: load documents — server applies board+medium from profile ── */
   const onSubjectSelect = useCallback(async (subj: string) => {
@@ -483,7 +497,7 @@ export default function TextbooksScreen() {
   const isQuerying = queryLoading || streaming;
   const isRestricted = !!boardStatus?.is_restricted && boardStatus.processing_status !== "completed";
   const boardReady = !boardStatusLoading && !isRestricted;
-  const hasNoBoard = !boardId;
+  const hasNoBoard = !boardId && !instituteStudent;
   const cardBg = isDark ? CARD_BG : "#ffffff";
   const cardBorder = isDark ? BORDER : "#e5e7eb";
   const textCol = isDark ? TEXT_COLOR : "#111827";
@@ -550,17 +564,23 @@ export default function TextbooksScreen() {
         {boardReady && !hasNoBoard && (
           <View style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <Text style={[sc.cardTitle, { color: textCol }]}>📖 Select Your Textbook</Text>
-            <DarkPicker label="Class / Year" options={classes} selected={selectedClass?.id ?? null} onSelect={(v) => onClassSelect({ id: v.id as number, name: v.name })} placeholder="Select Class" loading={classesLoading} disabled={classes.length === 0 && !classesLoading} />
+            <DarkPicker label="Class / Year" options={classes.map(cls => ({ ...cls, name: academicClassName(cls, user) }))} selected={selectedClass?.id ?? null} onSelect={(v) => onClassSelect({ id: v.id as number, name: v.name })} placeholder="Select Class" loading={classesLoading} disabled={classes.length === 0 && !classesLoading} />
             <DarkPicker label="Subject" options={subjects.map((s) => ({ id: s, name: s }))} selected={selectedSubject} onSelect={(v) => onSubjectSelect(v.name)} placeholder="Select Subject" disabled={!selectedClass || subjects.length === 0} loading={docsLoading && !!selectedClass && !selectedSubject} />
             <DarkPicker label="Textbook" options={documents.map((d) => ({ id: d.id, name: d.title }))} selected={selectedDoc?.id ?? null} onSelect={(v) => { const d = documents.find((x) => x.id === v.id); if (d) onDocSelect(d); }} onClear={() => onDocSelect(null)} placeholder="Select Textbook" disabled={!selectedSubject || documents.length === 0} loading={docsLoading && !!selectedSubject && !selectedDoc} />
             {!selectedClass && classes.length > 0 && (
               <View style={sc.hint}><Text style={sc.hintText}>👆 Select a class to see available subjects</Text></View>
             )}
             {!selectedClass && !classesLoading && classes.length === 0 && !boardStatusError && (
-              <View style={[sc.hint, sc.hintAmber]}><Text style={sc.hintAmberText}>📚 No classes available yet for your board</Text></View>
+              <View style={[sc.hint, sc.hintAmber]}><Text style={sc.hintAmberText}>📚 No classes available yet for your {instituteStudent ? "institute" : "board"}</Text></View>
             )}
             {selectedClass && subjects.length === 0 && !docsLoading && (
-              <View style={[sc.hint, sc.hintAmber]}><Text style={sc.hintAmberText}>📚 No subjects available for this class yet</Text></View>
+              <View style={[sc.hint, sc.hintAmber]}><Text style={sc.hintAmberText}>📚 No subjects with textbooks available for this class yet.</Text></View>
+            )}
+            {selectedClass && subjects.length > 1 && !selectedSubject && !docsLoading && (
+              <View style={sc.hint}><Text style={sc.hintText}>Select a subject to see available textbooks.</Text></View>
+            )}
+            {selectedClass && selectedSubject && documents.length === 0 && !docsLoading && (
+              <View style={[sc.hint, sc.hintAmber]}><Text style={sc.hintAmberText}>📚 No textbooks available for this combination yet.</Text></View>
             )}
           </View>
         )}
