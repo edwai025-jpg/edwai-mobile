@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 import type { ImagePickerAsset } from "expo-image-picker";
-import { prepareProfilePhotoUpload } from "./profilePhotoUpload";
+import { PhotoValidationError, prepareProfilePhotoUpload } from "./profilePhotoUpload";
 import { readAnswerStream } from "./answerStream";
 
 const PROD_URL = "https://edwai-api-953672603784.asia-south1.run.app";
@@ -9,8 +9,8 @@ export const PHOTO_ENDPOINT = `${PROD_URL}/api/student/profile/photo`;
 /** The storage key in /auth/me is not an image URL. Keep credentials in headers. */
 export function getProfilePhotoSource(token: string, userId?: number, revision = 0) {
   return {
-    uri: resolveUrl("/api/student/profile/photo"),
-    headers: { Authorization: `Bearer ${token}` },
+    uri: resolveUrl(`/api/student/profile/photo?v=${revision}`),
+    headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" },
     cacheKey: `student-photo:${userId ?? "current"}:${revision}`,
   };
 }
@@ -84,7 +84,7 @@ export type ApiUser = {
   email_verified: boolean;
   profile_complete: boolean;
   google_id?: boolean;
-  profile_photo_url?: string;
+  profile_photo_url?: string | null;
 };
 
 export type AuthResponse = {
@@ -562,12 +562,17 @@ const api = {
         cache: "no-store",
       });
       if (response.status === 404) return false;
-      if (!response.ok) throw new Error(`Could not load photo (HTTP ${response.status}).`);
+      if (!response.ok) throw new ApiError(`Could not load photo (HTTP ${response.status}).`, response.status, null);
+      if (!response.headers.get("content-type")?.toLowerCase().startsWith("image/jpeg")) {
+        throw new ApiError("The photo endpoint returned an unexpected image response.", response.status, null);
+      }
       return true;
     },
 
     uploadPhoto: async (token: string, asset: ImagePickerAsset) => {
-      const formData = await prepareProfilePhotoUpload(asset);
+      let formData: FormData;
+      try { formData = await prepareProfilePhotoUpload(asset); }
+      catch (error) { throw new PhotoValidationError(error instanceof Error ? error.message : "Could not read the selected photo."); }
       return request<{ success: boolean; profile_photo_url: string }>(
         "/api/student/profile/photo",
         { method: "POST", body: formData, headers: {} },

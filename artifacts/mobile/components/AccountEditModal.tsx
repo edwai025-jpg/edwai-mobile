@@ -1,6 +1,5 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
-import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -19,21 +18,26 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
-import api, { ApiError, getProfilePhotoSource } from "@/services/api";
+import { getProfilePhotoSource } from "@/services/api";
 import { useProfileAlert } from "@/hooks/useProfileAlert";
 import { useAccountDetails } from "@/hooks/useAccountDetails";
+import type { ProfilePhotoActions } from "@/hooks/useProfilePhoto";
 
 type Props = {
   visible: boolean;
   onClose: () => void;
+  photo: ProfilePhotoActions;
 };
 
-export default function AccountEditModal({ visible, onClose }: Props) {
-  const { user, refreshUser, accessToken, photoRevision, hasPhoto, setHasPhoto, probeHasPhoto } = useAuth();
+export default function AccountEditModal({ visible, onClose, photo }: Props) {
+  const { user, accessToken, photoRevision, hasPhoto, probeHasPhoto } = useAuth();
   const { showAlert, alertDialog } = useProfileAlert();
   const token = accessToken ?? "";
 
-  const [photoLoading, setPhotoLoading] = useState(false);
+  const photoLoading = photo.busy;
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const retryRevision = useRef<number | null>(null);
+  useEffect(() => { setPhotoFailed(false); }, [user?.id, photoRevision, token]);
   const [toast, setToast] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -101,82 +105,6 @@ export default function AccountEditModal({ visible, onClose }: Props) {
     );
   };
 
-  const doUpload = async (asset: ImagePicker.ImagePickerAsset) => {
-    if (photoLoading) return;
-    setPhotoLoading(true);
-    try {
-      await api.profile.uploadPhoto(token, asset);
-      setHasPhoto(true);
-      await refreshUser();
-      showToast("ok", "Photo updated.");
-    } catch (e) {
-      showToast("err", e instanceof Error ? e.message : "Failed to upload photo.");
-    } finally {
-      setPhotoLoading(false);
-    }
-  };
-
-  const handlePickFromLibrary = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { showAlert("Permission needed", "Allow photo library access in Settings to set a profile picture."); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.85,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    await doUpload(result.assets[0]);
-  };
-
-  const handlePickFromCamera = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { showAlert("Permission needed", "Allow camera access in Settings to take a profile picture."); return; }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.85,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    await doUpload(result.assets[0]);
-  };
-
-  const handlePickPhoto = () => {
-    if (photoLoading) return;
-    showAlert(
-      "Profile Photo",
-      "Choose an option",
-      [
-        { text: "Take Photo", onPress: handlePickFromCamera },
-        { text: "Choose from Library", onPress: handlePickFromLibrary },
-        { text: "Cancel", style: "cancel" },
-      ]
-    );
-  };
-
-  const handleRemovePhoto = async () => {
-    if (photoLoading) return;
-    showAlert("Remove Photo", "Are you sure you want to remove your profile photo?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          setPhotoLoading(true);
-          try {
-            await api.profile.deletePhoto(token);
-            setHasPhoto(false);
-            await refreshUser();
-            showToast("ok", "Photo removed.");
-          } catch {
-            showToast("err", "Failed to remove photo.");
-          } finally {
-            setPhotoLoading(false);
-          }
-        },
-      },
-    ]);
-  };
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -196,14 +124,21 @@ export default function AccountEditModal({ visible, onClose }: Props) {
           >
             {/* Photo */}
             <View style={s.photoRow}>
-              <Pressable onPress={handlePickPhoto} style={s.avatarWrap}>
-                {hasPhoto && token ? (
+              <Pressable onPress={photo.openPicker} disabled={photoLoading} accessibilityLabel="Change profile photo" style={s.avatarWrap}>
+                {hasPhoto && token && !photoFailed ? (
                   <ExpoImage
                     key={`${user?.id}:${photoRevision}`}
                     source={getProfilePhotoSource(token, user?.id, photoRevision)}
                     style={s.avatarImg}
                     contentFit="cover"
                     cachePolicy="none"
+                    onError={() => {
+                      setPhotoFailed(true);
+                      if (retryRevision.current !== photoRevision) {
+                        retryRevision.current = photoRevision + 1;
+                        void probeHasPhoto();
+                      }
+                    }}
                   />
                 ) : (
                   <LinearGradient colors={["#7c3aed", "#4f46e5"]} style={[s.avatarImg, { alignItems: "center", justifyContent: "center" }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
@@ -218,11 +153,11 @@ export default function AccountEditModal({ visible, onClose }: Props) {
                 </View>
               </Pressable>
               <View style={{ gap: 4 }}>
-                <TouchableOpacity onPress={handlePickPhoto}>
-                  <Text style={s.photoLink}>{hasPhoto ? "Change Photo" : "Add Photo"}</Text>
+                <TouchableOpacity onPress={photo.openPicker} disabled={photoLoading}>
+                  <Text style={s.photoLink}>{photo.needsReconcile ? "Check Saved Photo" : photoLoading ? "Uploading…" : photo.canRemove ? "Change Photo" : "Add Photo"}</Text>
                 </TouchableOpacity>
-                {hasPhoto && (
-                  <TouchableOpacity onPress={handleRemovePhoto}>
+                {photo.canRemove && (
+                  <TouchableOpacity disabled={photoLoading} onPress={() => { void photo.remove(); }}>
                     <Text style={s.removeLink}>Remove Photo</Text>
                   </TouchableOpacity>
                 )}

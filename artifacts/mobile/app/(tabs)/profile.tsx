@@ -1,9 +1,8 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
-import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   DimensionValue,
@@ -21,6 +20,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AccountEditModal from "@/components/AccountEditModal";
 import EducationEditModal from "@/components/EducationEditModal";
 import SessionsModal from "@/components/SessionsModal";
+import ProfilePhotoCropModal from "@/components/ProfilePhotoCropModal";
+import { useProfilePhoto } from "@/hooks/useProfilePhoto";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import { useTheme } from "@/context/theme";
@@ -38,17 +39,22 @@ function Avatar({
   hasPhoto,
   size = 72,
   onPress,
+  busy = false,
 }: {
   name: string;
   token?: string | null;
   hasPhoto?: boolean | null;
   size?: number;
   onPress?: () => void;
+  busy?: boolean;
 }) {
-  const { user, photoRevision } = useAuth();
+  const { user, photoRevision, probeHasPhoto } = useAuth();
+  const [failed, setFailed] = useState(false);
+  const retryRevision = useRef<number | null>(null);
+  useEffect(() => { setFailed(false); }, [user?.id, photoRevision, token]);
   const initials = name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
   const r = size / 2;
-  const inner = hasPhoto && token
+  const inner = hasPhoto && token && !failed
     ? (
       <ExpoImage
         key={`${user?.id}:${photoRevision}`}
@@ -56,6 +62,13 @@ function Avatar({
         style={{ width: size, height: size, borderRadius: r, borderWidth: 2, borderColor: "rgba(255,255,255,0.25)" }}
         contentFit="cover"
         cachePolicy="none"
+        onError={() => {
+          setFailed(true);
+          if (retryRevision.current !== photoRevision) {
+            retryRevision.current = photoRevision + 1;
+            void probeHasPhoto();
+          }
+        }}
       />
     )
     : (
@@ -65,10 +78,10 @@ function Avatar({
     );
   if (!onPress) return inner;
   return (
-    <Pressable onPress={onPress} style={{ position: "relative" }}>
+    <Pressable onPress={onPress} disabled={busy} accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{ busy, disabled: busy }} style={{ position: "relative" }}>
       {inner}
       <View style={{ position: "absolute", bottom: 0, right: 0, width: 22, height: 22, borderRadius: 11, backgroundColor: "#667eea", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(255,255,255,0.3)" }}>
-        <Ionicons name={"camera" as IoniconsName} size={11} color="#fff" />
+        {busy ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name={"camera" as IoniconsName} size={11} color="#fff" />}
       </View>
     </Pressable>
   );
@@ -124,13 +137,13 @@ const RowDivider = () => {
 /* ─── Main Screen ────────────────────────────────────────────────────────── */
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, logout, refreshUser, accessToken, hasPhoto, setHasPhoto, probeHasPhoto } = useAuth();
+  const { user, logout, refreshUser, accessToken, hasPhoto, probeHasPhoto } = useAuth();
   const { showAlert, alertDialog } = useProfileAlert();
   const { isDark } = useTheme();
 
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [usageLoading, setUsageLoading] = useState(true);
-  const [photoUploading, setPhotoUploading] = useState(false);
+  const photo = useProfilePhoto(showAlert);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [showEducation, setShowEducation] = useState(false);
@@ -164,65 +177,6 @@ export default function ProfileScreen() {
     }, [refreshUser, probeHasPhoto, accessToken])
   );
 
-  /* ── Photo actions (also accessible from tappable avatar) ── */
-  const doUploadPhoto = useCallback(async (asset: ImagePicker.ImagePickerAsset) => {
-    if (!accessToken) return;
-    setPhotoUploading(true);
-    try {
-      await api.profile.uploadPhoto(accessToken, asset);
-      setHasPhoto(true);
-      await refreshUser();
-    } catch (e) {
-      showAlert("Upload Failed", e instanceof Error ? e.message : "Could not upload photo. Please try again.");
-    } finally {
-      setPhotoUploading(false);
-    }
-  }, [accessToken, setHasPhoto, refreshUser]);
-
-  const handlePickFromLibrary = useCallback(async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { showAlert("Permission needed", "Allow photo library access in Settings."); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.85 });
-    if (result.canceled || !result.assets[0]) return;
-    await doUploadPhoto(result.assets[0]);
-  }, [doUploadPhoto]);
-
-  const handlePickFromCamera = useCallback(async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { showAlert("Permission needed", "Allow camera access in Settings."); return; }
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.85 });
-    if (result.canceled || !result.assets[0]) return;
-    await doUploadPhoto(result.assets[0]);
-  }, [doUploadPhoto]);
-
-  const handleRemovePhoto = useCallback(() => {
-    showAlert("Remove Photo", "Are you sure you want to remove your profile photo?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove", style: "destructive", onPress: async () => {
-          if (!accessToken) return;
-          try {
-            await api.profile.deletePhoto(accessToken);
-            setHasPhoto(false);
-            await refreshUser();
-          } catch {
-            showAlert("Error", "Could not remove photo. Please try again.");
-          }
-        },
-      },
-    ]);
-  }, [accessToken, setHasPhoto, refreshUser]);
-
-  const handleAvatarPress = useCallback(() => {
-    if (photoUploading) return;
-    const options: { text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive" }[] = [
-      { text: "Take Photo", onPress: handlePickFromCamera },
-      { text: "Choose from Library", onPress: handlePickFromLibrary },
-      ...(hasPhoto ? [{ text: "Remove Photo", style: "destructive" as const, onPress: handleRemovePhoto }] : []),
-      { text: "Cancel", style: "cancel" as const },
-    ];
-    showAlert("Profile Photo", "Choose an option", options);
-  }, [hasPhoto, photoUploading, handlePickFromCamera, handlePickFromLibrary, handleRemovePhoto]);
 
   const displayName = user?.name || "Student";
   const identifier = user?.email || user?.phone || "";
@@ -327,7 +281,7 @@ export default function ProfileScreen() {
         end={{ x: 1, y: 1 }}
       >
         <View style={st.avatarRow}>
-          <Avatar name={displayName} token={accessToken} hasPhoto={hasPhoto} size={70} onPress={handleAvatarPress} />
+          <Avatar name={displayName} token={accessToken} hasPhoto={hasPhoto} size={70} onPress={photo.openPicker} busy={photo.busy} />
           <View style={st.nameBlock}>
             <Text style={st.userName} numberOfLines={1}>{displayName}</Text>
             {!!identifier && <Text style={st.userIdentifier} numberOfLines={1}>{identifier}</Text>}
@@ -512,9 +466,11 @@ export default function ProfileScreen() {
       <AccountEditModal
         visible={showAccount}
         onClose={() => setShowAccount(false)}
+        photo={photo}
       />
       <EducationEditModal visible={showEducation} onClose={() => setShowEducation(false)} />
       <SessionsModal visible={showSessions} onClose={() => setShowSessions(false)} />
+      <ProfilePhotoCropModal asset={photo.asset} busy={photo.busy} onCancel={photo.cancel} onSave={photo.save} />
       {alertDialog}
     </LinearGradient>
   );

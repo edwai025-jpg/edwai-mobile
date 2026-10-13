@@ -31,7 +31,7 @@ export type UserProfile = {
   plan?: string;
   questionsUsed?: number;
   questionsLimit?: number;
-  profilePhotoUrl?: string;
+  profilePhotoUrl?: string | null;
   role?: string;
   orgRole?: string | null;
   orgId?: number | null;
@@ -130,7 +130,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [hasPhoto, setHasPhotoState] = useState<boolean | null>(null);
   const [photoRevision, setPhotoRevision] = useState(0);
+  const photoGeneration = useRef(0);
   const setHasPhoto = useCallback((value: boolean | null) => {
+    photoGeneration.current++;
     setHasPhotoState(value);
     // Replacements reuse the server's storage key; even true -> true must reload.
     setPhotoRevision(revision => revision + 1);
@@ -188,10 +190,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsLoggedIn(true);
           setIsProfileComplete(isComplete);
           await AsyncStorage.setItem(STORAGE_KEYS.profileComplete, String(isComplete));
+          setHasPhoto(!!restoredUser.profilePhotoUrl);
+          const generation = photoGeneration.current;
           api.profile.probePhoto(restoredToken).then(value => {
-            if (epoch === sessionEpoch.current) setHasPhoto(value);
+            if (epoch === sessionEpoch.current && generation === photoGeneration.current) setHasPhoto(value);
           }).catch(() => {
-            if (epoch === sessionEpoch.current) setHasPhoto(false);
+            // An unavailable download does not erase the saved photo reference.
           });
         }
       } catch {
@@ -270,11 +274,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateUser = useCallback(
     async (updates: Partial<UserProfile>) => {
+      const epoch = sessionEpoch.current;
+      const accountId = user?.id;
+      if (!accountId || (updates.id !== undefined && updates.id !== accountId)) throw new Error("Your account changed. Please sign in again.");
       const updated = { ...user, ...updates } as UserProfile;
       await AsyncStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updated));
-      setUser(updated);
+      if (epoch !== sessionEpoch.current) throw new Error("Your session changed.");
+      // Preserve concurrent, unrelated cached fields (e.g. usage); never apply
+      // a late photo/profile response to a different signed-in account.
+      setUser(previous => previous?.id === accountId ? { ...previous, ...updates } : previous);
       if (typeof updates.profileComplete === "boolean") {
         await AsyncStorage.setItem(STORAGE_KEYS.profileComplete, String(updates.profileComplete));
+        if (epoch !== sessionEpoch.current) throw new Error("Your session changed.");
         setIsProfileComplete(updates.profileComplete);
       }
     },
@@ -304,18 +315,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       if (options?.throwOnError) throw e;
       /* silently ignore — stale data stays */
-    }
-  }, [accessToken]);
-
-  const probeHasPhoto = useCallback(async () => {
-    const epoch = sessionEpoch.current;
-    try {
-      const token = accessToken ?? (await credentialStorage.getItem(STORAGE_KEYS.accessToken));
-      if (!token) { setHasPhoto(false); return; }
-      const result = await api.profile.probePhoto(token);
-      if (epoch === sessionEpoch.current) setHasPhoto(result);
-    } catch {
-      // A network/auth failure does not mean the server has removed the photo.
     }
   }, [accessToken]);
 
@@ -405,6 +404,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (epoch !== sessionEpoch.current) throw new Error("Session changed. Please sign in again.");
     return result;
   }, [accessToken, refreshAccessToken, logout]);
+
+  const probeHasPhoto = useCallback(async () => {
+    const epoch = sessionEpoch.current, generation = photoGeneration.current;
+    try {
+      const result = await runProfileRequest(token => api.profile.probePhoto(token));
+      if (epoch === sessionEpoch.current && generation === photoGeneration.current) setHasPhoto(result);
+    } catch {
+      // A network/auth failure does not mean the server removed the reference.
+    }
+  }, [runProfileRequest, setHasPhoto]);
 
   const applyServerUser = useCallback(async (apiUser: ApiUser, epoch: number) => {
     if (epoch !== sessionEpoch.current) throw new Error("Session changed. Please sign in again.");

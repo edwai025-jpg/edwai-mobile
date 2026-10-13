@@ -15,6 +15,12 @@ The Education/Academics and Account iteration must leave the remaining mobile Pr
 
 **How to apply:** Preserve the Profile page and its navigation. Refresh academic context when academic attributes change, but do not broaden the work to Payments, Settings, Security, deletion, or photo behavior.
 
+Profile photo add, replace, crop, display, and removal are separately approved using the supplied photo handoff. Keep the current mobile Profile tab and UI; the web screenshot is a functional reference, not a redesign request.
+
+**Why:** The user explicitly asked for seamless photo functionality from the Profile tab while keeping its current UI.
+
+**How to apply:** Use the existing avatar/photo entry points, keep photo changes independent of unfinished Account/Education drafts, and leave the remaining Profile sections outside this work.
+
 The user approved adding password-change controls inside the existing Account form using the legacy account-update API, despite the web handoff not displaying password fields. Password login remains disabled.
 
 **Why:** The user explicitly selected password-change controls after being told this would not enable password sign-in.

@@ -17,7 +17,9 @@ function load(file, scope = {}) {
 
 function photoModule(os = "web", scope = {}) {
   return load("../services/profilePhotoUpload.ts", {
-    require: () => ({ Platform: { OS: os } }), ...scope,
+    require: name => name === "expo-file-system" ? {
+      File: class { size = scope.nativeSize ?? 1024; async bytes() { return new Uint8Array([255, 216, 255, 217]); } },
+    } : { Platform: { OS: os } }, ...scope,
   });
 }
 
@@ -115,7 +117,7 @@ test("photo validation rejects unsupported formats, oversized files and unknown 
   const web = photoModule().prepareProfilePhotoUpload;
   await assert.rejects(web({ file: new Blob(["x"], { type: "image/gif" }) }), /JPEG, PNG or WebP/);
   await assert.rejects(web({ file: new Blob([new Uint8Array(5 * 1024 * 1024 + 1)], { type: "image/jpeg" }) }), /5 MiB/);
-  const native = photoModule("ios").prepareProfilePhotoUpload;
+  const native = photoModule("ios", { nativeSize: 0 }).prepareProfilePhotoUpload;
   await assert.rejects(native({ uri: "file:///photo.png", mimeType: "image/png" }), /determine the photo size/);
 });
 
@@ -126,7 +128,8 @@ test("native photo metadata keeps the real format and validates the size", async
     uri: "file:///photo.webp", mimeType: "image/webp", fileName: "photo.webp", fileSize: 1024,
   });
   assert.equal(part.type, "image/webp");
-  assert.equal(part.uri, "file:///photo.webp");
+  assert.equal(part.uri, undefined);
+  assert.deepEqual(Array.from(await part.bytes()), [255, 216, 255, 217]);
 });
 
 test("photo probe distinguishes no photo from an auth or network failure", async () => {
