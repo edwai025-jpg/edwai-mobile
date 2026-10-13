@@ -15,6 +15,12 @@ When matching the authenticated study banner to the web version, reuse its visua
 
 **How to apply:** Scope web-banner parity to colors, backgrounds and dynamic identity/photo/billing data. Do not add the web Profile control or copy desktop dimensions into the mobile banner.
 
+The student banner's top-corner brand should use the main login logo in a white rounded box, including the EDUwAI lettering below the lotus/book mark, rather than the text-only EdwAI wordmark.
+
+**Why:** The user supplied the highlighted web logo reference and explicitly asked to reuse the app's main login logo.
+
+**How to apply:** Preserve the compact mobile banner and its existing controls; this is a logo replacement, not a header redesign.
+
 The onboarding What's New cards should scroll rather than require clicking the Next button.
 
 **Why:** The user explicitly requested this change to the newly added announcement cards.

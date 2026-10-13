@@ -218,8 +218,13 @@ export function HomeBanner({
         <View style={nb.navRow}>
           {/* Logo */}
           <View style={nb.logoWrap}>
-            <Text style={nb.logoEdw}>Edw</Text>
-            <Text style={nb.logoAI}>AI</Text>
+            <ExpoImage
+              source={require("@/assets/images/eduwai-logo.png")}
+              style={nb.logo}
+              contentFit="contain"
+              accessibilityLabel="EDUwAI"
+              testID="student-banner-logo"
+            />
           </View>
 
           {/* Divider */}
@@ -378,9 +383,8 @@ const nb = StyleSheet.create({
   nav: { paddingHorizontal: 14, paddingBottom: 12 },
   avatarHalo: { position: "absolute", top: -2, left: -2, right: -2, bottom: -2, borderRadius: 18, opacity: 0.65 },
   navRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  logoWrap: { flexDirection: "row", alignItems: "baseline" },
-  logoEdw: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.navLogoEdw, letterSpacing: -0.5 },
-  logoAI: { fontSize: 20, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.5 },
+  logoWrap: { width: 58, height: 42, padding: 3, borderRadius: 7, backgroundColor: "#fff", overflow: "hidden", flexShrink: 0 },
+  logo: { width: "100%", height: "100%" },
   divider: { width: 1, height: 22, backgroundColor: "rgba(255,255,255,0.2)", marginHorizontal: 4 },
   userBlock: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   avatarWrap: { width: 32, height: 32, borderRadius: 16, overflow: "hidden", borderWidth: 1.5, borderColor: Colors.bannerAvatarBorder },
