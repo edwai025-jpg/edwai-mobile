@@ -9,7 +9,7 @@ function load(file, scope = {}) {
   const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: false },
   }).outputText;
-  vm.runInNewContext(code, { exports, Error, TypeError, Blob, FormData, ...scope });
+  vm.runInNewContext(code, { exports, Error, TypeError, Blob, FormData, TextEncoder, ...scope });
   return exports;
 }
 const crop = load("services/profilePhotoCrop.ts");
@@ -26,25 +26,32 @@ test("crop exports square pixels matching centered cover and bounded drags at zo
   }
   assert.throws(() => crop.getPhotoCrop(0, 10, 300, 1, 0, 0), /dimensions/);
 });
-test("native photo bytes serialize through the installed Expo multipart encoder", async () => {
-  class NativeForm { constructor() { this._parts = []; } }
-  load("node_modules/expo/src/winter/FormData.ts").installFormDataPatch(NativeForm);
+test("native photo bypasses FormData and preserves multipart bytes through the installed Expo request normalizer", async () => {
+  class UnsupportedForm { constructor() { throw new Error("Native FormData must not be used"); } }
   const uploader = load("services/profilePhotoUpload.ts", {
-    FormData: NativeForm,
+    FormData: UnsupportedForm,
     require: name => name === "react-native" ? { Platform: { OS: "ios" } } : {
       File: class { size = 4; bytes() { return Promise.resolve(new Uint8Array([255, 216, 255, 217])); } },
     },
   });
-  const encoder = load("node_modules/expo/src/winter/fetch/convertFormData.ts", {
-    TextEncoder, require: () => ({ blobToArrayBufferAsync: blob => blob.arrayBuffer() }),
+  const normalizer = load("node_modules/expo/src/winter/fetch/RequestUtils.ts", {
+    FormData: UnsupportedForm,
+    require: name => name === "./convertFormData" ? {
+      convertFormDataAsync: () => { throw new Error("Unsupported FormDataPart implementation"); },
+    } : { blobToArrayBufferAsync: blob => blob.arrayBuffer() },
   });
-  const form = await uploader.prepareProfilePhotoUpload({ uri: "file:///cache/photo.jpg", mimeType: "IMAGE/JPEG", fileName: "photo.jpg", fileSize: 99999999 });
-  const result = await encoder.convertFormDataAsync(form, "fixture-photo-boundary");
+  const upload = await uploader.prepareProfilePhotoUpload({ uri: "file:///cache/photo.jpg", mimeType: "IMAGE/JPEG", fileName: "photo.jpg", fileSize: 99999999 });
+  const result = await normalizer.normalizeBodyInitAsync(upload.body);
   const bytes = new Uint8Array(result.body);
   const text = new TextDecoder().decode(bytes);
   assert.match(text, /name="file"; filename="photo.jpg"/);
   assert.match(text, /image\/jpeg/);
   assert.ok(bytes.some((v, i) => v === 255 && bytes[i + 1] === 216));
+  assert.deepEqual(Array.from(bytes), Array.from(upload.body));
+  assert.equal(result.overriddenHeaders, undefined);
+  const fields = await new Request("http://fixture.invalid", { method: "POST", ...upload }).formData();
+  assert.deepEqual([...fields.keys()], ["file"]);
+  assert.equal(fields.get("file").size, 4);
 });
 class ApiError extends Error { constructor(message, statusCode) { super(message); this.statusCode = statusCode; } }
 class PhotoValidationError extends Error {}

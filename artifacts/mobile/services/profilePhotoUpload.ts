@@ -18,23 +18,37 @@ function validatePhoto(type: string, size: number | undefined) {
   }
 }
 
-export async function prepareProfilePhotoUpload(asset: ImagePickerAsset): Promise<FormData> {
-  const data = new FormData();
+export type ProfilePhotoUpload = {
+  body: FormData | Uint8Array<ArrayBuffer>;
+  headers: Record<string, string>;
+};
+
+export async function prepareProfilePhotoUpload(asset: ImagePickerAsset): Promise<ProfilePhotoUpload> {
   if (Platform.OS === "web") {
     // The browser needs a real Blob/File, not React Native's { uri, type, name }.
     const file = asset.file ?? await (await fetch(asset.uri)).blob();
     validatePhoto(file.type.toLowerCase(), file.size);
+    const data = new FormData();
     data.append("file", file, asset.fileName ?? "profile-photo");
+    return { body: data, headers: {} };
   } else {
-    // Inspect actual cached bytes; picker size metadata is not authoritative.
+    // Native runtimes do not agree on FormData file objects. Encode this one
+    // bounded file ourselves: both Expo fetch and RN fetch accept byte bodies.
+    // Never replay a failed POST using another transport.
     const file = new File(asset.uri);
     const type = asset.mimeType?.toLowerCase() ?? "";
     validatePhoto(type, file.size);
-    data.append("file", {
-      type,
-      name: asset.fileName ?? `photo.${type.split("/")[1]}`,
-      bytes: () => file.bytes(),
-    } as unknown as Blob);
+    const bytes = await file.bytes();
+    validatePhoto(type, bytes.byteLength);
+    const boundary = `----EDUwAIPhoto${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+    const filename = encodeURIComponent((asset.fileName ?? `photo.${type.split("/")[1]}`).replace(/[\\/]/g, "_"));
+    const encoder = new TextEncoder();
+    const prefix = encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${type}\r\n\r\n`);
+    const suffix = encoder.encode(`\r\n--${boundary}--\r\n`);
+    const body = new Uint8Array(prefix.byteLength + bytes.byteLength + suffix.byteLength);
+    body.set(prefix);
+    body.set(bytes, prefix.byteLength);
+    body.set(suffix, prefix.byteLength + bytes.byteLength);
+    return { body, headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` } };
   }
-  return data;
 }

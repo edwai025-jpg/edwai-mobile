@@ -11,14 +11,14 @@ function load(file, scope = {}) {
     fileName: path.join(__dirname, file),
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: false },
   }).outputText;
-  vm.runInNewContext(code, { exports, FormData, Blob, ...scope });
+  vm.runInNewContext(code, { exports, FormData, Blob, TextEncoder, ...scope });
   return exports;
 }
 
 function photoModule(os = "web", scope = {}) {
   return load("../services/profilePhotoUpload.ts", {
     require: name => name === "expo-file-system" ? {
-      File: class { size = scope.nativeSize ?? 1024; async bytes() { return new Uint8Array([255, 216, 255, 217]); } },
+      File: class { size = scope.nativeSize ?? 4; async bytes() { return new Uint8Array([255, 216, 255, 217]); } },
     } : { Platform: { OS: os } }, ...scope,
   });
 }
@@ -122,14 +122,60 @@ test("photo validation rejects unsupported formats, oversized files and unknown 
 });
 
 test("native photo metadata keeps the real format and validates the size", async () => {
-  let part;
-  class NativeFormData { append(name, value) { assert.equal(name, "file"); part = value; } }
-  await photoModule("ios", { FormData: NativeFormData }).prepareProfilePhotoUpload({
+  const upload = await photoModule("ios").prepareProfilePhotoUpload({
     uri: "file:///photo.webp", mimeType: "image/webp", fileName: "photo.webp", fileSize: 1024,
   });
+  const form = await new Request("http://fixture.invalid", { method: "POST", ...upload }).formData();
+  const part = form.get("file");
   assert.equal(part.type, "image/webp");
-  assert.equal(part.uri, undefined);
-  assert.deepEqual(Array.from(await part.bytes()), [255, 216, 255, 217]);
+  assert.equal(part.name, "photo.webp");
+  assert.deepEqual(Array.from(new Uint8Array(await part.arrayBuffer())), [255, 216, 255, 217]);
+});
+
+test("native photo API sends one authenticated byte multipart request accepted by an HTTP server", async () => {
+  const http = require("node:http");
+  let received, count = 0;
+  const server = http.createServer(async (req, res) => {
+    try {
+      count++;
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const form = await new Request("http://localhost/photo", {
+        method: req.method, headers: req.headers, body: Buffer.concat(chunks),
+      }).formData();
+      const file = form.get("file");
+      received = { authorization: req.headers.authorization, type: req.headers["content-type"],
+        keys: [...form.keys()], name: file.name, mime: file.type,
+        bytes: [...new Uint8Array(await file.arrayBuffer())] };
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ success: true, profile_photo_url: "profiles/42/avatar.jpg" }));
+    } catch (error) { res.statusCode = 500; res.end(JSON.stringify({ detail: error.message })); }
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  try {
+    for (const os of ["ios", "android"]) {
+      const api = load("../services/api.ts", {
+        process: { env: {} },
+        require: name => name === "./profilePhotoUpload" ? photoModule(os) : { Platform: { OS: os } },
+        fetch: (url, options) => {
+          assert.match(url, /\/api\/student\/profile\/photo$/);
+          assert.equal(options.body instanceof FormData, false);
+          return fetch(`http://127.0.0.1:${server.address().port}/photo`, options);
+        },
+      }).default;
+      const response = await api.profile.uploadPhoto("fixture-token", {
+        uri: "file:///photo.jpg", mimeType: "image/jpeg", fileName: "photo.jpg", fileSize: 4,
+      });
+      assert.equal(response.success, true);
+      assert.equal(received.authorization, "Bearer fixture-token");
+      assert.match(received.type, /^multipart\/form-data; boundary=----EDUwAIPhoto/);
+      assert.deepEqual(received.keys, ["file"]);
+      assert.equal(received.name, "photo.jpg");
+      assert.equal(received.mime, "image/jpeg");
+      assert.deepEqual(received.bytes, [255, 216, 255, 217]);
+    }
+    assert.equal(count, 2);
+  } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
 test("photo probe distinguishes no photo from an auth or network failure", async () => {

@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 import type { ImagePickerAsset } from "expo-image-picker";
-import { PhotoValidationError, prepareProfilePhotoUpload } from "./profilePhotoUpload";
+import { PhotoValidationError, prepareProfilePhotoUpload, type ProfilePhotoUpload } from "./profilePhotoUpload";
 import { readAnswerStream } from "./answerStream";
 
 const PROD_URL = "https://edwai-api-953672603784.asia-south1.run.app";
@@ -570,12 +570,12 @@ const api = {
     },
 
     uploadPhoto: async (token: string, asset: ImagePickerAsset) => {
-      let formData: FormData;
-      try { formData = await prepareProfilePhotoUpload(asset); }
+      let upload: ProfilePhotoUpload;
+      try { upload = await prepareProfilePhotoUpload(asset); }
       catch (error) { throw new PhotoValidationError(error instanceof Error ? error.message : "Could not read the selected photo."); }
       return request<{ success: boolean; profile_photo_url: string }>(
         "/api/student/profile/photo",
-        { method: "POST", body: formData, headers: {} },
+        { method: "POST", body: upload.body, headers: upload.headers },
         token
       );
     },
