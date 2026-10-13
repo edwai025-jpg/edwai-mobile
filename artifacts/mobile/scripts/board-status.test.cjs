@@ -8,7 +8,7 @@ const ts = require("typescript");
 function evaluate(source, scope) {
   const exports = {};
   const js = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   vm.runInNewContext(js, { exports, Error, TypeError, ...scope });
   return exports;
@@ -30,7 +30,12 @@ const screen = fs.readFileSync(path.join(__dirname, "../app/(tabs)/index.tsx"), 
 const ast = ts.createSourceFile("index.tsx", screen, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const initializers = {};
 let pollingEffect;
+let errorBanner;
 function visit(node) {
+  if (ts.isJsxExpression(node) && node.expression
+    && node.expression.getText(ast).startsWith("!boardStatusLoading && boardStatusError &&")) {
+    errorBanner = node.expression.getText(ast);
+  }
   if (ts.isVariableDeclaration(node) && ["loadBoardStatus", "handleStartProcessing", "boardReady"].includes(node.name.getText(ast))) {
     initializers[node.name.getText(ast)] = node.initializer.getText(ast);
   }
@@ -44,6 +49,40 @@ visit(ast);
 assert.ok(initializers.loadBoardStatus);
 assert.ok(initializers.handleStartProcessing);
 assert.ok(pollingEffect);
+assert.ok(errorBanner);
+
+test("textbook failures show contact guidance alongside the error and retry, but success/loading do not", () => {
+  const jsx = (type, props) => ({ type, props });
+  function render(error, loading = false) {
+    return evaluate(`exports.banner = (${errorBanner});`, {
+      boardStatusLoading: loading, boardStatusError: error,
+      View: "View", Text: "Text", Pressable: "Pressable", Feather: "Feather",
+      sc: {}, loadBoardStatus: () => {},
+      require: name => {
+        assert.equal(name, "react/jsx-runtime");
+        return { jsx, jsxs: jsx };
+      },
+    }).banner;
+  }
+  function text(node) {
+    if (typeof node === "string") return node;
+    if (Array.isArray(node)) return node.map(text).join("");
+    return node?.props ? text(node.props.children) : "";
+  }
+  for (const error of [
+    "Couldn't check textbook access: Not found",
+    "Couldn't reach the server. Check your connection and retry.",
+    "Your session could not be verified. Please sign in again.",
+    "Couldn't start textbook processing: Please retry.",
+  ]) {
+    const content = text(render(error));
+    assert.ok(content.includes(error));
+    assert.ok(content.includes("Please contact the EDUwAI team through in-app chat or the support contact number for help."));
+    assert.ok(content.includes("Retry"));
+  }
+  assert.equal(render(null), null);
+  assert.equal(render("Network error", true), false);
+});
 
 function statusLoader(client) {
   const state = { status: null, loading: true, error: null, starting: false };

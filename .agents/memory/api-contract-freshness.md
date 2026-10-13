@@ -14,3 +14,9 @@ Restricted-board processing must be confirmed by a fresh authenticated status re
 **Why:** The live processing routes document no response schemas; starting processing creates a per-user access record. A route/authentication probe cannot establish authenticated success, and real processing must not be initiated merely for testing without authorization.
 
 **How to apply:** Preserve server restriction truth, fail closed on unreadable status, and use simulated responses for transition regressions. Obtain authorized, read-only response evidence before accepting new response shapes.
+
+API error messages should also direct the student to contact the EDUwAI team through chat or the support contact number.
+
+**Why:** The user requested contact guidance alongside identifying API errors.
+
+**How to apply:** Keep the specific error and retry instructions visible; add support guidance rather than replacing the failure detail. Use established support contact details, not an invented phone number.

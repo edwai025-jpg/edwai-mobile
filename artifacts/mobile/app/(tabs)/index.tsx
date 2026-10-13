@@ -584,7 +584,11 @@ export default function TextbooksScreen() {
         {!boardStatusLoading && boardStatusError && (
           <View style={sc.errorBanner}>
             <Feather name="wifi-off" size={14} color="#fcd34d" />
-            <Text style={sc.errorBannerText}>{boardStatusError}</Text>
+            <Text style={sc.errorBannerText}>
+              {boardStatusError}
+              {"\n\n"}
+              Please contact the EDUwAI team through in-app chat or the support contact number for help.
+            </Text>
             <Pressable onPress={() => loadBoardStatus()} style={sc.retryBtn}>
               <Text style={sc.retryBtnText}>Retry</Text>
             </Pressable>
@@ -775,7 +779,7 @@ const sc = StyleSheet.create({
   footer: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center", paddingTop: 8, paddingBottom: 16 },
   footerText: { fontSize: 11, color: MUTED },
   errorBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(245,158,11,0.12)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(245,158,11,0.3)", paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12 },
-  errorBannerText: { flex: 1, fontSize: 13, color: "#fcd34d", fontFamily: "Inter_500Medium" },
+  errorBannerText: { flex: 1, fontSize: 13, lineHeight: 19, color: "#fcd34d", fontFamily: "Inter_500Medium" },
   retryBtn: { backgroundColor: "rgba(245,158,11,0.25)", borderRadius: 6, paddingHorizontal: 12, paddingVertical: 5 },
   retryBtnText: { fontSize: 12, color: "#fde68a", fontFamily: "Inter_600SemiBold" },
   setupCard: { backgroundColor: CARD_BG, borderRadius: 12, borderWidth: 1, borderColor: BORDER, padding: 28, marginBottom: 12, alignItems: "center" },
