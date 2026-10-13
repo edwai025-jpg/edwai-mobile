@@ -630,15 +630,35 @@ const api = {
     getUsage: (token: string) =>
       request<UsageInfo>("/api/billing/usage/me", {}, token),
 
-    getBoardStatus: (token: string) =>
-      request<BoardStatus>("/api/student/board-status", {}, token),
+    getBoardStatus: async (token: string): Promise<BoardStatus> => {
+      const result = await request<unknown>("/api/student/board-status", {}, token);
+      // OpenAPI leaves this response unspecified. Never grant access from an
+      // empty/malformed response or guess a processing state.
+      if (!result || typeof result !== "object"
+        || !("is_restricted" in result) || typeof result.is_restricted !== "boolean"
+        || !("processing_status" in result)
+        || !["not_started", "in_progress", "completed", "failed"].includes(String(result.processing_status))
+        || !("processing_delay_minutes" in result)
+        || typeof result.processing_delay_minutes !== "number"
+        || !Number.isFinite(result.processing_delay_minutes) || result.processing_delay_minutes < 0) {
+        throw new Error("The textbook access response could not be read. Please retry.");
+      }
+      return result as BoardStatus;
+    },
 
-    startBoardProcessing: (token: string) =>
-      request<{ message: string; estimated_minutes: number }>(
-        "/api/student/board/process",
+    startBoardProcessing: async (token: string): Promise<void> => {
+      const result = await request<unknown>(
+        "/api/student/process-documents",
         { method: "POST" },
         token
-      ),
+      );
+      // No documented success envelope: callers must re-read board status.
+      if (result && typeof result === "object"
+        && (("success" in result && result.success === false)
+          || ("processing_status" in result && result.processing_status === "failed"))) {
+        throw new Error("The server could not start textbook processing. Please retry.");
+      }
+    },
 
     /* Server automatically applies board_id + medium_id from saved profile */
     getAvailableClasses: (token: string) =>

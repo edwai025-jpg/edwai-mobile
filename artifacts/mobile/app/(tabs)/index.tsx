@@ -205,10 +205,17 @@ export default function TextbooksScreen() {
   const [showUpgrade, setShowUpgrade] = useState(false);
 
   /* board status */
-  const [boardStatus, setBoardStatus] = useState<BoardStatus | null>(null);
+  const [storedBoardStatus, setBoardStatus] = useState<BoardStatus | null>(null);
+  const [boardStatusScope, setBoardStatusScope] = useState<string | null>(null);
   const [boardStatusLoading, setBoardStatusLoading] = useState(true);
   const [boardStatusError, setBoardStatusError] = useState<string | null>(null);
   const [startingProcess, setStartingProcess] = useState(false);
+  const boardScope = JSON.stringify([accessToken, user?.id, user?.boardId, user?.mediumId]);
+  const boardStatus = boardStatusScope === boardScope ? storedBoardStatus : null;
+  const currentBoardScope = useRef(boardScope);
+  currentBoardScope.current = boardScope;
+  const boardStatusRequest = useRef(0);
+  const processingStartScope = useRef<string | null>(null);
 
   /* book selection */
   const [classes, setClasses] = useState<{ id: number; name: string }[]>([]);
@@ -283,34 +290,45 @@ export default function TextbooksScreen() {
   }, [logout]);
 
   /* ── board status ── */
-  const loadBoardStatus = useCallback(async () => {
+  const loadBoardStatus = useCallback(async (background = false) => {
     if (!accessToken) return;
-    setBoardStatusLoading(true);
+    const request = ++boardStatusRequest.current;
+    const isCurrent = () => currentBoardScope.current === boardScope && boardStatusRequest.current === request;
+    if (!background) setBoardStatusLoading(true);
     setBoardStatusError(null);
     try {
       const s = await api.study.getBoardStatus(accessToken);
+      if (!isCurrent()) return;
       setBoardStatus(s);
+      setBoardStatusScope(boardScope);
     } catch (error) {
-      setBoardStatus(null);
+      if (!isCurrent()) return;
       setBoardStatusError(
         error instanceof ApiError
           ? error.statusCode === 401
             ? "Your session could not be verified. Please sign in again."
+            : error.statusCode === 403
+              ? "You don't have permission to process these textbooks. Please check your account or board."
             : `Couldn't check textbook access: ${error.message}`
           : error instanceof TypeError
             ? "Couldn't reach the server. Check your connection and retry."
-            : "Couldn't check textbook access. Please retry.",
+            : error instanceof Error ? error.message : "Couldn't check textbook access. Please retry.",
       );
     } finally {
-      setBoardStatusLoading(false);
+      if (isCurrent()) setBoardStatusLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, boardScope]);
 
   /* Re-fetch board status whenever boardId changes (e.g. after profile edit) */
   useEffect(() => {
+    setBoardStatus(null);
+    setBoardStatusError(null);
+    setStartingProcess(false);
+    processingStartScope.current = null;
     if (!accessToken) { setBoardStatusLoading(false); return; }
     loadBoardStatus();
-  }, [accessToken, boardId]);
+    return () => { boardStatusRequest.current++; };
+  }, [loadBoardStatus]);
 
   /* Never retain or combine class lists from another board, account, or institute. */
   useEffect(() => {
@@ -330,16 +348,16 @@ export default function TextbooksScreen() {
 
   useEffect(() => {
     if (boardStatus?.processing_status !== "in_progress") return;
+    let busy = false;
     const t = setInterval(async () => {
-      if (!accessToken) return;
+      if (busy) return;
+      busy = true;
       try {
-        const s = await api.study.getBoardStatus(accessToken);
-        setBoardStatus(s);
-        if (s.processing_status !== "in_progress") clearInterval(t);
-      } catch {}
+        await loadBoardStatus(true);
+      } finally { busy = false; }
     }, 5000);
     return () => clearInterval(t);
-  }, [boardStatus?.processing_status, accessToken]);
+  }, [boardStatus?.processing_status, loadBoardStatus]);
 
   /* The existing endpoint owns board/org scope; keep every returned class. */
   useEffect(() => {
@@ -382,10 +400,10 @@ export default function TextbooksScreen() {
      A deliberate choice (including another grade) must never be overwritten. */
   useEffect(() => {
     if (pathname !== "/" || classesLoading || initialClassChosen.current || loadedClassesScope.current !== classScope) return;
-    if (boardStatusLoading || (boardStatus?.is_restricted && boardStatus.processing_status !== "completed")) return;
+    if (boardStatusLoading || boardStatusError || !boardStatus || (boardStatus.is_restricted && boardStatus.processing_status !== "completed")) return;
     const cls = initialAcademicClass(classes, user);
     if (cls) void onClassSelect(cls);
-  }, [classes, classesLoading, classScope, user?.classId, user?.className, user?.orgRole, user?.orgId, pathname, onClassSelect, boardStatusLoading, boardStatus?.is_restricted, boardStatus?.processing_status]);
+  }, [classes, classesLoading, classScope, user?.classId, user?.className, user?.orgRole, user?.orgId, pathname, onClassSelect, boardStatusLoading, boardStatusError, boardStatus?.is_restricted, boardStatus?.processing_status]);
 
   /* ── subject select: load documents — server applies board+medium from profile ── */
   const onSubjectSelect = useCallback(async (subj: string) => {
@@ -491,20 +509,37 @@ export default function TextbooksScreen() {
   }, [accessToken]);
 
   const handleStartProcessing = useCallback(async () => {
-    if (!accessToken) return;
+    if (!accessToken || processingStartScope.current === boardScope) return;
+    processingStartScope.current = boardScope;
     setStartingProcess(true);
+    setBoardStatusError(null);
     try {
       await api.study.startBoardProcessing(accessToken);
-      setBoardStatus((s) => s ? { ...s, processing_status: "in_progress" } : s);
+      if (currentBoardScope.current !== boardScope) return;
+      await loadBoardStatus();
     } catch (e) {
-      Alert.alert("Error", e instanceof ApiError ? e.message : "Failed to start processing");
-    } finally { setStartingProcess(false); }
-  }, [accessToken]);
+      if (currentBoardScope.current !== boardScope) return;
+      setBoardStatusError(
+        e instanceof ApiError && e.statusCode === 401
+          ? "Your session could not be verified. Please sign in again."
+          : e instanceof ApiError && e.statusCode === 403
+            ? "You don't have permission to process these textbooks. Please check your account or board."
+            : e instanceof TypeError
+              ? "Couldn't reach the server. Processing was not confirmed. Check your connection and retry."
+              : `Couldn't start textbook processing: ${e instanceof Error ? e.message : "Please retry."}`,
+      );
+    } finally {
+      if (currentBoardScope.current === boardScope) {
+        processingStartScope.current = null;
+        setStartingProcess(false);
+      }
+    }
+  }, [accessToken, boardScope, loadBoardStatus]);
 
   const { isDark, toggleTheme } = useTheme();
   const isQuerying = queryLoading || streaming;
   const isRestricted = !!boardStatus?.is_restricted && boardStatus.processing_status !== "completed";
-  const boardReady = !boardStatusLoading && !isRestricted;
+  const boardReady = !boardStatusLoading && !boardStatusError && !!boardStatus && !isRestricted;
   const hasNoBoard = !boardId && !instituteStudent;
   const cardBg = isDark ? CARD_BG : "#ffffff";
   const cardBorder = isDark ? BORDER : "#e5e7eb";
@@ -550,7 +585,7 @@ export default function TextbooksScreen() {
           <View style={sc.errorBanner}>
             <Feather name="wifi-off" size={14} color="#fcd34d" />
             <Text style={sc.errorBannerText}>{boardStatusError}</Text>
-            <Pressable onPress={loadBoardStatus} style={sc.retryBtn}>
+            <Pressable onPress={() => loadBoardStatus()} style={sc.retryBtn}>
               <Text style={sc.retryBtnText}>Retry</Text>
             </Pressable>
           </View>
