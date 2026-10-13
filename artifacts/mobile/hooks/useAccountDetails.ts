@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiUserToProfile, useAuth } from "@/context/auth";
 import api, { ApiError, ApiUser } from "@/services/api";
 import { normalizePhoneInput } from "@/services/onboarding";
-import { validateAccountEmail, validateAccountPassword, validateName, validatePhone } from "@/services/accountDetails";
+import { validateAccountEmail, validateName, validatePhone } from "@/services/accountDetails";
 import type { AlertButton } from "react-native";
 
 type Channel = "email" | "phone";
@@ -18,23 +18,20 @@ export function useAccountDetails(
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmation, setConfirmation] = useState("");
   const [codes, setCodes] = useState<Record<Channel, CodeState>>({ email: emptyCode(), phone: emptyCode() });
   const [busy, setBusy] = useState(false);
   const [needsReconcile, setNeedsReconcile] = useState(false);
   const locked = useRef(false);
-  const latest = useRef({ user, visible, name, email, phone, codes, password, confirmation });
-  latest.current = { user, visible, name, email, phone, codes, password, confirmation };
+  const latest = useRef({ user, visible, name, email, phone, codes });
+  latest.current = { user, visible, name, email, phone, codes };
   const epoch = useRef(0);
 
   useEffect(() => {
     epoch.current++;
-    if (!visible) { setPassword(""); setConfirmation(""); return; }
+    if (!visible) return;
     setName(user?.name ?? "");
     setEmail(user?.email ?? "");
     setPhone(normalizePhoneInput(user?.phone ?? ""));
-    setPassword(""); setConfirmation("");
     setCodes({ email: emptyCode(), phone: emptyCode() });
     setNeedsReconcile(false);
   }, [visible, user?.id]);
@@ -147,7 +144,6 @@ export function useAccountDetails(
       const data = {
         full_name: draft.name.trim().replace(/\s+/g, " "),
         ...(removePhone ? { phone: "" } : {}),
-        ...(draft.password ? { password: draft.password } : {}),
       };
       let committed = false;
       try {
@@ -158,31 +154,30 @@ export function useAccountDetails(
         if (requestEpoch === epoch.current) {
           setName(server.full_name ?? "");
           if (removePhone) { setPhone(""); patchCode("phone", emptyCode()); }
-          setPassword(""); setConfirmation(""); setNeedsReconcile(false);
-          showToast("ok", draft.password ? "Account details and password updated. Login remains OTP-based." : "Account details saved.");
+          setNeedsReconcile(false);
+          showToast("ok", "Account details saved.");
         }
       } catch (error) {
         if (requestEpoch !== epoch.current) return;
         if (committed) {
-          // Never replay a successful password/removal write because GET failed.
-          setPassword(""); setConfirmation(""); setNeedsReconcile(true);
+          // Never replay a successful write because its following GET failed.
+          setNeedsReconcile(true);
           showToast("err", "Account update succeeded, but the saved profile could not be refreshed. Check saved details before continuing.");
         } else if (ambiguous(error)) {
           try {
             await reconcile(accountId);
-            showToast("err", "The update response was lost. Saved profile refreshed; password changes cannot be checked here. Review before deliberately saving again.");
+            showToast("err", "The update response was lost. Saved profile refreshed. Review before deliberately saving again.");
           } catch {
             setNeedsReconcile(true);
             showToast("err", "Update outcome is unknown. Check saved details before retrying; it may already have saved.");
           }
-          setPassword(""); setConfirmation("");
         } else showToast("err", errorMessage(error, "Could not save account details."));
       }
     });
   }
   function save() {
     if (locked.current || needsReconcile) return;
-    const validation = validateName(name) || validateAccountPassword(password, confirmation)
+    const validation = validateName(name)
       || (email.trim() ? validateAccountEmail(email) : user?.email ? "An existing email cannot be removed here." : "")
       || validatePhone(phone);
     if (validation) { showToast("err", validation); return; }
@@ -206,7 +201,7 @@ export function useAccountDetails(
   }
 
   return {
-    name, setName, email, phone, password, setPassword, confirmation, setConfirmation,
+    name, setName, email, phone,
     codes, busy, needsReconcile, pendingContacts, save, verify,
     emailVerified: verified("email"), phoneVerified: verified("phone"),
     emailError: email.trim() ? validateAccountEmail(email) : user?.email ? "An existing email cannot be removed here." : "",

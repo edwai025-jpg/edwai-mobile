@@ -21,8 +21,8 @@ Profile photo add, replace, crop, display, and removal are separately approved u
 
 **How to apply:** Use the existing avatar/photo entry points, keep photo changes independent of unfinished Account/Education drafts, and leave the remaining Profile sections outside this work.
 
-The user approved adding password-change controls inside the existing Account form using the legacy account-update API, despite the web handoff not displaying password fields. Password login remains disabled.
+Do not show New Password or Confirm Password controls in the mobile Account editor. Use the web version's “Password login is disabled” notice explaining phone/email OTP login and support-assisted access instead.
 
-**Why:** The user explicitly selected password-change controls after being told this would not enable password sign-in.
+**Why:** The user explicitly reversed the earlier password-control approval because there is no password login.
 
-**How to apply:** Keep password updates separate from enabling login methods. Do not remove the OTP-only login notice or interpret this approval as permission to change authentication.
+**How to apply:** Keep account saves free of password drafts/payloads and preserve existing contact verification. This is not permission to change authentication or enable password sign-in.

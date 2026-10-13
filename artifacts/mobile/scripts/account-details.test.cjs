@@ -106,15 +106,12 @@ function harness(options = {}) {
     close() { visible = false; render(); }, open() { visible = true; render(); } };
 }
 
-test("validates Unicode names, email handoff rules, Indian numbers, and matching legacy passwords", () => {
+test("validates Unicode names, email handoff rules, and Indian numbers", () => {
   assert.equal(validation.validateName(" 学生 "), "");
   assert.ok(validation.validateName("Learner 12"));
   for (const email of ["a..b@example.invalid", "a@domain", "a@b.c", "a b@example.invalid", "@a.invalid"]) assert.ok(validation.validateAccountEmail(email));
   assert.equal(validation.validateAccountEmail("learner@example.invalid"), "");
   assert.ok(validation.validatePhone("5123456789"));
-  assert.ok(validation.validateAccountPassword("lettersOnly", "lettersOnly"));
-  assert.ok(validation.validateAccountPassword("Fixture!123", "different"));
-  assert.equal(validation.validateAccountPassword("Fixture!123", "Fixture!123"), "");
 });
 test("new contacts clear verified badges; Send targets the draft and does not save contact or pending name", async () => {
   const h = harness();
@@ -196,22 +193,39 @@ test("unknown verification outcome blocks further mutations until a saved-profil
   h.form.save(); h.form.verify("email"); await flush();
   assert.equal(h.calls.filter(call => call.action === "verify").length, 1);
 });
-test("password/name save omits contacts, normalizes name and clears password drafts", async () => {
+test("name save normalizes name and never submits contacts or a password", async () => {
   const h = harness();
   h.form.setName(" Updated   Learner ");
-  h.form.setPassword("Fixture!123"); h.form.setConfirmation("Fixture!123");
   h.form.save(); await flush();
-  assert.deepEqual(h.calls[0].data, { full_name: "Updated Learner", password: "Fixture!123" });
-  assert.equal(h.form.password, "");
+  assert.deepEqual(h.calls[0].data, { full_name: "Updated Learner" });
+  assert.equal(h.form.password, undefined);
+  assert.equal(h.form.setPassword, undefined);
+  assert.equal(h.form.setConfirmation, undefined);
   assert.equal(h.user.name, "Updated Learner");
 });
-test("successful write followed by failed read is never replayed; password is cleared", async () => {
+test("successful account write followed by failed read is never replayed", async () => {
   const h = harness({ readFailure: true });
-  h.form.setPassword("Fixture!123"); h.form.setConfirmation("Fixture!123");
   h.form.save(); await flush(); h.form.save(); await flush();
   assert.equal(h.calls.filter(call => call.action === "save").length, 1);
-  assert.equal(h.form.password, "");
+  assert.equal("password" in h.calls[0].data, false);
   assert.equal(h.form.needsReconcile, true);
+});
+test("Account editor replaces password inputs with the web OTP-only support notice", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../components/AccountEditModal.tsx"), "utf8");
+  const ast = ts.createSourceFile("AccountEditModal.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const labels = [], text = [];
+  function visit(node) {
+    if (ts.isJsxAttribute(node) && node.name.getText(ast) === "accessibilityLabel"
+      && node.initializer && ts.isStringLiteral(node.initializer)) labels.push(node.initializer.text);
+    if (ts.isJsxText(node)) text.push(node.text.trim());
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.equal(ast.parseDiagnostics.length, 0);
+  assert.ok(labels.includes("Full Name") && labels.includes("Email Address") && labels.includes("Phone Number"));
+  assert.ok(!labels.some(label => /password/i.test(label)));
+  assert.ok(text.includes("Password login is disabled"));
+  assert.ok(text.includes("Your account uses OTP-based login via phone or email. Password sign-in is not available. If you're unable to receive an OTP, please contact support for assisted access."));
 });
 test("phone removal requires confirmation and sends explicit empty string", async () => {
   const h = harness();

@@ -233,26 +233,13 @@ export default function AccountEditModal({ visible, onClose, photo }: Props) {
               {!!account.codes.phone.success && <Text style={s.verifyLink}>{account.codes.phone.success}</Text>}
             </View>
 
-            <View style={s.field}>
-              <Text style={s.label}>New Password</Text>
-              <TextInput style={s.input} value={account.password} onChangeText={account.setPassword}
-                placeholder="Leave blank to keep unchanged" placeholderTextColor={Colors.darkTextMuted}
-                secureTextEntry autoCapitalize="none" autoComplete="new-password"
-                accessibilityLabel="New Password" editable={!saving} />
-              <Text style={s.noticeText}>At least 8 characters, an ASCII letter, a digit, and a special character.</Text>
-            </View>
-            <View style={s.field}>
-              <Text style={s.label}>Confirm New Password</Text>
-              <TextInput style={s.input} value={account.confirmation} onChangeText={account.setConfirmation}
-                placeholder="Repeat your new password" placeholderTextColor={Colors.darkTextMuted}
-                secureTextEntry autoCapitalize="none" autoComplete="new-password"
-                accessibilityLabel="Confirm New Password" editable={!saving} />
-            </View>
-
             {/* Notice */}
             <View style={s.notice}>
-              <Feather name="info" size={12} color={Colors.darkTextMuted} />
-              <Text style={s.noticeText}>Password login is disabled. Updating your password does not enable password login; continue using OTP or linked Google sign-in.</Text>
+              <Feather name="lock" size={14} color={Colors.primary} style={{ marginTop: 2 }} />
+              <View style={{ flex: 1, gap: 5 }}>
+                <Text style={s.noticeTitle}>Password login is disabled</Text>
+                <Text style={s.noticeText}>Your account uses OTP-based login via phone or email. Password sign-in is not available. If you're unable to receive an OTP, please contact support for assisted access.</Text>
+              </View>
             </View>
 
             {/* Save */}
@@ -316,8 +303,9 @@ const s = StyleSheet.create({
   otpConfirm: { flex: 1, backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 11, alignItems: "center" },
   otpResend: { paddingHorizontal: 14, paddingVertical: 11, borderRadius: 10, borderWidth: 1, borderColor: Colors.darkDivider, alignItems: "center" },
   otpResendText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.darkTextSub },
-  notice: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: Colors.darkSurface, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: Colors.darkDivider },
-  noticeText: { fontSize: 12, fontFamily: "Inter_400Regular", color: Colors.darkTextMuted, flex: 1 },
+  notice: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: Colors.darkSurface, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: Colors.darkDivider },
+  noticeTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.darkText },
+  noticeText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", color: Colors.darkTextMuted },
   saveBtn: { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 4 },
   saveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff" },
   toast: { margin: 12, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },

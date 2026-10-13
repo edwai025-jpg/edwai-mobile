@@ -19,12 +19,3 @@ export function validateAccountEmail(raw: string): string {
   }
   return "";
 }
-
-export function validateAccountPassword(password: string, confirmation: string): string {
-  if (!password && !confirmation) return "";
-  if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)
-    || !/[^A-Za-z0-9\s]/.test(password)) {
-    return "Password must have at least 8 characters, an ASCII letter, a digit, and a special character.";
-  }
-  return password === confirmation ? "" : "Passwords do not match.";
-}
