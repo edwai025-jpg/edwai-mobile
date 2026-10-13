@@ -207,7 +207,7 @@ export default function TextbooksScreen() {
   /* board status */
   const [boardStatus, setBoardStatus] = useState<BoardStatus | null>(null);
   const [boardStatusLoading, setBoardStatusLoading] = useState(true);
-  const [boardStatusError, setBoardStatusError] = useState(false);
+  const [boardStatusError, setBoardStatusError] = useState<string | null>(null);
   const [startingProcess, setStartingProcess] = useState(false);
 
   /* book selection */
@@ -286,13 +286,21 @@ export default function TextbooksScreen() {
   const loadBoardStatus = useCallback(async () => {
     if (!accessToken) return;
     setBoardStatusLoading(true);
-    setBoardStatusError(false);
+    setBoardStatusError(null);
     try {
       const s = await api.study.getBoardStatus(accessToken);
       setBoardStatus(s);
-    } catch {
+    } catch (error) {
       setBoardStatus(null);
-      setBoardStatusError(true);
+      setBoardStatusError(
+        error instanceof ApiError
+          ? error.statusCode === 401
+            ? "Your session could not be verified. Please sign in again."
+            : `Couldn't check textbook access: ${error.message}`
+          : error instanceof TypeError
+            ? "Couldn't reach the server. Check your connection and retry."
+            : "Couldn't check textbook access. Please retry.",
+      );
     } finally {
       setBoardStatusLoading(false);
     }
@@ -541,7 +549,7 @@ export default function TextbooksScreen() {
         {!boardStatusLoading && boardStatusError && (
           <View style={sc.errorBanner}>
             <Feather name="wifi-off" size={14} color="#fcd34d" />
-            <Text style={sc.errorBannerText}>Couldn't reach server</Text>
+            <Text style={sc.errorBannerText}>{boardStatusError}</Text>
             <Pressable onPress={loadBoardStatus} style={sc.retryBtn}>
               <Text style={sc.retryBtnText}>Retry</Text>
             </Pressable>

@@ -14,3 +14,4 @@
 - [Sources and study pages](sources-study-pages-scope.md) — Web-handoff UI/API parity only; generated images never fall back to textbook scans.
 - [Question section visibility](question-visibility-scope.md) — Whole section requires a selected source; single-option auto-selection and mode/resource resets follow web rules.
 - [Academic class selection](academic-class-selection-scope.md) — Profile default only once; all API-returned classes remain selectable, but cross-grade books remain backend-restricted.
+- [API contract freshness](api-contract-freshness.md) — Legacy handoff routes can be stale; verify the live API before blaming connectivity or hiding warnings.

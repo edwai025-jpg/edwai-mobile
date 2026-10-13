@@ -631,7 +631,7 @@ const api = {
       request<UsageInfo>("/api/billing/usage/me", {}, token),
 
     getBoardStatus: (token: string) =>
-      request<BoardStatus>("/api/student/board/status", {}, token),
+      request<BoardStatus>("/api/student/board-status", {}, token),
 
     startBoardProcessing: (token: string) =>
       request<{ message: string; estimated_minutes: number }>(
