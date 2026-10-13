@@ -65,6 +65,39 @@ test("verified Profile write routes use their documented methods and canonical u
   assert.ok(calls.every(({ options }) => options.headers.Authorization === "Bearer fixture-token"));
 });
 
+test("Account contact verification and raw password writes use protected profile routes without login-token replacement", async () => {
+  const calls = [];
+  const api = client(async (url, options) => {
+    calls.push({ path: new URL(url).pathname.replace("/api/edwai/", "/api/"), options, body: options.body && JSON.parse(options.body) });
+    return new Response(JSON.stringify({ success: true, sent: true, user: { id: 42 } }));
+  });
+  await api.profile.sendEmailOtp("fixture-token", "new@example.invalid");
+  await api.profile.verifyEmailOtp("fixture-token", "new@example.invalid", "001234");
+  await api.profile.verifyPhoneOtp("fixture-token", "+916123456789", "001234");
+  await api.profile.saveAccount("fixture-token", { full_name: "Fixture Learner", password: "Fixture!123" });
+  assert.deepEqual(calls.map(call => call.path), [
+    "/api/auth/email/send-otp", "/api/auth/email/verify-for-profile",
+    "/api/auth/phone/verify-for-profile", "/api/student/profile/account",
+  ]);
+  assert.equal(calls[1].body.otp, "001234");
+  assert.equal(calls[3].options.method, "PUT");
+  assert.equal(calls[3].body.email, undefined);
+  assert.equal(calls[3].body.phone, undefined);
+  for (const call of calls) assert.equal(call.options.headers.Authorization, "Bearer fixture-token");
+});
+
+test("Education uses the board-filtered profile classes and class-filtered medium lookups", async () => {
+  const urls = [];
+  const api = client(async url => { urls.push(new URL(url)); return new Response("[]"); });
+  await api.data.getClassesForBoard(2);
+  await api.data.getMediumsForClass(3);
+  assert.equal(urls[0].pathname, "/api/edwai/classes");
+  assert.equal(urls[0].searchParams.get("board_id"), "2");
+  assert.equal(urls[1].pathname, "/api/edwai/mediums");
+  assert.equal(urls[1].searchParams.get("class_id"), "3");
+  assert.equal(urls[1].searchParams.has("board_id"), false);
+});
+
 test("web photo uploads send a real file with no manually-set content type", async () => {
   let options;
   const api = client(async (_url, opts) => {

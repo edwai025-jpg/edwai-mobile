@@ -1,6 +1,6 @@
 ---
-name: External API browser-test isolation
-description: Safe request interception and one-time auth seeding for browser tests against the external EdwAI backend.
+name: External API test isolation
+description: Fail-closed browser fixtures, one-time auth seeding, and module-mock interoperability for EDUwAI tests.
 ---
 
 Use a single fail-closed fixture router for external API browser tests. Every external API request must either receive a known fixture or a local rejection; never continue an unmatched API request to the network.
@@ -26,3 +26,9 @@ Freeze application edits while a critical Expo browser pass is running.
 **Why:** Editing shared API/auth modules can trigger a full development reload, resetting in-memory selections and session-only access. This can look like a catalogue bug during fixture testing.
 
 **How to apply:** Finish code changes and restart before the pass. If selections suddenly reset, check for a new application-start log before changing production selection logic; continue only the affected or unverified scenarios on the stable app.
+
+CommonJS unit-test module mocks must match the transpiler's default-import interoperability; compiler upgrades can change this behavior.
+
+**Why:** Newer TypeScript default-import wrapping made a fixture's API object inaccessible even though the real app imports were correct. The resulting mock failures resembled broken API calls.
+
+**How to apply:** Explicitly configure mock transpilation interoperability or supply correctly marked module exports. Investigate fixture/import mismatches before changing working application logic.

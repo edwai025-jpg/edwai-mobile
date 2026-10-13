@@ -17,8 +17,8 @@ import {
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
-import { useAuth } from "@/context/auth";
-import api, { ApiError } from "@/services/api";
+import { apiUserToProfile, useAuth } from "@/context/auth";
+import api, { ApiError, ApiUser } from "@/services/api";
 import ManagedEducationDetails from "@/components/ManagedEducationDetails";
 import { isEducationManaged } from "@/services/profileContracts";
 
@@ -199,7 +199,7 @@ const sh = StyleSheet.create({
 type Props = { visible: boolean; onClose: () => void };
 
 export default function EducationEditModal({ visible, onClose }: Props) {
-  const { user, updateUser, refreshUser, accessToken } = useAuth();
+  const { user, updateUser, accessToken, runAuthenticatedRequest } = useAuth();
   const educationManaged = isEducationManaged(user);
   const token = accessToken ?? "";
 
@@ -222,10 +222,14 @@ export default function EducationEditModal({ visible, onClose }: Props) {
   const [classesLoading, setClassesLoading] = useState(false);
   const [mediumsLoading, setMediumsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [needsRefresh, setNeedsRefresh] = useState(false);
 
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null);
   const [toast, setToast] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveLock = useRef(false);
+  const currentScope = useRef("");
+  currentScope.current = JSON.stringify([visible, user?.id, educationManaged, stateId, boardId, classId]);
 
   const showToast = (type: "ok" | "err", msg: string) => {
     setToast({ type, msg });
@@ -248,93 +252,141 @@ export default function EducationEditModal({ visible, onClose }: Props) {
     setToast(null);
 
     if (educationManaged) return;
+    let cancelled = false;
     setStatesLoading(true);
     api.data.getStates()
-      .then((d) => setStates(d.sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => {})
-      .finally(() => setStatesLoading(false));
-  }, [visible, educationManaged]);
+      .then((d) => { if (!cancelled) setStates(d.sort((a, b) => a.name.localeCompare(b.name))); })
+      .catch(() => { if (!cancelled) showToast("err", "Could not load states. Please close and reopen Academic Details to retry."); })
+      .finally(() => { if (!cancelled) setStatesLoading(false); });
+    return () => { cancelled = true; };
+  }, [visible, educationManaged, user?.id]);
 
   useEffect(() => {
-    if (!visible || educationManaged || !stateId) { setBoards([]); return; }
+    if (!visible || educationManaged || !stateId) { setBoards([]); setBoardsLoading(false); return; }
+    let cancelled = false;
+    setBoards([]);
     setBoardsLoading(true);
     api.data.getBoards(stateId)
-      .then((d) => setBoards(d.sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => {})
-      .finally(() => setBoardsLoading(false));
-  }, [visible, educationManaged, stateId]);
+      .then((d) => { if (!cancelled) setBoards(d.sort((a, b) => a.name.localeCompare(b.name))); })
+      .catch(() => { if (!cancelled) showToast("err", "Could not load boards. Please close and reopen Academic Details to retry."); })
+      .finally(() => { if (!cancelled) setBoardsLoading(false); });
+    return () => { cancelled = true; };
+  }, [visible, educationManaged, user?.id, stateId]);
 
   useEffect(() => {
-    if (!visible || educationManaged || !boardId) { setClasses([]); return; }
+    if (!visible || educationManaged || !boardId) { setClasses([]); setClassesLoading(false); return; }
+    let cancelled = false;
+    setClasses([]);
     setClassesLoading(true);
-    api.data.getClasses(boardId)
-      .then((d) => setClasses(d.sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => {})
-      .finally(() => setClassesLoading(false));
-  }, [visible, educationManaged, boardId]);
+    api.data.getClassesForBoard(boardId)
+      .then((d) => { if (!cancelled) setClasses(d.sort((a, b) => a.name.localeCompare(b.name))); })
+      .catch(() => { if (!cancelled) showToast("err", "Could not load classes. Please close and reopen Academic Details to retry."); })
+      .finally(() => { if (!cancelled) setClassesLoading(false); });
+    return () => { cancelled = true; };
+  }, [visible, educationManaged, user?.id, boardId]);
 
   useEffect(() => {
-    if (!visible || educationManaged || !boardId || !classId) { setMediums([]); return; }
+    if (!visible || educationManaged || !boardId || !classId) { setMediums([]); setMediumsLoading(false); return; }
+    let cancelled = false;
+    setMediums([]);
     setMediumsLoading(true);
-    api.data.getMediums(boardId, classId)
+    api.data.getMediumsForClass(classId)
       .then((list) => {
-        /* Deduplicate by name so "English x5" doesn't confuse users */
-        const seen = new Set<string>();
-        const deduped = list.filter((m) => {
-          if (seen.has(m.name)) return false;
-          seen.add(m.name);
-          return true;
-        });
-        setMediums(deduped);
+        // IDs are authoritative; similarly named options may be distinct.
+        if (!cancelled) setMediums(list.sort((a, b) => a.name.localeCompare(b.name)));
       })
-      .catch(() => showToast("err", "Could not load mediums. Check your connection."))
-      .finally(() => setMediumsLoading(false));
-  }, [visible, educationManaged, boardId, classId]);
+      .catch(() => { if (!cancelled) showToast("err", "Could not load mediums. Please close and reopen Academic Details to retry."); })
+      .finally(() => { if (!cancelled) setMediumsLoading(false); });
+    return () => { cancelled = true; };
+  }, [visible, educationManaged, user?.id, boardId, classId]);
 
   const handleStateSelect = (item: PickerItem) => {
+    setBoards([]); setClasses([]); setMediums([]);
     setStateId(item.id); setStateName(item.name);
     setBoardId(null); setBoardName("");
     setClassId(null); setClassName("");
     setMediumId(null); setMediumName("");
   };
   const handleBoardSelect = (item: PickerItem) => {
+    setClasses([]); setMediums([]);
     setBoardId(item.id); setBoardName(item.name);
     setClassId(null); setClassName("");
     setMediumId(null); setMediumName("");
   };
   const handleClassSelect = (item: PickerItem) => {
+    setMediums([]);
     setClassId(item.id); setClassName(item.name);
     setMediumId(null); setMediumName("");
   };
 
   const handleSave = async () => {
-    if (educationManaged) return;
+    if (educationManaged || saveLock.current || !accessToken) return;
+    const accountId = user?.id;
+    const scope = currentScope.current;
+    const applyServer = async (server: ApiUser, resetDraft = true) => {
+      if (server.id !== accountId) throw new Error("Your account changed. Please reopen Academic Details.");
+      await updateUser(apiUserToProfile(server));
+      if (currentScope.current !== scope) return false;
+      if (resetDraft) {
+        setStateId(server.state_id ?? null); setStateName(server.state ?? "");
+        setBoardId(server.board_id ?? null); setBoardName(server.board ?? "");
+        setClassId(server.class_id ?? null); setClassName(server.class_name ?? "");
+        setMediumId(server.medium_id ?? null); setMediumName(server.medium_name ?? "");
+      }
+      return true;
+    };
+    if (needsRefresh) {
+      saveLock.current = true; setSaving(true);
+      try {
+        await applyServer(await runAuthenticatedRequest(token => api.auth.getMe(token)));
+        setNeedsRefresh(false);
+        showToast("ok", "Saved academic details refreshed. Review your selections before saving again.");
+      } catch { showToast("err", "Could not check saved academic details. No further save was attempted. Please try again or contact the EDUwAI team."); }
+      finally { saveLock.current = false; setSaving(false); }
+      return;
+    }
     if (!boardId) { showToast("err", "Please select a board."); return; }
-    if (classId && !mediumId) { showToast("err", "Please select a medium of instruction."); return; }
+    if (statesLoading || boardsLoading || classesLoading || mediumsLoading) {
+      showToast("err", "Please wait for the academic options to load."); return;
+    }
+    saveLock.current = true;
     setSaving(true);
+    let committed = false;
     try {
       /* Use the correct education endpoint — this saves medium_id to the server
          so that GET /api/documents can apply it automatically server-side */
-      const res = await api.profile.saveEducation(token, {
+      await runAuthenticatedRequest(token => api.profile.saveEducation(token, {
         board_id: boardId,
         class_id: classId ?? null,
         medium_id: mediumId ?? null,
-      });
-      await updateUser({
-        state: res.user.state,
-        stateId: res.user.state_id,
-        board: res.user.board,
-        boardId: res.user.board_id,
-        className: res.user.class_name,
-        classId: res.user.class_id,
-        medium: res.user.medium_name,
-        mediumId: res.user.medium_id,
-      });
-      await refreshUser();
-      showToast("ok", "Academic details saved.");
+      }));
+      committed = true;
+      // PUT returns only a partial user. Resolve State IDs and server completion
+      // truth from auth/me without replaying PUT if this read needs a refresh.
+      const server = await runAuthenticatedRequest(token => api.auth.getMe(token));
+      if (server.board_id !== boardId || (server.class_id ?? null) !== classId || (server.medium_id ?? null) !== mediumId) {
+        throw new Error("The saved profile did not confirm these academic selections. Please review before retrying.");
+      }
+      if (await applyServer(server)) showToast("ok", "Academic details saved.");
     } catch (e) {
-      showToast("err", e instanceof ApiError ? e.message : "Failed to save.");
+      if (currentScope.current === scope) {
+        // No automatic retry of a write after a lost response. Check the
+        // authoritative selections first; block writes if that check fails.
+        if (committed || !(e instanceof ApiError) || e.statusCode >= 500 || e.statusCode < 400) {
+          try {
+            const server = await runAuthenticatedRequest(token => api.auth.getMe(token));
+            const matches = server.board_id === boardId && (server.class_id ?? null) === classId && (server.medium_id ?? null) === mediumId;
+            await applyServer(server, matches);
+            if (matches) {
+              showToast("ok", "Your saved academic details match these selections.");
+              return;
+            }
+          } catch { setNeedsRefresh(true); }
+        }
+        showToast("err", `${e instanceof Error ? e.message : "Could not confirm the save. Check saved details before retrying."}\nPlease contact the EDUwAI team through in-app chat or the “Contact Us” section on the home page for help.`);
+      }
     } finally {
+      saveLock.current = false;
       setSaving(false);
     }
   };
@@ -369,6 +421,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
             {educationManaged ? <ManagedEducationDetails user={user} /> : <>
             <SelectorRow
               label="State"
+              disabled={saving}
               value={stateName || undefined}
               placeholder="Select state"
               loading={statesLoading}
@@ -378,7 +431,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
               label="Board"
               value={boardName || undefined}
               placeholder={stateId ? "Select board" : "Select a state first"}
-              disabled={!stateId || statesLoading}
+              disabled={saving || !stateId || statesLoading}
               loading={boardsLoading}
               onPress={() => setActiveSheet("board")}
             />
@@ -386,15 +439,15 @@ export default function EducationEditModal({ visible, onClose }: Props) {
               label="Class"
               value={className || undefined}
               placeholder={boardId ? "Select class" : "Select a board first"}
-              disabled={!boardId || boardsLoading}
+              disabled={saving || !boardId || boardsLoading}
               loading={classesLoading}
               onPress={() => setActiveSheet("class")}
             />
             <SelectorRow
-              label="Medium of Instruction *"
+              label="Medium of Instruction"
               value={mediumName || undefined}
               placeholder={classId ? "Select medium" : "Select a class first"}
-              disabled={!classId || classesLoading}
+              disabled={saving || !classId || classesLoading}
               loading={mediumsLoading}
               onPress={() => setActiveSheet("medium")}
             />
@@ -406,7 +459,7 @@ export default function EducationEditModal({ visible, onClose }: Props) {
             >
               {saving
                 ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={s.saveBtnText}>Save Academic Details</Text>
+                : <Text style={s.saveBtnText}>{needsRefresh ? "Check Saved Academic Details" : "Save Academic Details"}</Text>
               }
             </TouchableOpacity>
             </>}

@@ -511,6 +511,8 @@ const api = {
       request<ClassItem[]>(`/api/classes?board_id=${boardId}`),
     getMediums: (boardId: number, classId: number) =>
       request<MediumItem[]>(`/api/mediums?board_id=${boardId}&class_id=${classId}`),
+    getMediumsForClass: (classId: number) =>
+      request<MediumItem[]>(`/api/mediums?class_id=${classId}`),
     getWhatsNew: () => request<WhatsNewResponse>("/api/whats-new"),
     getAppConfig: () => request<AppConfig>("/api/app-config"),
   },
@@ -521,6 +523,8 @@ const api = {
       data: {
         full_name?: string;
         email?: string;
+        phone?: string;
+        password?: string;
       }
     ): Promise<{ user: ApiUser }> => {
       // The live OpenAPI specifies the input but not the write response.
@@ -532,6 +536,14 @@ const api = {
       );
       return { user: await request<ApiUser>("/api/auth/me", {}, token) };
     },
+
+    // Keep the mutation separate from its read-back: a 401 during GET must not
+    // cause the caller to replay a possibly committed account/password write.
+    saveAccount: (token: string, data: {
+      full_name?: string; email?: string; phone?: string; password?: string;
+    }) => request<{ success: boolean }>("/api/student/profile/account", {
+      method: "PUT", body: JSON.stringify(data),
+    }, token),
 
     /* Correct endpoint for saving education details (board + class + medium) */
     saveEducation: (
@@ -612,18 +624,28 @@ const api = {
       request<{ success: boolean; sessions_revoked: number }>("/api/auth/logout-all", { method: "POST" }, token),
 
     sendPhoneOtp: (token: string, phone: string) =>
-      request<{ message: string }>(
+      request<{ sent: boolean }>(
         "/api/auth/phone/send-otp",
         { method: "POST", body: JSON.stringify({ phone }) },
         token
       ),
 
     verifyPhoneOtp: (token: string, phone: string, otp: string) =>
-      request<{ message: string }>(
+      request<{ success: boolean; user: ApiUser }>(
         "/api/auth/phone/verify-for-profile",
         { method: "POST", body: JSON.stringify({ phone, otp }) },
         token
       ),
+
+    sendEmailOtp: (token: string, email: string) =>
+      request<{ sent: boolean }>("/api/auth/email/send-otp", {
+        method: "POST", body: JSON.stringify({ email }),
+      }, token),
+
+    verifyEmailOtp: (token: string, email: string, otp: string) =>
+      request<{ success: boolean; user: ApiUser }>("/api/auth/email/verify-for-profile", {
+        method: "POST", body: JSON.stringify({ email, otp }),
+      }, token),
   },
 
   study: {

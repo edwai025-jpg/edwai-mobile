@@ -261,7 +261,7 @@ export default function TextbooksScreen() {
   }, [user?.id, user?.boardId, selectedDoc?.id]);
   const boardId = user?.boardId;
   const instituteStudent = isInstituteStudent(user);
-  const classScope = JSON.stringify([user?.id, boardId, user?.orgRole, user?.orgId]);
+  const classScope = JSON.stringify([user?.id, boardId, user?.orgRole, user?.orgId, user?.classId, user?.mediumId]);
   const initialClassChosen = useRef(false);
   const loadedClassesScope = useRef<string | null>(null);
   const bottomInset = Platform.OS === "web" ? 84 : insets.bottom + 84;

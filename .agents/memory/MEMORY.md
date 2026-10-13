@@ -5,7 +5,7 @@
 - [Mobile SDK boundaries](mobile-sdk-boundaries.md) — Keep mobile React peer contexts separate from other artifacts; use Expo's headless setting for the hosted server.
 - [Mobile Profile scope](mobile-profile-scope.md) — Approved API/behavior fixes preserve the separate tab and mobile layout; no copied web navigation or invented settings/payments.
 - [Profile session contract](profile-session-contract.md) — Bearer-only native sessions cannot identify the current device; external timezone-less session times are UTC.
-- [External API browser tests](external-api-browser-tests.md) — Fixture interception must fail closed; seed auth once so logout checks cannot silently re-authenticate.
+- [External API testing](external-api-browser-tests.md) — Fail-closed browser fixtures, one-time auth seeding, and module-mock interoperability.
 - [Study resource scope](study-resource-scope.md) — Completed-answer controls use frozen context and existing APIs; voice quota and replay are distinct from question usage.
 - [Profile completion contract](completion-contracts.md) — Required order and full onboarding scope; preserve server completion truth and non-idempotent request limitations.
 - [Question input scope](input-mode-scope.md) — Detailed PDF parity boundaries; voice capture is independent of books and answer/explanation quotas.

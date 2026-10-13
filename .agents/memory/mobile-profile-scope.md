@@ -8,3 +8,15 @@ Fix API and behavior gaps while preserving the separate Profile tab and its exis
 **Why:** The user separated Profile review from banner-only work and approved API/behavior fixes with the existing layout preserved.
 
 **How to apply:** Treat visual redesigns, new settings capabilities and native checkout as separate requests. Verify external request contracts before changing callers; do not infer institution-managed account flags from unrelated roles.
+
+The Education/Academics and Account iteration must leave the remaining mobile Profile sections unchanged; the user reserved them for a second iteration.
+
+**Why:** The user explicitly requested attribute entry and related functionality only in those two sections, with no change to the mobile Profile layout.
+
+**How to apply:** Preserve the Profile page and its navigation. Refresh academic context when academic attributes change, but do not broaden the work to Payments, Settings, Security, deletion, or photo behavior.
+
+The user approved adding password-change controls inside the existing Account form using the legacy account-update API, despite the web handoff not displaying password fields. Password login remains disabled.
+
+**Why:** The user explicitly selected password-change controls after being told this would not enable password sign-in.
+
+**How to apply:** Keep password updates separate from enabling login methods. Do not remove the OTP-only login notice or interpret this approval as permission to change authentication.

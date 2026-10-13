@@ -18,9 +18,10 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors } from "@/constants/colors";
-import { apiUserToProfile, useAuth } from "@/context/auth";
+import { useAuth } from "@/context/auth";
 import api, { ApiError, getProfilePhotoSource } from "@/services/api";
 import { useProfileAlert } from "@/hooks/useProfileAlert";
+import { useAccountDetails } from "@/hooks/useAccountDetails";
 
 type Props = {
   visible: boolean;
@@ -28,35 +29,19 @@ type Props = {
 };
 
 export default function AccountEditModal({ visible, onClose }: Props) {
-  const { user, refreshUser, updateUser, accessToken, photoRevision, hasPhoto, setHasPhoto, probeHasPhoto } = useAuth();
+  const { user, refreshUser, accessToken, photoRevision, hasPhoto, setHasPhoto, probeHasPhoto } = useAuth();
   const { showAlert, alertDialog } = useProfileAlert();
   const token = accessToken ?? "";
-
-  const [name, setName] = useState(user?.name ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
-  const [phone, setPhone] = useState((user?.phone ?? "").replace(/^\+91/, ""));
-  const [saving, setSaving] = useState(false);
-
-  const [otpStep, setOtpStep] = useState<"idle" | "sending" | "verifying">("idle");
-  const [otp, setOtp] = useState("");
-  const [otpLoading, setOtpLoading] = useState(false);
 
   const [photoLoading, setPhotoLoading] = useState(false);
   const [toast, setToast] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const phoneVerified = !!user?.phoneVerified && `+91${phone.replace(/\D/g, "")}` === user.phone;
-  const isPhoneComplete = phone.replace(/\D/g, "").length === 10;
   const displayName = user?.name || "Student";
   const initials = displayName.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
 
   useEffect(() => {
     if (visible) {
-      setName(user?.name ?? "");
-      setEmail(user?.email ?? "");
-      setPhone((user?.phone ?? "").replace(/^\+91/, ""));
-      setOtpStep("idle");
-      setOtp("");
       setToast(null);
       if (token) {
         void probeHasPhoto();
@@ -70,50 +55,50 @@ export default function AccountEditModal({ visible, onClose }: Props) {
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   };
 
-  const handleSave = async () => {
-    if (!name.trim()) { showToast("err", "Name cannot be empty."); return; }
-    setSaving(true);
-    try {
-      const res = await api.profile.updateAccount(token, {
-        full_name: name.trim(),
-        email: email.trim() || undefined,
-      });
-      await updateUser(apiUserToProfile(res.user));
-      showToast("ok", "Account details saved.");
-    } catch (e) {
-      showToast("err", e instanceof ApiError ? e.message : "Failed to save.");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const account = useAccountDetails(visible, showAlert, showToast);
+  const { name, setName, email, phone, phoneVerified, emailVerified, busy: saving } = account;
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
 
-  const handleSendOtp = async () => {
-    setOtpStep("sending");
-    setOtpLoading(true);
-    try {
-      await api.profile.sendPhoneOtp(token, `+91${phone.replace(/\D/g, "")}`);
-      setOtpStep("verifying");
-    } catch (e) {
-      showToast("err", e instanceof ApiError ? e.message : "Failed to send OTP.");
-      setOtpStep("idle");
-    } finally {
-      setOtpLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    setOtpLoading(true);
-    try {
-      await api.profile.verifyPhoneOtp(token, `+91${phone.replace(/\D/g, "")}`, otp);
-      await refreshUser({ throwOnError: true });
-      setOtpStep("idle");
-      setOtp("");
-      showToast("ok", "Phone number verified!");
-    } catch (e) {
-      showToast("err", e instanceof ApiError ? e.message : "Invalid OTP.");
-    } finally {
-      setOtpLoading(false);
-    }
+  const verificationPanel = (channel: "email" | "phone") => {
+    const state = account.codes[channel];
+    const target = channel === "email" ? email.trim() : `+91${phone}`;
+    return (
+      <View style={s.otpBox} accessibilityLabel={`${channel} verification`}>
+        <Text style={s.noticeText}>
+          {state.sentTo === target ? `OTP sent to ${target}. Enter the 6-digit code below.`
+            : `Verify ${target} before changing it. Your saved contact stays unchanged until verification succeeds.`}
+        </Text>
+        <TouchableOpacity disabled={saving || account.needsReconcile} onPress={() => account.send(channel)}>
+          <Text style={s.verifyLink}>{saving ? "Please wait…" : state.sentTo === target ? "Resend OTP" : `Send OTP to new ${channel}`}</Text>
+        </TouchableOpacity>
+        <TextInput
+          style={s.input}
+          value={state.code}
+          onChangeText={value => account.changeCode(channel, value)}
+          placeholder="Enter 6-digit OTP"
+          placeholderTextColor={Colors.darkTextMuted}
+          keyboardType="number-pad"
+          autoComplete="one-time-code"
+          textContentType="oneTimeCode"
+          accessibilityLabel={`${channel} verification OTP`}
+          maxLength={6}
+          editable={!saving && !account.needsReconcile}
+        />
+        <TouchableOpacity
+          style={[s.otpConfirm, (saving || account.needsReconcile || state.sentTo !== target || state.code.length !== 6) && { opacity: 0.5 }]}
+          onPress={() => account.verify(channel)}
+          disabled={saving || account.needsReconcile || state.sentTo !== target || state.code.length !== 6}
+        >
+          <Text style={s.saveBtnText}>{`Verify OTP and change ${channel}`}</Text>
+        </TouchableOpacity>
+        {!!state.error && <Text style={{ color: Colors.danger }} accessibilityRole="alert">{state.error}</Text>}
+        {channel === "email" && <TouchableOpacity disabled={saving} onPress={account.cancelEmail}>
+          <Text style={s.verifyLink}>Cancel email change</Text>
+        </TouchableOpacity>}
+      </View>
+    );
   };
 
   const doUpload = async (asset: ImagePicker.ImagePickerAsset) => {
@@ -251,6 +236,9 @@ export default function AccountEditModal({ visible, onClose }: Props) {
                 style={s.input}
                 value={name}
                 onChangeText={setName}
+                editable={!saving}
+                maxLength={101}
+                accessibilityLabel="Full Name"
                 placeholder="Your full name"
                 placeholderTextColor={Colors.darkTextMuted}
                 autoCapitalize="words"
@@ -262,20 +250,25 @@ export default function AccountEditModal({ visible, onClose }: Props) {
               <Text style={s.label}>Email Address</Text>
               <View style={s.inputRow}>
                 <TextInput
-                  style={[s.input, { flex: 1 }]}
+                  style={[s.input, { flex: 1, minWidth: 0 }]}
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={account.changeEmail}
+                  editable={!saving}
+                  accessibilityLabel="Email Address"
                   placeholder="you@example.com"
                   placeholderTextColor={Colors.darkTextMuted}
                   keyboardType="email-address"
                   autoCapitalize="none"
                 />
-                {!!user?.emailVerified && (
+                {emailVerified && (
                   <View style={s.verifiedBadge}>
                     <Text style={s.verifiedText}>✓</Text>
                   </View>
                 )}
               </View>
+              {!!account.emailError && <Text style={{ color: Colors.danger }} accessibilityRole="alert">{account.emailError}</Text>}
+              {!!email.trim() && !account.emailError && !emailVerified && verificationPanel("email")}
+              {!!account.codes.email.success && <Text style={s.verifyLink}>{account.codes.email.success}</Text>}
             </View>
 
             {/* Phone */}
@@ -284,13 +277,15 @@ export default function AccountEditModal({ visible, onClose }: Props) {
               <View style={s.inputRow}>
                 <View style={s.phonePre}><Text style={s.phonePreText}>+91</Text></View>
                 <TextInput
-                  style={[s.input, { flex: 1 }]}
+                  style={[s.input, { flex: 1, minWidth: 0 }]}
                   value={phone}
-                  onChangeText={(t) => { setPhone(t); setOtpStep("idle"); setOtp(""); }}
+                  onChangeText={account.changePhone}
+                  editable={!saving}
+                  accessibilityLabel="Phone Number"
                   placeholder="10-digit number"
                   placeholderTextColor={Colors.darkTextMuted}
                   keyboardType="phone-pad"
-                  maxLength={10}
+                  maxLength={16}
                 />
                 <View style={[s.verifyBadge, phoneVerified ? s.verifiedBg : s.unverifiedBg]}>
                   <Text style={[s.verifyBadgeText, { color: phoneVerified ? "#22c55e" : "#f59e0b" }]}>
@@ -298,55 +293,47 @@ export default function AccountEditModal({ visible, onClose }: Props) {
                   </Text>
                 </View>
               </View>
-              {isPhoneComplete && !phoneVerified && otpStep === "idle" && (
-                <TouchableOpacity onPress={handleSendOtp} disabled={otpLoading} style={{ marginTop: 6 }}>
-                  <Text style={s.verifyLink}>{otpLoading ? "Sending…" : "Verify phone number →"}</Text>
-                </TouchableOpacity>
-              )}
-              {otpStep === "verifying" && (
-                <View style={s.otpBox}>
-                  <TextInput
-                    style={s.input}
-                    value={otp}
-                    onChangeText={setOtp}
-                    placeholder="Enter 6-digit OTP"
-                    placeholderTextColor={Colors.darkTextMuted}
-                    keyboardType="number-pad"
-                    maxLength={6}
-                  />
-                  <View style={s.otpBtnRow}>
-                    <TouchableOpacity
-                      style={[s.otpConfirm, (otpLoading || otp.length < 6) && { opacity: 0.5 }]}
-                      onPress={handleVerifyOtp}
-                      disabled={otpLoading || otp.length < 6}
-                    >
-                      {otpLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>Confirm OTP</Text>}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.otpResend} onPress={handleSendOtp} disabled={otpLoading}>
-                      <Text style={s.otpResendText}>Resend</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
+              {!!account.phoneError && <Text style={{ color: Colors.danger }} accessibilityRole="alert">{account.phoneError}</Text>}
+              {!!phone && !account.phoneError && !phoneVerified && verificationPanel("phone")}
+              {!!account.codes.phone.success && <Text style={s.verifyLink}>{account.codes.phone.success}</Text>}
+            </View>
+
+            <View style={s.field}>
+              <Text style={s.label}>New Password</Text>
+              <TextInput style={s.input} value={account.password} onChangeText={account.setPassword}
+                placeholder="Leave blank to keep unchanged" placeholderTextColor={Colors.darkTextMuted}
+                secureTextEntry autoCapitalize="none" autoComplete="new-password"
+                accessibilityLabel="New Password" editable={!saving} />
+              <Text style={s.noticeText}>At least 8 characters, an ASCII letter, a digit, and a special character.</Text>
+            </View>
+            <View style={s.field}>
+              <Text style={s.label}>Confirm New Password</Text>
+              <TextInput style={s.input} value={account.confirmation} onChangeText={account.setConfirmation}
+                placeholder="Repeat your new password" placeholderTextColor={Colors.darkTextMuted}
+                secureTextEntry autoCapitalize="none" autoComplete="new-password"
+                accessibilityLabel="Confirm New Password" editable={!saving} />
             </View>
 
             {/* Notice */}
             <View style={s.notice}>
               <Feather name="info" size={12} color={Colors.darkTextMuted} />
-              <Text style={s.noticeText}>Account uses OTP-based login — no password required</Text>
+              <Text style={s.noticeText}>Password login is disabled. Updating your password does not enable password login; continue using OTP or linked Google sign-in.</Text>
             </View>
 
             {/* Save */}
             <TouchableOpacity
               style={[s.saveBtn, saving && { opacity: 0.7 }]}
-              onPress={handleSave}
-              disabled={saving}
+              onPress={account.save}
+              disabled={saving || account.needsReconcile}
             >
               {saving
                 ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={s.saveBtnText}>Save Account Details</Text>
+                : <Text style={s.saveBtnText}>{account.pendingContacts ? "Send OTP to verify changes" : "Save Account Details"}</Text>
               }
             </TouchableOpacity>
+            {account.needsReconcile && <TouchableOpacity style={s.otpResend} disabled={saving} onPress={account.checkSavedDetails}>
+              <Text style={s.otpResendText}>Check saved details before retrying</Text>
+            </TouchableOpacity>}
           </ScrollView>
 
           {/* Toast */}
