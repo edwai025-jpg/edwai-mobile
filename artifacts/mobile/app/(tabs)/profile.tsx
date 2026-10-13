@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   View,
@@ -137,6 +138,13 @@ export default function ProfileScreen() {
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
+
+  // The header stays dark in both themes; inactive tabs must not own the status bar.
+  useFocusEffect(useCallback(() => {
+    if (Platform.OS === "web") return;
+    const entry = StatusBar.pushStackEntry({ barStyle: "light-content" });
+    return () => StatusBar.popStackEntry(entry);
+  }, []));
 
   /* Refresh everything on every focus */
   useFocusEffect(
