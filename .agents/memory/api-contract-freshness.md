@@ -15,8 +15,8 @@ Restricted-board processing must be confirmed by a fresh authenticated status re
 
 **How to apply:** Preserve server restriction truth, fail closed on unreadable status, and use simulated responses for transition regressions. Obtain authorized, read-only response evidence before accepting new response shapes.
 
-API error messages should also direct the student to contact the EDUwAI team through chat or the support contact number.
+API error messages should also direct the student to contact the EDUwAI team through in-app chat or the “Contact Us” section on the home page. Do not specify a phone number in the error message.
 
-**Why:** The user requested contact guidance alongside identifying API errors.
+**Why:** The user requested contact guidance alongside identifying API errors and clarified that contact details are already in the home page’s Contact Us section.
 
-**How to apply:** Keep the specific error and retry instructions visible; add support guidance rather than replacing the failure detail. Use established support contact details, not an invented phone number.
+**How to apply:** Keep the specific error and retry instructions visible; add support guidance rather than replacing the failure detail. Refer students to chat or Contact Us rather than repeating contact numbers.

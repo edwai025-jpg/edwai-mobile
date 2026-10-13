@@ -77,7 +77,7 @@ test("textbook failures show contact guidance alongside the error and retry, but
   ]) {
     const content = text(render(error));
     assert.ok(content.includes(error));
-    assert.ok(content.includes("Please contact the EDUwAI team through in-app chat or the support contact number for help."));
+    assert.ok(content.includes("Please contact the EDUwAI team through in-app chat or the “Contact Us” section on the home page for help."));
     assert.ok(content.includes("Retry"));
   }
   assert.equal(render(null), null);

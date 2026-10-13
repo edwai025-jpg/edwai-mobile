@@ -587,7 +587,7 @@ export default function TextbooksScreen() {
             <Text style={sc.errorBannerText}>
               {boardStatusError}
               {"\n\n"}
-              Please contact the EDUwAI team through in-app chat or the support contact number for help.
+              Please contact the EDUwAI team through in-app chat or the “Contact Us” section on the home page for help.
             </Text>
             <Pressable onPress={() => loadBoardStatus()} style={sc.retryBtn}>
               <Text style={sc.retryBtnText}>Retry</Text>
