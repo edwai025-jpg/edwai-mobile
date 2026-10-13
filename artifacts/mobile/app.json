@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.eduwai.app",
+      "bundleIdentifier": "com.edwai.app",
       "googleServicesFile": "./firebase/GoogleService-Info.plist",
       "buildNumber": "1",
       "infoPlist": {
@@ -27,7 +27,7 @@
       }
     },
     "android": {
-      "package": "com.eduwai.app",
+      "package": "com.edwai.app",
       "googleServicesFile": "./firebase/google-services.json",
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "pan",

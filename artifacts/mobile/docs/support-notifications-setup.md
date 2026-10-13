@@ -6,6 +6,12 @@ The app-side notification code is implemented, but native delivery is NOT enable
 
 The supplied Android and iOS client files match Firebase project `edwai-prod-70474` and package/bundle identifier `com.edwai.app`. They are saved under `artifacts/mobile/firebase/` and referenced by the static `app.json`. Do not change the app identifiers.
 
+### App identity verification
+
+The user explicitly approved restoring the original Android package and iOS bundle identifier `com.edwai.app`. The later `com.eduwai.app` declarations did not match either supplied Firebase client; the regression's original identity expectations were not stale. Both declarations now match the unchanged client files. The URL scheme is independent of Firebase identity and is unchanged.
+
+The local regression checks both approved identifiers, the presence of a matching Android client, the iOS bundle, the existing project `edwai-prod-70474`, matching sender IDs, and disabled messaging auto-initialization/auto-registration. These checks inspect local files only, without displaying API keys. They do not establish the current Firebase console registrations, APNs configuration, signing, native compilation, or device delivery. Confirm store/signing registrations use `com.edwai.app` before a native release; do not silently switch to another identity or project. Keep the public push gate off until the provider/build/device checklist below passes.
+
 Implemented code:
 
 - `services/supportApi.ts`: `registerFcmToken` uses the existing guest/account registration endpoints, rejects Expo push tokens, and requires a saved thread with matching owner kind.

@@ -20,3 +20,9 @@ The user wants app-side native support-push code completed now and provider/buil
 **Why:** The user asked to complete code-related changes now and test after publishing, fixing issues then.
 
 **How to apply:** Preserve Expo Go foreground chat. Distinguish implemented code from native compilation and provider/device verification. A foreground-chat release may keep push off; do not enable public push or claim verified delivery/privacy before installed Android/iOS acceptance passes.
+
+The user explicitly approved using the original `com.edwai.app` for both Android and iOS, authorizing restoration rather than preserving the later `com.eduwai.app` declarations.
+
+**Why:** The user selected “Use the original com.edwai.app” after being shown the mismatch with the existing Firebase clients.
+
+**How to apply:** Preserve this approved identity in future native-release work unless the user explicitly requests another change. App branding or URL-scheme changes do not authorize a package/bundle migration.
