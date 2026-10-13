@@ -279,7 +279,7 @@ export default function LoginScreen() {
 
             <View style={styles.trustRow}>
               <Feather name="shield" size={14} color={Colors.success} />
-              <Text style={styles.trustText}>Evaluated by trusted teachers  {"\u00B7"}  Made in India</Text>
+              <Text style={styles.trustText}>Evaluated by trusted teachers  {"\u00B7"}  🇮🇳 Made in India</Text>
             </View>
           </View>
         </ScrollView>
