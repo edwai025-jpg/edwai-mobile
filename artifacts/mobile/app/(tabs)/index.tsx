@@ -588,7 +588,7 @@ export default function TextbooksScreen() {
         {/* ─── HELP ─── */}
         {boardReady && !hasNoBoard && !selectedDoc && (
           <View style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-            <Text style={[sc.cardTitle, { color: textCol }]}>💬 How to use EdwAI</Text>
+            <Text style={[sc.cardTitle, { color: textCol }]}>💬 How to use EDUwAI</Text>
             {[["📚","Select your class, subject, and textbook above"],["✍️","Type your question in the box below"],["🔍","Choose Answer from Book to get the exact answer"],["💡","Choose Learn Concept for a detailed explanation"]].map(([icon, text], i) => (
               <View key={i} style={sc.helpRow}><Text style={sc.helpIcon}>{icon}</Text><Text style={[sc.helpText, { color: mutedCol }]}>{text}</Text></View>
             ))}
