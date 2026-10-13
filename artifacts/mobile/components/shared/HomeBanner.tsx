@@ -4,8 +4,8 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   DimensionValue,
@@ -13,6 +13,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -24,6 +25,7 @@ import { useAuth } from "@/context/auth";
 import { Colors } from "@/constants/colors";
 import { getProfilePhotoSource, UsageInfo } from "@/services/api";
 import { getBannerUsage } from "@/services/bannerUsage";
+import { getBannerTopLayout } from "@/services/bannerTopLayout";
 import { BannerBackground } from "@/components/shared/BannerBackground";
 
 const PRIMARY = "#667eea";
@@ -94,10 +96,17 @@ export function HomeBanner({
   const showPhoto = !!(hasPhoto && accessToken) && photoFailedKey !== photoKey;
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const topPad = Platform.OS === "web" ? 0 : insets.top;
 
   const [phoneNudgeDismissed, setPhoneNudgeDismissed] = useState(true);
   const [payhallVisible, setPayhallVisible] = useState(false);
+  const topLayout = getBannerTopLayout(usage?.status, phoneNudgeDismissed, insets.top, Platform.OS);
+
+  // Off-screen tabs must not override the active screen's system indicators.
+  useFocusEffect(useCallback(() => {
+    if (Platform.OS === "web") return;
+    const entry = StatusBar.pushStackEntry({ barStyle: topLayout.statusBarStyle });
+    return () => StatusBar.popStackEntry(entry);
+  }, [topLayout.statusBarStyle]));
 
   const displayName = user?.name ?? "Student";
   const nameShort = displayName.split(" ")[0] ?? "Student";
@@ -126,7 +135,6 @@ export function HomeBanner({
   const pct = Math.max(0, Math.min(100, Number.isFinite(bu.percent) ? bu.percent : 0));
   const barColors = pct >= 90 ? Colors.bannerBarHigh : pct >= 70 ? Colors.bannerBarMid : Colors.bannerBarLow;
   const planLabel = usage?.tier_name ?? usage?.plan_name ?? "Plan";
-  const statusBanner = usage?.status;
 
   /* reset date — "↺ 2 Jun" format */
   const resetLabel = (() => {
@@ -140,8 +148,8 @@ export function HomeBanner({
   return (
     <View>
       {/* ── Layer 0: Grace Period Banner (priority 1) ── */}
-      {statusBanner === "grace_period" && (
-        <View style={[bn.grace, { paddingTop: topPad + 10 }]}>
+      {topLayout.alert === "grace_period" && (
+        <View style={[bn.grace, { paddingTop: topLayout.alertPaddingTop }]}>
           <View style={bn.graceInner}>
             <View style={{ flex: 1 }}>
               <Text style={bn.graceText}>
@@ -170,8 +178,8 @@ export function HomeBanner({
       )}
 
       {/* ── Layer 0: Past Due Banner (priority 2) ── */}
-      {statusBanner === "past_due" && (
-        <View style={[bn.pastDue, { paddingTop: topPad + 10 }]}>
+      {topLayout.alert === "past_due" && (
+        <View style={[bn.pastDue, { paddingTop: topLayout.alertPaddingTop }]}>
           <View style={bn.pastDueInner}>
             <View style={{ flex: 1 }}>
               <Text style={bn.pastDueText}>⛔ Your account has been downgraded. Questions are now limited. Renew to restore full access.</Text>
@@ -184,8 +192,8 @@ export function HomeBanner({
       )}
 
       {/* ── Layer 0: Phone Nudge Banner ── */}
-      {!phoneNudgeDismissed && statusBanner !== "past_due" && statusBanner !== "grace_period" && (
-        <View style={[bn.phone, { paddingTop: topPad + 10 }]}>
+      {topLayout.alert === "phone" && (
+        <View style={[bn.phone, { paddingTop: topLayout.alertPaddingTop }]}>
           <View style={bn.phoneInner}>
             <Pressable style={{ flex: 1 }} onPress={() => router.push("/(tabs)/profile")}>
               <Text style={bn.phoneText}>
@@ -212,7 +220,7 @@ export function HomeBanner({
       <View
         style={[
           nb.nav,
-          { paddingTop: statusBanner || !phoneNudgeDismissed ? 12 : topPad + 12 },
+          { paddingTop: topLayout.navPaddingTop },
         ]}
       >
         <View style={nb.navRow}>
