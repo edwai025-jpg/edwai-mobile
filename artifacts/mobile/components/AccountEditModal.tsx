@@ -22,6 +22,7 @@ import { getProfilePhotoSource } from "@/services/api";
 import { useProfileAlert } from "@/hooks/useProfileAlert";
 import { useAccountDetails } from "@/hooks/useAccountDetails";
 import type { ProfilePhotoActions } from "@/hooks/useProfilePhoto";
+import ProfilePhotoCropModal, { type ProfilePhotoCropHandle } from "@/components/ProfilePhotoCropModal";
 
 type Props = {
   visible: boolean;
@@ -35,6 +36,7 @@ export default function AccountEditModal({ visible, onClose, photo }: Props) {
   const token = accessToken ?? "";
 
   const photoLoading = photo.busy;
+  const cropCloseRef = useRef<ProfilePhotoCropHandle>(null);
   const [photoFailed, setPhotoFailed] = useState(false);
   const retryRevision = useRef<number | null>(null);
   useEffect(() => { setPhotoFailed(false); }, [user?.id, photoRevision, token]);
@@ -107,7 +109,14 @@ export default function AccountEditModal({ visible, onClose, photo }: Props) {
 
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => {
+      if (photo.asset) cropCloseRef.current?.requestClose();
+      else onClose();
+    }}>
+      {visible && photo.asset ? (
+        <ProfilePhotoCropModal embedded closeRequestRef={cropCloseRef} asset={photo.asset}
+          busy={photo.busy} onCancel={photo.cancel} onSave={photo.save} />
+      ) : (
       <KeyboardAvoidingView style={s.backdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={s.card}>
           <View style={s.titleRow}>
@@ -266,6 +275,7 @@ export default function AccountEditModal({ visible, onClose, photo }: Props) {
           )}
         </View>
       </KeyboardAvoidingView>
+      )}
       {alertDialog}
     </Modal>
   );

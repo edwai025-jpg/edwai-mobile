@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { File as FSFile } from "expo-file-system";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import type { ImagePickerAsset } from "expo-image-picker";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import {
   ActivityIndicator,
   GestureResponderEvent,
@@ -26,7 +26,10 @@ type Props = {
   busy: boolean;
   onCancel: () => void;
   onSave: (asset: ImagePickerAsset) => Promise<boolean>;
+  embedded?: boolean;
+  closeRequestRef?: Ref<ProfilePhotoCropHandle>;
 };
+export type ProfilePhotoCropHandle = { requestClose: () => void };
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
@@ -41,7 +44,7 @@ function touchDistance(e: GestureResponderEvent): number | null {
   return Math.hypot(t[0].pageX - t[1].pageX, t[0].pageY - t[1].pageY);
 }
 
-export default function ProfilePhotoCropModal({ asset, busy, onCancel, onSave }: Props) {
+export default function ProfilePhotoCropModal({ asset, busy, onCancel, onSave, embedded = false, closeRequestRef }: Props) {
   const { width: winW } = useWindowDimensions();
   const viewport = Math.max(160, Math.min(MAX_VIEWPORT, winW - 88));
 
@@ -57,6 +60,10 @@ export default function ProfilePhotoCropModal({ asset, busy, onCancel, onSave }:
   // Live refs for PanResponder (created once).
   const st = useRef({ dims, zoom, offset, viewport, locked });
   st.current = { dims, zoom, offset, viewport, locked };
+  const requestClose = () => {
+    if (!st.current.locked && !savingRef.current) onCancel();
+  };
+  useImperativeHandle(closeRequestRef, () => ({ requestClose }));
 
   // Reset everything for each new asset.
   useEffect(() => {
@@ -178,9 +185,11 @@ export default function ProfilePhotoCropModal({ asset, busy, onCancel, onSave }:
     }
 
     try {
-      if (produced) await onSave(produced);
+      if (produced && !await onSave(produced)) {
+        setError("Could not confirm this photo was saved. Check your current photo before trying again.");
+      }
     } catch {
-      // Parent owns upload errors; keep crop for retry.
+      setError("Could not confirm this photo was saved. Check your current photo before trying again.");
     } finally {
       if (generatedUri && generatedUri !== asset.uri) {
         if (Platform.OS === "web") {
@@ -201,8 +210,7 @@ export default function ProfilePhotoCropModal({ asset, busy, onCancel, onSave }:
   const imgH = dims ? dims.h * base * zoom : viewport;
   const pct = (zoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM);
 
-  return (
-    <Modal visible={!!asset} transparent animationType="fade" onRequestClose={() => { if (!locked) onCancel(); }}>
+  const content = (
       <View style={s.backdrop}>
         <View style={s.card}>
           <View style={s.titleRow}>
@@ -294,8 +302,11 @@ export default function ProfilePhotoCropModal({ asset, busy, onCancel, onSave }:
           </ScrollView>
         </View>
       </View>
-    </Modal>
   );
+  // Reuse the existing Account modal's native host. A sibling native modal
+  // cannot reliably present while that host is already showing on iOS.
+  if (embedded) return asset ? content : null;
+  return <Modal visible={!!asset} transparent animationType="fade" onRequestClose={requestClose}>{content}</Modal>;
 }
 
 const s = StyleSheet.create({

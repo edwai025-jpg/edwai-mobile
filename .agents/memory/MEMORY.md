@@ -1,6 +1,6 @@
 - [Mobile visual direction](mobile-visual-direction.md) — Entry page and study banner follow web visual references while preserving mobile layouts.
 - [Support chat scope](support-chat-scope.md) — Human support must use the existing web API; REST foreground chat and native push are separate integrations.
-- [Expo browser caveats](mobile-platform-quirks.md) — Confirmations, font startup, DOM text refs, and explicit microphone-track cleanup.
+- [Mobile platform caveats](mobile-platform-quirks.md) — Native single-host dialogs; web confirmations, startup, text refs, and microphone cleanup.
 - [Package installation verification](package-installation.md) — A successful lockfile update may leave workspace symlinks unchanged; verify actual installed versions before testing.
 - [Mobile SDK boundaries](mobile-sdk-boundaries.md) — Keep mobile React peer contexts separate from other artifacts; use Expo's headless setting for the hosted server.
 - [Mobile Profile scope](mobile-profile-scope.md) — Approved API/behavior fixes preserve the separate tab and mobile layout; no copied web navigation or invented settings/payments.

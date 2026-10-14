@@ -470,7 +470,7 @@ export default function ProfileScreen() {
       />
       <EducationEditModal visible={showEducation} onClose={() => setShowEducation(false)} />
       <SessionsModal visible={showSessions} onClose={() => setShowSessions(false)} />
-      <ProfilePhotoCropModal asset={photo.asset} busy={photo.busy} onCancel={photo.cancel} onSave={photo.save} />
+      {!showAccount && <ProfilePhotoCropModal asset={photo.asset} busy={photo.busy} onCancel={photo.cancel} onSave={photo.save} />}
       {alertDialog}
     </LinearGradient>
   );
