@@ -15,11 +15,11 @@ Do not rely on React Native's `Alert.alert` to present confirmation actions in t
 
 **How to apply:** For cross-platform confirmations, verify the web branch actually exposes actionable confirm/cancel controls. Do not substitute browser `window.confirm`, which can be blocked inside preview iframes.
 
-An Expo preview snapshot can capture a white frame before startup fonts settle even when the application works.
+An Expo preview snapshot can capture a white frame before a cold web bundle or startup fonts settle even when the application works.
 
-**Why:** Two snapshot captures were white with no errors, while a clean browser on the same Expo origin rendered the signed-out page with all fonts/assets loaded shortly afterward.
+**Why:** Two snapshot captures were white with no errors, while a clean browser on the same Expo origin rendered the signed-out page with all fonts/assets loaded shortly afterward. A browser test also stopped at an empty root during cold Metro compilation, then passed unchanged once compilation finished.
 
-**How to apply:** Before treating a white snapshot as a broken app, verify the exact origin in a real browser and wait for visible content and `document.fonts.ready`. Do not repeatedly restart a working server or infer failure from the brief capture alone.
+**How to apply:** Before treating a white snapshot as a broken app, verify the exact origin in a real browser, allow the first web bundle to compile, and wait for visible content and `document.fonts.ready`. Do not repeatedly restart a working server or infer failure from the brief capture alone.
 
 Native TextInput TypeScript methods are not proof that the Expo web ref exposes the same imperative API.
 

@@ -113,26 +113,37 @@ const dp = StyleSheet.create({
 });
 
 /* ─── Board Processing Card ──────────────────────────────────────────────── */
-function BoardProcessingCard({ status, delayMinutes, onStart, starting }: {
+function BoardProcessingCard({ status, delayMinutes, remainingSeconds, onCountdownEnd, onStart, starting }: {
   status: BoardStatus["processing_status"];
   delayMinutes: number;
+  remainingSeconds?: number;
+  onCountdownEnd: () => void;
   onStart: () => void;
   starting: boolean;
 }) {
-  const [elapsed, setElapsed] = useState(0);
+  const [remaining, setRemaining] = useState(remainingSeconds ?? 0);
   useEffect(() => {
-    if (status !== "in_progress") return;
-    const t = setInterval(() => setElapsed((e) => e + 1), 1000);
+    const seconds = remainingSeconds ?? 0;
+    setRemaining(seconds);
+    if ((status !== "processing" && status !== "in_progress") || seconds <= 0) return;
+    const deadline = Date.now() + seconds * 1000;
+    const t = setInterval(() => {
+      const next = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setRemaining(next);
+      if (next === 0) {
+        clearInterval(t);
+        onCountdownEnd();
+      }
+    }, 1000);
     return () => clearInterval(t);
-  }, [status]);
+  }, [status, remainingSeconds, onCountdownEnd]);
 
   const total = delayMinutes * 60;
-  const pct = Math.max(5, Math.min(95, Math.round((elapsed / Math.max(total, 1)) * 100)));
-  const remaining = Math.max(0, total - elapsed);
+  const pct = Math.max(5, Math.min(95, Math.round(((total - remaining) / Math.max(total, 1)) * 100)));
   const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
   const ss = String(remaining % 60).padStart(2, "0");
 
-  if (status === "in_progress") {
+  if (status === "processing" || status === "in_progress") {
     return (
       <View style={bp.card}>
         <View style={bp.timerRing}>
@@ -142,11 +153,11 @@ function BoardProcessingCard({ status, delayMinutes, onStart, starting }: {
           </View>
         </View>
         <Text style={bp.title}>Processing Your Board's Textbooks</Text>
-        <Text style={bp.desc}>Indexing your textbooks. This may take up to {delayMinutes} minutes.</Text>
+        <Text style={bp.desc}>Textbook access will be available after the setup delay.</Text>
         <View style={bp.progressBg}>
           <View style={[bp.progressFill, { width: `${pct}%` as `${number}%` }]} />
         </View>
-        <Text style={bp.note}>{pct}% complete — check back soon</Text>
+        <Text style={bp.note}>{remaining > 0 ? "Access setup in progress — check back soon" : "Waiting for the server to confirm access"}</Text>
       </View>
     );
   }
@@ -167,7 +178,7 @@ function BoardProcessingCard({ status, delayMinutes, onStart, starting }: {
       <View style={bp.iconCircle}><Text style={{ fontSize: 40 }}>📚</Text></View>
       <Text style={bp.title}>Unlock Your Board's Textbooks</Text>
       <Text style={bp.desc}>
-        Your board's textbooks need to be indexed before you can search them. This takes around {delayMinutes} minute{delayMinutes !== 1 ? "s" : ""}.
+        Your board requires a one-time access setup before you can search its textbooks. This takes around {delayMinutes} minute{delayMinutes !== 1 ? "s" : ""}.
       </Text>
       <Pressable style={[bp.btn, starting && { opacity: 0.6 }]} onPress={onStart} disabled={starting}>
         {starting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={bp.btnText}>📄 Process Official Documents</Text>}
@@ -210,7 +221,7 @@ export default function TextbooksScreen() {
   const [boardStatusLoading, setBoardStatusLoading] = useState(true);
   const [boardStatusError, setBoardStatusError] = useState<string | null>(null);
   const [startingProcess, setStartingProcess] = useState(false);
-  const boardScope = JSON.stringify([accessToken, user?.id, user?.boardId, user?.mediumId]);
+  const boardScope = JSON.stringify([accessToken, user?.id, user?.boardId, user?.mediumId, user?.orgRole, user?.orgId]);
   const boardStatus = boardStatusScope === boardScope ? storedBoardStatus : null;
   const currentBoardScope = useRef(boardScope);
   currentBoardScope.current = boardScope;
@@ -261,6 +272,9 @@ export default function TextbooksScreen() {
   }, [user?.id, user?.boardId, selectedDoc?.id]);
   const boardId = user?.boardId;
   const instituteStudent = isInstituteStudent(user);
+  const isRestricted = !instituteStudent && !!boardStatus?.is_restricted && boardStatus.processing_status !== "completed";
+  const boardReady = instituteStudent || (!boardStatusLoading && !boardStatusError && !!boardStatus && !isRestricted);
+  const hasNoBoard = !instituteStudent && (!boardId || boardStatus?.has_board === false);
   const classScope = JSON.stringify([user?.id, boardId, user?.orgRole, user?.orgId, user?.classId, user?.mediumId]);
   const initialClassChosen = useRef(false);
   const loadedClassesScope = useRef<string | null>(null);
@@ -291,7 +305,7 @@ export default function TextbooksScreen() {
 
   /* ── board status ── */
   const loadBoardStatus = useCallback(async (background = false) => {
-    if (!accessToken) return;
+    if (!accessToken || instituteStudent) return;
     const request = ++boardStatusRequest.current;
     const isCurrent = () => currentBoardScope.current === boardScope && boardStatusRequest.current === request;
     if (!background) setBoardStatusLoading(true);
@@ -317,7 +331,7 @@ export default function TextbooksScreen() {
     } finally {
       if (isCurrent()) setBoardStatusLoading(false);
     }
-  }, [accessToken, boardScope]);
+  }, [accessToken, boardScope, instituteStudent]);
 
   /* Re-fetch board status whenever boardId changes (e.g. after profile edit) */
   useEffect(() => {
@@ -325,7 +339,7 @@ export default function TextbooksScreen() {
     setBoardStatusError(null);
     setStartingProcess(false);
     processingStartScope.current = null;
-    if (!accessToken) { setBoardStatusLoading(false); return; }
+    if (!accessToken || instituteStudent) { setBoardStatusLoading(false); return; }
     loadBoardStatus();
     return () => { boardStatusRequest.current++; };
   }, [loadBoardStatus]);
@@ -347,7 +361,7 @@ export default function TextbooksScreen() {
   }, [classScope]);
 
   useEffect(() => {
-    if (boardStatus?.processing_status !== "in_progress") return;
+    if (instituteStudent || (boardStatus?.processing_status !== "processing" && boardStatus?.processing_status !== "in_progress")) return;
     let busy = false;
     const t = setInterval(async () => {
       if (busy) return;
@@ -357,12 +371,11 @@ export default function TextbooksScreen() {
       } finally { busy = false; }
     }, 5000);
     return () => clearInterval(t);
-  }, [boardStatus?.processing_status, loadBoardStatus]);
+  }, [instituteStudent, boardStatus?.processing_status, loadBoardStatus]);
 
   /* The existing endpoint owns board/org scope; keep every returned class. */
   useEffect(() => {
-    if (!accessToken || (!boardId && !instituteStudent)) return;
-    if (boardStatus?.processing_status === "in_progress") return;
+    if (!accessToken || !boardReady || hasNoBoard) return;
     let active = true;
     loadedClassesScope.current = null;
     setClassesLoading(true);
@@ -372,7 +385,7 @@ export default function TextbooksScreen() {
       setClasses(list);
     }).catch(() => {}).finally(() => { if (active) setClassesLoading(false); });
     return () => { active = false; };
-  }, [accessToken, classScope, instituteStudent, boardStatus?.processing_status]);
+  }, [accessToken, classScope, boardReady, hasNoBoard]);
 
   /* ── class select: load subjects via dedicated endpoint ── */
   const onClassSelect = useCallback(async (cls: { id: number; name: string }) => {
@@ -400,10 +413,10 @@ export default function TextbooksScreen() {
      A deliberate choice (including another grade) must never be overwritten. */
   useEffect(() => {
     if (pathname !== "/" || classesLoading || initialClassChosen.current || loadedClassesScope.current !== classScope) return;
-    if (boardStatusLoading || boardStatusError || !boardStatus || (boardStatus.is_restricted && boardStatus.processing_status !== "completed")) return;
+    if (!boardReady || hasNoBoard) return;
     const cls = initialAcademicClass(classes, user);
     if (cls) void onClassSelect(cls);
-  }, [classes, classesLoading, classScope, user?.classId, user?.className, user?.orgRole, user?.orgId, pathname, onClassSelect, boardStatusLoading, boardStatusError, boardStatus?.is_restricted, boardStatus?.processing_status]);
+  }, [classes, classesLoading, classScope, user?.classId, user?.className, user?.orgRole, user?.orgId, pathname, onClassSelect, boardReady, hasNoBoard]);
 
   /* ── subject select: load documents — server applies board+medium from profile ── */
   const onSubjectSelect = useCallback(async (subj: string) => {
@@ -509,7 +522,7 @@ export default function TextbooksScreen() {
   }, [accessToken]);
 
   const handleStartProcessing = useCallback(async () => {
-    if (!accessToken || processingStartScope.current === boardScope) return;
+    if (!accessToken || instituteStudent || processingStartScope.current === boardScope) return;
     processingStartScope.current = boardScope;
     setStartingProcess(true);
     setBoardStatusError(null);
@@ -534,13 +547,10 @@ export default function TextbooksScreen() {
         setStartingProcess(false);
       }
     }
-  }, [accessToken, boardScope, loadBoardStatus]);
+  }, [accessToken, boardScope, instituteStudent, loadBoardStatus]);
 
   const { isDark, toggleTheme } = useTheme();
   const isQuerying = queryLoading || streaming;
-  const isRestricted = !!boardStatus?.is_restricted && boardStatus.processing_status !== "completed";
-  const boardReady = !boardStatusLoading && !boardStatusError && !!boardStatus && !isRestricted;
-  const hasNoBoard = !boardId && !instituteStudent;
   const cardBg = isDark ? CARD_BG : "#ffffff";
   const cardBorder = isDark ? BORDER : "#e5e7eb";
   const textCol = isDark ? TEXT_COLOR : "#111827";
@@ -574,14 +584,14 @@ export default function TextbooksScreen() {
         keyboardDismissMode="interactive"
       >
         {/* ─── BOARD STATUS ─── */}
-        {boardStatusLoading && (
+        {!instituteStudent && boardStatusLoading && (
           <View style={[sc.card, { alignItems: "center", paddingVertical: 28, backgroundColor: cardBg, borderColor: cardBorder }]}>
             <ActivityIndicator color={PRIMARY} />
             <Text style={{ color: mutedCol, marginTop: 10, fontSize: 13 }}>Checking board status…</Text>
           </View>
         )}
 
-        {!boardStatusLoading && boardStatusError && (
+        {!boardStatusLoading && boardStatusError && !instituteStudent && (
           <View style={sc.errorBanner}>
             <Feather name="wifi-off" size={14} color="#fcd34d" />
             <Text style={sc.errorBannerText}>
@@ -595,8 +605,8 @@ export default function TextbooksScreen() {
           </View>
         )}
 
-        {!boardStatusLoading && isRestricted && boardStatus && (
-          <BoardProcessingCard status={boardStatus.processing_status} delayMinutes={boardStatus.processing_delay_minutes} onStart={handleStartProcessing} starting={startingProcess} />
+        {!boardStatusLoading && !hasNoBoard && isRestricted && boardStatus && (
+          <BoardProcessingCard status={boardStatus.processing_status} delayMinutes={boardStatus.processing_delay_minutes} remainingSeconds={boardStatus.remaining_seconds} onCountdownEnd={loadBoardStatus} onStart={handleStartProcessing} starting={startingProcess} />
         )}
 
         {!boardStatusLoading && !isRestricted && hasNoBoard && (

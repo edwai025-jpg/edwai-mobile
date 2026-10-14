@@ -31,17 +31,26 @@ const ast = ts.createSourceFile("index.tsx", screen, ts.ScriptTarget.Latest, tru
 const initializers = {};
 let pollingEffect;
 let errorBanner;
+let catalogEffect;
+let resetEffect;
+let countdownEffect;
 function visit(node) {
   if (ts.isJsxExpression(node) && node.expression
     && node.expression.getText(ast).startsWith("!boardStatusLoading && boardStatusError &&")) {
     errorBanner = node.expression.getText(ast);
   }
-  if (ts.isVariableDeclaration(node) && ["loadBoardStatus", "handleStartProcessing", "boardReady"].includes(node.name.getText(ast))) {
+  if (ts.isVariableDeclaration(node) && ["loadBoardStatus", "handleStartProcessing", "boardReady", "isRestricted", "hasNoBoard"].includes(node.name.getText(ast))) {
     initializers[node.name.getText(ast)] = node.initializer.getText(ast);
   }
   if (ts.isCallExpression(node) && node.expression.getText(ast) === "useEffect"
     && node.arguments[0].getText(ast).includes("let busy = false")) {
     pollingEffect = node.arguments[0].getText(ast);
+  }
+  if (ts.isCallExpression(node) && node.expression.getText(ast) === "useEffect") {
+    const body = node.arguments[0].getText(ast);
+    if (body.includes("api.study.getAvailableClasses")) catalogEffect = body;
+    if (body.includes("setBoardStatus(null)")) resetEffect = body;
+    if (body.includes("const deadline = Date.now()")) countdownEffect = body;
   }
   ts.forEachChild(node, visit);
 }
@@ -55,7 +64,7 @@ test("textbook failures show contact guidance alongside the error and retry, but
   const jsx = (type, props) => ({ type, props });
   function render(error, loading = false) {
     return evaluate(`exports.banner = (${errorBanner});`, {
-      boardStatusLoading: loading, boardStatusError: error,
+      boardStatusLoading: loading, boardStatusError: error, instituteStudent: false,
       View: "View", Text: "Text", Pressable: "Pressable", Feather: "Feather",
       sc: {}, loadBoardStatus: () => {},
       require: name => {
@@ -84,11 +93,12 @@ test("textbook failures show contact guidance alongside the error and retry, but
   assert.equal(render("Network error", true), false);
 });
 
-function statusLoader(client) {
+function statusLoader(client, instituteStudent = false) {
   const state = { status: null, loading: true, error: null, starting: false };
   const currentBoardScope = { current: "account-board" };
   const scope = {
     accessToken: "fixture-token",
+    instituteStudent,
     boardScope: "account-board",
     currentBoardScope,
     boardStatusRequest: { current: 0 },
@@ -108,22 +118,27 @@ function statusLoader(client) {
     exports.loadBoardStatus = loadBoardStatus;
     exports.handleStartProcessing = handleStartProcessing;
   `, scope);
-  return { state, loadBoardStatus, handleStartProcessing, currentBoardScope };
+  return { state, loadBoardStatus, handleStartProcessing, currentBoardScope, scope };
 }
 
-const status = processing_status => ({ is_restricted: true, processing_status, processing_delay_minutes: 5 });
+const status = processing_status => ({ has_board: true, is_restricted: true, processing_status, processing_delay_minutes: 5 });
 const json = (data, code = 200) => new Response(JSON.stringify(data), { status: code });
 
-function isReady(state) {
-  return evaluate(`exports.ready = ${initializers.boardReady};`, {
+function accessState(state, instituteStudent = false, boardId = 123) {
+  return evaluate(`
+    const isRestricted = ${initializers.isRestricted};
+    exports.ready = ${initializers.boardReady};
+    exports.hasNoBoard = ${initializers.hasNoBoard};
+  `, {
+    instituteStudent, boardId,
     boardStatusLoading: state.loading, boardStatusError: state.error,
     boardStatus: state.status,
-    isRestricted: !!state.status?.is_restricted && state.status.processing_status !== "completed",
-  }).ready;
+  });
 }
+const isReady = state => accessState(state).ready;
 
 test("board check uses the server's documented route and preserves authenticated status", async () => {
-  const response = { is_restricted: false, processing_status: "completed", processing_delay_minutes: 5 };
+  const response = { ...status(null), is_restricted: false };
   const client = apiClient(async (url, options) => {
     assert.equal(new URL(url).pathname, "/api/student/board-status");
     assert.equal(options.headers.Authorization, "Bearer fixture-token");
@@ -139,7 +154,7 @@ test("board check uses the server's documented route and preserves authenticated
 test("HTTP failures are not described as a network outage and successful retry removes the warning", async () => {
   let code = 404;
   const client = apiClient(async () => new Response(JSON.stringify(
-    code === 200 ? { is_restricted: false, processing_status: "completed", processing_delay_minutes: 5 } : { detail: "Not found" },
+    code === 200 ? { ...status("completed"), is_restricted: false } : { detail: "Not found" },
   ), { status: code }));
   const { state, loadBoardStatus } = statusLoader(client);
   await loadBoardStatus();
@@ -177,13 +192,14 @@ test("start posts to the documented account-scoped route and gets server status 
       assert.equal(options.body, undefined); // no client board/account overrides
       return json({ message: "Accepted" });
     }
-    return json(status("in_progress"));
+    return json({ ...status("processing"), remaining_seconds: 180 });
   });
   const loader = statusLoader(client);
-  loader.state.status = status("not_started");
+  loader.state.status = status(null);
   await loader.handleStartProcessing();
   assert.deepEqual(calls, ["/api/student/process-documents", "/api/student/board-status"]);
-  assert.equal(loader.state.status.processing_status, "in_progress");
+  assert.equal(loader.state.status.processing_status, "processing");
+  assert.equal(loader.state.status.remaining_seconds, 180);
   assert.equal(loader.state.status.is_restricted, true);
   assert.equal(loader.state.starting, false);
   assert.equal(isReady(loader.state), false);
@@ -251,7 +267,11 @@ test("unconfirmed start due to a network failure or unreadable status never unlo
   }
 });
 
-for (const data of [null, {}, { ...status("completed"), is_restricted: undefined }, status("unknown")]) {
+for (const data of [null, {}, { ...status("completed"), has_board: undefined },
+  { ...status("completed"), is_restricted: undefined }, status("unknown"), status(["completed"]),
+  { ...status("processing"), remaining_seconds: -1 },
+  { ...status("processing"), remaining_seconds: 1.5 },
+  { ...status("processing"), remaining_seconds: "180" }]) {
   test(`unreadable status fails closed: ${JSON.stringify(data)}`, async () => {
     const loader = statusLoader(apiClient(async () => json(data)));
     await loader.loadBoardStatus();
@@ -270,6 +290,7 @@ for (const terminal of ["completed", "failed"]) {
     let cleared = false;
     const { effect } = evaluate(`exports.effect = ${pollingEffect};`, {
       boardStatus: loader.state.status,
+      instituteStudent: false,
       loadBoardStatus: loader.loadBoardStatus,
       setInterval: (fn, ms) => { assert.equal(ms, 5000); tick = fn; return 1; },
       clearInterval: () => { cleared = true; },
@@ -298,6 +319,138 @@ test("polling errors stay visible, retain server restriction, and recover on ret
   await loader.loadBoardStatus();
   assert.equal(loader.state.error, null);
   assert.equal(isReady(loader.state), true);
+});
+
+function loadCatalog(state, instituteStudent = false, boardId = 123) {
+  const access = accessState(state, instituteStudent, boardId);
+  const catalog = { calls: 0, classes: [], loading: false };
+  const { effect } = evaluate(`exports.effect = ${catalogEffect};`, {
+    accessToken: "fixture-token", classScope: "account-board-class",
+    boardReady: access.ready, hasNoBoard: access.hasNoBoard,
+    loadedClassesScope: { current: null },
+    setClasses: value => { catalog.classes = value; },
+    setClassesLoading: value => { catalog.loading = value; },
+    api: { study: { getAvailableClasses: async () => {
+      catalog.calls++;
+      return [{ id: 9, name: "Class 9" }];
+    } } },
+  });
+  effect();
+  return catalog;
+}
+
+for (const [label, response, expectedAccess] of [
+  ["unrestricted without an access record", { ...status(null), is_restricted: false }, true],
+  ["restricted without an access record", status(null), false],
+  ["restricted processing with remaining time", { ...status("processing"), remaining_seconds: 180 }, false],
+  ["restricted processing with zero remaining time", { ...status("processing"), remaining_seconds: 0 }, false],
+  ["restricted processing without a completion timestamp", status("processing"), false],
+  ["restricted completed", { ...status("completed"), remaining_seconds: 0 }, true],
+]) {
+  test(`web contract: ${label} is readable and ${expectedAccess ? "loads" : "blocks"} the catalog`, async () => {
+    const loader = statusLoader(apiClient(async () => json(response)));
+    await loader.loadBoardStatus();
+    assert.equal(loader.state.error, null);
+    assert.deepEqual(JSON.parse(JSON.stringify(loader.state.status)), response);
+    assert.equal(isReady(loader.state), expectedAccess);
+    const catalog = loadCatalog(loader.state);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(catalog.calls, Number(expectedAccess));
+    assert.equal(catalog.classes.length, Number(expectedAccess));
+  });
+}
+
+test("the no-board response permits absent IDs/countdown but cannot load textbooks even with a stale profile board", async () => {
+  const response = { has_board: false, is_restricted: false, processing_status: null, processing_delay_minutes: 5 };
+  const loader = statusLoader(apiClient(async () => json(response)));
+  await loader.loadBoardStatus();
+  assert.equal(loader.state.error, null);
+  assert.equal(accessState(loader.state).hasNoBoard, true);
+  assert.equal(loadCatalog(loader.state).calls, 0);
+});
+
+test("institution students skip board GET and processing POST, clear the gate, and load organization classes without a board", async () => {
+  let requests = 0;
+  const loader = statusLoader(apiClient(async () => {
+    requests++;
+    throw new Error("Institution students must not call board processing");
+  }), true);
+  loader.state.error = "Previous board error";
+  const { effect } = evaluate(`exports.effect = ${resetEffect};`, loader.scope);
+  effect();
+  await loader.loadBoardStatus();
+  await loader.handleStartProcessing();
+  assert.equal(requests, 0);
+  assert.equal(loader.state.loading, false);
+  assert.equal(loader.state.error, null);
+  assert.equal(loader.state.status, null);
+  const access = accessState(loader.state, true, undefined);
+  assert.equal(access.ready, true);
+  assert.equal(access.hasNoBoard, false);
+  const catalog = loadCatalog(loader.state, true, undefined);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(catalog.calls, 1);
+  assert.equal(catalog.classes.length, 1);
+});
+
+test("the real processing status is polled and only confirmed completion opens the catalog", async () => {
+  const loader = statusLoader(apiClient(async () => json(status("completed"))));
+  loader.state.status = { ...status("processing"), remaining_seconds: 0 };
+  loader.state.loading = false;
+  assert.equal(isReady(loader.state), false);
+  let tick;
+  const { effect } = evaluate(`exports.effect = ${pollingEffect};`, {
+    instituteStudent: false, boardStatus: loader.state.status,
+    loadBoardStatus: loader.loadBoardStatus,
+    setInterval: (fn, ms) => { assert.equal(ms, 5000); tick = fn; return 1; },
+    clearInterval: () => {},
+  });
+  const cleanup = effect();
+  await tick();
+  assert.equal(loader.state.status.processing_status, "completed");
+  assert.equal(isReady(loader.state), true);
+  cleanup();
+});
+
+test("countdown uses server remaining time, accounts for delayed ticks, and rechecks once at zero", () => {
+  let now = 0;
+  let tick;
+  let remaining;
+  let rechecks = 0;
+  const { effect } = evaluate(`exports.effect = ${countdownEffect};`, {
+    status: "processing", remainingSeconds: 3,
+    Date: { now: () => now },
+    setRemaining: value => { remaining = value; },
+    onCountdownEnd: () => { rechecks++; },
+    setInterval: (fn, ms) => { assert.equal(ms, 1000); tick = fn; return 1; },
+    clearInterval: () => { tick = null; },
+  });
+  const cleanup = effect();
+  assert.equal(remaining, 3); // not the full five-minute board delay
+  now = 2500;
+  tick();
+  assert.equal(remaining, 1);
+  now = 3500;
+  tick();
+  assert.equal(remaining, 0);
+  assert.equal(rechecks, 1);
+  assert.equal(tick, null);
+  cleanup();
+});
+
+test("missing/zero remaining time does not invent a countdown or a completed status", () => {
+  for (const remainingSeconds of [undefined, 0]) {
+    let remaining;
+    const { effect } = evaluate(`exports.effect = ${countdownEffect};`, {
+      status: "processing", remainingSeconds,
+      setRemaining: value => { remaining = value; },
+      onCountdownEnd: () => { throw new Error("No countdown has elapsed"); },
+      setInterval: () => { throw new Error("Do not invent remaining time"); },
+    });
+    effect();
+    assert.equal(remaining, 0);
+    assert.equal(isReady({ status: status("processing"), loading: false, error: null }), false);
+  }
 });
 
 test("late account/board responses and superseded status reads are ignored", async () => {

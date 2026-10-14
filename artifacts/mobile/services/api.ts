@@ -160,11 +160,13 @@ export type UsageInfo = {
 };
 
 export type BoardStatus = {
+  has_board: boolean;
+  board_id?: number;
+  board_name?: string;
   is_restricted: boolean;
-  processing_status: "not_started" | "in_progress" | "completed" | "failed";
+  processing_status: null | "processing" | "completed" | "not_started" | "in_progress" | "failed";
   processing_delay_minutes: number;
-  progress_percent?: number;
-  started_at?: string;
+  remaining_seconds?: number;
 };
 
 export type DocumentItem = {
@@ -659,15 +661,21 @@ const api = {
 
     getBoardStatus: async (token: string): Promise<BoardStatus> => {
       const result = await request<unknown>("/api/student/board-status", {}, token);
-      // OpenAPI leaves this response unspecified. Never grant access from an
-      // empty/malformed response or guess a processing state.
+      // Match the web handler: no access record is null, an active record is
+      // "processing", and no-board responses omit IDs and remaining_seconds.
+      // Retain known legacy statuses, but never infer completion from a timer.
       if (!result || typeof result !== "object"
+        || !("has_board" in result) || typeof result.has_board !== "boolean"
         || !("is_restricted" in result) || typeof result.is_restricted !== "boolean"
         || !("processing_status" in result)
-        || !["not_started", "in_progress", "completed", "failed"].includes(String(result.processing_status))
+        || !(result.processing_status === null
+          || (typeof result.processing_status === "string"
+            && ["processing", "not_started", "in_progress", "completed", "failed"].includes(result.processing_status)))
         || !("processing_delay_minutes" in result)
         || typeof result.processing_delay_minutes !== "number"
-        || !Number.isFinite(result.processing_delay_minutes) || result.processing_delay_minutes < 0) {
+        || !Number.isFinite(result.processing_delay_minutes) || result.processing_delay_minutes < 0
+        || ("remaining_seconds" in result && (typeof result.remaining_seconds !== "number"
+          || !Number.isInteger(result.remaining_seconds) || result.remaining_seconds < 0))) {
         throw new Error("The textbook access response could not be read. Please retry.");
       }
       return result as BoardStatus;

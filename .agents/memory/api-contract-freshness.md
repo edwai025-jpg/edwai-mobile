@@ -13,7 +13,13 @@ Restricted-board processing must be confirmed by a fresh authenticated status re
 
 **Why:** The live processing routes document no response schemas; starting processing creates a per-user access record. A route/authentication probe cannot establish authenticated success, and real processing must not be initiated merely for testing without authorization.
 
-**How to apply:** Preserve server restriction truth, fail closed on unreadable status, and use simulated responses for transition regressions. Obtain authorized, read-only response evidence before accepting new response shapes.
+**How to apply:** Preserve server restriction truth, fail closed on unreadable status, and use simulated responses for transition regressions. Obtain current backend-handler evidence or authorized response evidence before accepting new response shapes.
+
+Restricted-board processing is a per-user access setup and display delay, not a textbook OCR/indexing job. The status GET can persist a scheduled transition to completed. Institution students use organization-owned processed documents rather than this personal board-processing gate.
+
+**Why:** The user supplied the current web backend and frontend contract after mobile rejected valid textbook-access responses; the implementation creates an access record and delays its visible completion.
+
+**How to apply:** Do not label the delay as indexing, treat a zero countdown as authorization, or require personal board processing for institution students. Do not describe the status GET as strictly read-only when investigating live accounts.
 
 API error messages should also direct the student to contact the EDUwAI team through in-app chat or the “Contact Us” section on the home page. Do not specify a phone number in the error message.
 
