@@ -398,9 +398,9 @@ export default function ProfileScreen() {
               </View>
               <View style={{ flex: 1, gap: 4 }}>
                 <Text style={st.payTitle}>Manage your subscription</Text>
-                <Text style={st.paySub}>Payments, billing and plan upgrades are managed at edwai.com</Text>
-                <Pressable onPress={() => Linking.openURL("https://edwai.com").catch(() => {})} style={st.payLink}>
-                  <Text style={st.payLinkText}>Visit edwai.com →</Text>
+                <Text style={st.paySub}>Payments, billing and plan upgrades are managed at https://eduwai.in/login</Text>
+                <Pressable onPress={() => Linking.openURL("https://eduwai.in/login").catch(() => {})} style={st.payLink}>
+                  <Text style={st.payLinkText}>Visit eduwai.in/login →</Text>
                 </Pressable>
               </View>
             </View>
@@ -421,13 +421,13 @@ export default function ProfileScreen() {
             <MenuRow
               icon={<Feather name={"shield" as FeatherName} size={17} color={Colors.primary} />}
               title="Privacy Policy"
-              onPress={() => Linking.openURL("https://edwai.com/privacy").catch(() => showAlert("Privacy Policy", "Visit edwai.com/privacy for our full privacy policy."))}
+              onPress={() => Linking.openURL("https://eduwai.in/login").catch(() => showAlert("Privacy Policy", "Visit https://eduwai.in/login to access our full privacy policy."))}
             />
             <RowDivider />
             <MenuRow
               icon={<Feather name={"file-text" as FeatherName} size={17} color={Colors.primary} />}
               title="Terms of Service"
-              onPress={() => Linking.openURL("https://edwai.com/terms").catch(() => showAlert("Terms of Service", "Visit edwai.com/terms for our terms of service."))}
+              onPress={() => Linking.openURL("https://eduwai.in/login").catch(() => showAlert("Terms of Service", "Visit https://eduwai.in/login to access our terms of service."))}
             />
           </View>
         </View>

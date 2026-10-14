@@ -14,7 +14,7 @@ const RESOURCES: { key: string; title: string; sub: string; cfg: string | null; 
   { key: "yt", title: "EDUwAI YouTube Channel", sub: "Tutorials, tips & subject walkthroughs", cfg: "social_youtube", fallback: "https://youtube.com/@edwai", colors: ["#ef4444", "#e11d48"], icon: "youtube", badge: true },
   { key: "tg", title: "Telegram Community", sub: "Ask questions, share notes, get help", cfg: "social_telegram", fallback: "https://t.me/edwai", colors: ["#0ea5e9", "#2563eb"], icon: "send", badge: true },
   { key: "ig", title: "Instagram", sub: "Updates, tips & student stories", cfg: "social_instagram", fallback: "https://instagram.com/edwai", colors: ["#ec4899", "#f43f5e"], icon: "instagram", badge: true },
-  { key: "sr", title: "Study Resources", sub: "Curated links, guides & exam prep", cfg: "social_resources", fallback: "https://edwai.com/resources", colors: ["#8b5cf6", "#9333ea"], icon: "book-open", badge: true },
+  { key: "sr", title: "Study Resources", sub: "Curated links, guides & exam prep", cfg: "social_resources", fallback: "https://eduwai.in/login", colors: ["#8b5cf6", "#9333ea"], icon: "book-open", badge: true },
   { key: "hs", title: "Help & Support", sub: "FAQs, troubleshooting & contact", cfg: null, fallback: "mailto:support@edwai.com", colors: ["#10b981", "#0d9488"], icon: "help-circle", badge: false },
 ];
 

@@ -14,13 +14,13 @@ import { Path, Svg } from "react-native-svg";
 import { Colors } from "@/constants/colors";
 
 const QUICK_LINKS = [
-  { label: "Home", href: "https://edwai.com" },
-  { label: "Features", href: "https://edwai.com/features" },
-  { label: "How It Works", href: "https://edwai.com/how-it-works" },
-  { label: "Pricing", href: "https://edwai.com/pricing" },
-  { label: "For Schools & Institutes", href: "https://edwai.com/schools" },
-  { label: "Project Vaigyaan", href: "https://edwai.com/vaigyaan", isNew: true },
-  { label: "Login / Sign Up", href: "https://edwai.com/login" },
+  { label: "Home", href: "https://eduwai.in/login" },
+  { label: "Features", href: "https://eduwai.in/login" },
+  { label: "How It Works", href: "https://eduwai.in/login" },
+  { label: "Pricing", href: "https://eduwai.in/login" },
+  { label: "For Schools & Institutes", href: "https://eduwai.in/login" },
+  { label: "Project Vaigyaan", href: "https://eduwai.in/login", isNew: true },
+  { label: "Login / Sign Up", href: "https://eduwai.in/login" },
 ];
 
 const SOCIAL = [
@@ -40,7 +40,7 @@ const WAVE_H = 48;
 
 function openLink(href: string) {
   Linking.openURL(href).catch(() =>
-    Alert.alert("Cannot open link", "Please visit edwai.com in your browser")
+    Alert.alert("Cannot open link", "Please visit https://eduwai.in/login in your browser")
   );
 }
 
@@ -142,15 +142,15 @@ export function HomeFooter({ parentPadding = 24 }: HomeFooterProps) {
         <View style={styles.bottomBar}>
           <Text style={styles.copyright}>© 2025 EdwAI. All rights reserved.</Text>
           <View style={styles.legalLinks}>
-            <Pressable onPress={() => openLink("https://edwai.com/privacy")}>
+            <Pressable onPress={() => openLink("https://eduwai.in/login")}>
               <Text style={styles.legalLink}>Privacy Policy</Text>
             </Pressable>
             <Text style={styles.legalDot}>·</Text>
-            <Pressable onPress={() => openLink("https://edwai.com/terms")}>
+            <Pressable onPress={() => openLink("https://eduwai.in/login")}>
               <Text style={styles.legalLink}>Terms of Service</Text>
             </Pressable>
             <Text style={styles.legalDot}>·</Text>
-            <Pressable onPress={() => openLink("https://edwai.com/refund")}>
+            <Pressable onPress={() => openLink("https://eduwai.in/login")}>
               <Text style={styles.legalLink}>Refund Policy</Text>
             </Pressable>
           </View>

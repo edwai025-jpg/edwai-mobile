@@ -39,10 +39,10 @@ export function UpgradeModal({ visible, onClose }: { visible: boolean; onClose: 
           <Text style={um.emoji}>🚀</Text>
           <Text style={um.title}>Upgrade Your Plan</Text>
           <Text style={um.body}>
-            Visit edwai.com to explore plans and upgrade your subscription for unlimited questions and premium features.
+            Visit https://eduwai.in/login to explore plans and upgrade your subscription for unlimited questions and premium features.
           </Text>
-          <TouchableOpacity style={um.primaryBtn} onPress={() => { Linking.openURL("https://edwai.com").catch(() => {}); onClose(); }}>
-            <Text style={um.primaryBtnText}>Open edwai.com →</Text>
+          <TouchableOpacity style={um.primaryBtn} onPress={() => { Linking.openURL("https://eduwai.in/login").catch(() => {}); onClose(); }}>
+            <Text style={um.primaryBtnText}>Open eduwai.in/login →</Text>
           </TouchableOpacity>
           <TouchableOpacity style={um.secondaryBtn} onPress={onClose}>
             <Text style={um.secondaryBtnText}>Close</Text>

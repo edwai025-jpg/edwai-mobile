@@ -16,3 +16,4 @@
 - [Academic class selection](academic-class-selection-scope.md) — Profile default only once; all API-returned classes remain selectable, but cross-grade books remain backend-restricted.
 - [API contract freshness](api-contract-freshness.md) — Legacy handoff routes can be stale; verify the live API before blaming connectivity or hiding warnings.
 - [Native photo transport](native-photo-transport.md) — Phone photos use bounded multipart bytes, not runtime-dependent FormData file objects; test the full request.
+- [Mobile website links](website-link-destination.md) — User-requested login destination for legacy dashboard and Profile website links.
