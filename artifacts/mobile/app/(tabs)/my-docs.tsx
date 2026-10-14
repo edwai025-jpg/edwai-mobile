@@ -204,7 +204,7 @@ export default function OwnBooksScreen() {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [pdfTitle, setPdfTitle] = useState("");
   const [pdfDocType, setPdfDocType] = useState("textbook");
-  const [pdfFile, setPdfFile] = useState<{ uri: string; name: string } | null>(null);
+  const [pdfFile, setPdfFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -310,9 +310,11 @@ export default function OwnBooksScreen() {
       const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
-      setPdfFile({ uri: asset.uri, name: asset.name });
+      setPdfFile(asset);
       if (!pdfTitle) setPdfTitle(asset.name.replace(/\.pdf$/i, ""));
-    } catch {}
+    } catch (error) {
+      Alert.alert("Could Not Select PDF", error instanceof Error ? error.message : "Please select the PDF again.");
+    }
   }, [pdfTitle]);
 
   /* ── upload PDF ── */
@@ -328,11 +330,11 @@ export default function OwnBooksScreen() {
   }, []);
 
   const handleUploadPdf = useCallback(async () => {
-    if (!pdfFile || !pdfTitle.trim() || !accessToken) return;
+    if (!pdfFile || !pdfTitle.trim() || !accessToken || uploading) return;
     setUploading(true);
     startProgressSimulation();
     try {
-      const doc = await api.phase2.uploadPdf(accessToken, pdfFile.uri, pdfFile.name, pdfTitle.trim(), pdfDocType);
+      const doc = await api.phase2.uploadPdf(accessToken, pdfFile, pdfTitle.trim(), pdfDocType);
       if (progressRef.current) { clearInterval(progressRef.current); progressRef.current = null; }
       setUploadProgress(100);
       setTimeout(() => { setUploading(false); setUploadProgress(0); }, 600);
@@ -342,9 +344,12 @@ export default function OwnBooksScreen() {
     } catch (e) {
       if (progressRef.current) { clearInterval(progressRef.current); progressRef.current = null; }
       setUploading(false); setUploadProgress(0);
-      Alert.alert("Upload Failed", e instanceof ApiError ? e.message : "Could not upload PDF");
+      const message = e instanceof TypeError
+        ? "The PDF upload was not confirmed. Check your connection and refresh Your Books before retrying to avoid a duplicate upload."
+        : e instanceof Error ? e.message : "Could not upload PDF. Please retry.";
+      Alert.alert("Upload Failed", `${message}\n\nPlease contact the EDUwAI team through in-app chat or the “Contact Us” section on the home page for help.`);
     }
-  }, [pdfFile, pdfTitle, pdfDocType, accessToken, startProgressSimulation]);
+  }, [pdfFile, pdfTitle, pdfDocType, accessToken, uploading, startProgressSimulation]);
 
   /* ── add YouTube ── */
   const handleAddYoutube = useCallback(async () => {

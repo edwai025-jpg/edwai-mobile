@@ -314,6 +314,11 @@ async function request<T>(
     headers,
   });
 
+  return readApiResponse<T>(res);
+}
+
+/** Share HTTP/error decoding with the native file uploader. */
+async function readApiResponse<T>(res: Pick<Response, "status" | "ok" | "text">): Promise<T> {
   const text = await res.text();
   if (res.status === 204) return undefined as T;
   let data: unknown;
@@ -812,20 +817,11 @@ const api = {
         token
       ),
 
-    uploadPdf: (token: string, fileUri: string, fileName: string, title: string, bookType: string) => {
-      const formData = new FormData();
-      formData.append("file", {
-        uri: fileUri,
-        type: "application/pdf",
-        name: fileName,
-      } as unknown as Blob);
-      formData.append("title", title);
-      formData.append("book_type", bookType);
-      return request<DocumentItem>(
-        "/api/phase2/documents/upload",
-        { method: "POST", body: formData, headers: {} },
-        token
-      );
+    uploadPdf: async (token: string, asset: import("expo-document-picker").DocumentPickerAsset, title: string, bookType: string) => {
+      const { sendPdfUpload } = await import("./pdfUpload");
+      return readApiResponse<DocumentItem>(await sendPdfUpload(
+        resolveUrl("/api/phase2/documents/upload"), token, asset, title, bookType,
+      ));
     },
 
     deleteDocument: (token: string, id: number) =>
