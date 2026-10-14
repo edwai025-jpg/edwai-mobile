@@ -5,7 +5,7 @@ description: Native modal hosting and Expo web confirmations, startup, text refs
 
 Do not use sibling React Native modal hosts for an Account editor and its photo crop step on iOS. Reuse the currently visible host and change its content without closing the editor.
 
-**Why:** Browser photo tests passed with multiple portals, but the user confirmed the iPhone returned from photo selection without ever showing Crop Photo. UIKit's native presentation rules differ from browser portals; no crop means the upload has not started.
+**Why:** Browser photo tests passed with multiple portals, but the user confirmed the iPhone returned from photo selection without ever showing Crop Photo. UIKit's native presentation rules differ from browser portals; no crop means the upload has not started. The user subsequently confirmed photo uploads work after reusing the Account host.
 
 **How to apply:** Preserve unsaved editor state when entering/leaving crop, keep Cancel free of mutations, and route system back to the crop's own busy-aware cancellation. Verify host ownership separately from HTTP encoding; browser upload success is not native presentation proof.
 
