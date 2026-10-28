@@ -36,6 +36,7 @@ export type UserProfile = {
   orgRole?: string | null;
   orgId?: number | null;
   orgName?: string | null;
+  orgSubdomain?: string | null;
   authProvider?: string;
   phoneVerified?: boolean;
   emailVerified?: boolean;
@@ -63,6 +64,7 @@ export function apiUserToProfile(u: ApiUser): UserProfile {
     orgRole: u.org_role,
     orgId: u.org_id,
     orgName: u.org_name,
+    orgSubdomain: u.org_subdomain,
     authProvider: u.auth_provider,
     phoneVerified: u.phone_verified,
     emailVerified: u.email_verified,

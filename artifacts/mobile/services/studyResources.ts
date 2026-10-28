@@ -3,6 +3,7 @@ import { ApiError, resolveUrl, type Flashcard } from "./api";
 export type StudyAnswerContext = {
   id: string; question: string; answer: string; language: string;
   bookTitle: string; pageNumber: number | null;
+  orgSubdomain?: string | null;
 };
 export type ExplainQuota = { allowed: boolean; used: number; limit: number; remaining: number };
 export type QuizQuestion = {
@@ -73,7 +74,8 @@ export async function withStudyAuth<T>(
 }
 
 async function resourceRequest(
-  token: string, path: string, body?: unknown, signal?: AbortSignal, binary = false
+  token: string, path: string, body?: unknown, signal?: AbortSignal, binary = false,
+  contextHeaders: Record<string, string> = {},
 ) {
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -83,20 +85,34 @@ async function resourceRequest(
   try {
     const response = await fetch(resolveUrl(path), {
       method: body === undefined ? "GET" : "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...contextHeaders },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
     if (!response.ok) {
       const text = await response.text();
       let data: unknown;
-      try { data = JSON.parse(text); } catch { data = { detail: text }; }
+      try { data = JSON.parse(text); } catch {
+        data = { detail: path === "/api/flashcards" ? undefined : text };
+      }
       const detail = (data as { detail?: unknown })?.detail;
-      const message = typeof detail === "string" ? detail
-        : (detail as { message?: string })?.message ?? `Request failed (HTTP ${response.status}).`;
+      const message = typeof detail === "string" && detail.trim() ? detail
+        : Array.isArray(detail)
+          ? detail.map(item => typeof item?.msg === "string" ? item.msg : "").filter(Boolean).join("; ")
+            || `Request failed (HTTP ${response.status}).`
+          : (detail as { message?: string })?.message ?? (path === "/api/flashcards"
+            ? "Flashcard generation is temporarily unavailable. Please try again."
+            : `Request failed (HTTP ${response.status}).`);
       throw new ApiError(message, response.status, data);
     }
-    if (!binary) return await response.json();
+    if (!binary) {
+      try { return await response.json(); }
+      catch {
+        throw new Error(path === "/api/flashcards"
+          ? "The flashcard response could not be read. Please try again."
+          : "The service response could not be read. Please try again.");
+      }
+    }
     const mime = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     if (!["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave"].includes(mime)) {
       throw new Error("The audio service returned an unsupported file format.");
@@ -110,8 +126,13 @@ async function resourceRequest(
         ? "The report timed out and may already be saved. Check before submitting it again."
         : path === "/api/explain"
           ? "The explanation timed out and may have consumed voice allowance. Check your quota before generating again."
-          : "Generation timed out. Please try again.";
+          : path === "/api/flashcards"
+            ? "Flashcard generation timed out. The server may still be working; retry only when you choose."
+            : "Generation timed out. Please try again.";
       throw new Error(message);
+    }
+    if (path === "/api/flashcards" && !signal?.aborted && error instanceof TypeError) {
+      throw new Error("Flashcard generation was interrupted by the server or gateway. Please try again.");
     }
     throw error;
   } finally {
@@ -135,14 +156,23 @@ export const studyResources = {
   quiz: async (token: string, text: string, language: string, signal?: AbortSignal): Promise<QuizQuestion[]> =>
     validateQuiz(await resourceRequest(token, "/api/mcq", { text: plainStudyText(text), language }, signal)),
   flashcards: async (token: string, context: StudyAnswerContext, signal?: AbortSignal): Promise<Flashcard[]> => {
-    const value = await resourceRequest(token, "/api/flashcards", { question: context.question, answer: context.answer }, signal);
+    const value = await resourceRequest(token, "/api/flashcards", { question: context.question, answer: context.answer }, signal, false, {
+      Accept: "application/json",
+      ...(context.orgSubdomain ? { "X-Org-Subdomain": context.orgSubdomain } : {}),
+    });
     const cards = value?.flashcards;
-    if (!Array.isArray(cards) || !cards.length || !cards.every(c => c
-      && typeof c.front === "string" && c.front.trim() && typeof c.back === "string" && c.back.trim()
-      && ["definition", "concept", "process", "fact", "diagram"].includes(c.type))) {
+    if (!Array.isArray(cards) || cards.length < 2 || cards.length > 10
+      || !Number.isInteger(value?.count) || value.count !== cards.length
+      || !cards.every(c => c && typeof c.front === "string" && c.front.trim()
+        && typeof c.back === "string" && c.back.trim())) {
       throw new Error("No valid flashcards were returned. Please try again.");
     }
-    return cards;
+    // Count, order and content belong to the backend, not a native word-count
+    // heuristic. Unknown types get the same coherent Concept fallback as web.
+    return cards.map(c => ({
+      front: c.front, back: c.back,
+      type: ["definition", "concept", "process", "fact", "diagram"].includes(c.type) ? c.type : "concept",
+    }));
   },
   report: async (token: string, payload: ReportPayload, signal?: AbortSignal): Promise<{ ok: true }> => {
     if (!["incorrect", "too_short", "too_long", "irrelevant", "missing_concepts", "wrong_source", "other"].includes(payload.issue_type)) {

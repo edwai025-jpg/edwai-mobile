@@ -11,6 +11,6 @@ Keep native profile-photo uploads as a pre-encoded, bounded multipart byte body.
 
 Do not generalize bounded photo encoding to potentially large PDFs. Native PDF uploads should avoid whole-file JavaScript buffers and must not silently retry interrupted writes through an iOS background session.
 
-**Why:** Expo's native multipart API can read a cached document directly. Its background session mode explicitly retries network failures indefinitely, which is unsafe for a document-creation endpoint without a confirmed idempotency contract. Native multipart still uses native memory; it is not proof of constant-memory streaming.
+**Why:** Expo's native multipart API can read a cached document directly. Its background session mode explicitly retries network failures indefinitely, which is unsafe for a document-creation endpoint without a confirmed idempotency contract. Native multipart still uses native memory; it is not proof of constant-memory streaming. The user confirmed the preceding upload fixes were working.
 
 **How to apply:** Use a foreground native upload for personal PDFs, keep the browser's real File/Blob, preserve the server's upload limits and access errors, and treat lost responses as uncertain rather than automatically resubmitting.

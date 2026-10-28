@@ -470,6 +470,7 @@ export default function TextbooksScreen() {
         id: `${selectedDoc.id}:${Date.now()}`, question: originalQuestion, answer: finalRes.answer,
         language: resolveStudyLanguage(finalRes.answer_language ?? finalRes.language, user?.medium, finalRes.answer),
         bookTitle, pageNumber: finalRes.sources?.[0]?.page ?? null,
+        orgSubdomain: user?.orgId ? user.orgSubdomain : undefined,
       });
       setResponse(finalRes); setStreaming(false); setQueryLoading(false);
       /* Phase 1: fetch citation/diagram images asynchronously after stream */
@@ -500,7 +501,7 @@ export default function TextbooksScreen() {
       }
       setStreaming(false); setQueryLoading(false);
     }
-  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium, recentQuestions.refreshAfterAnswer, pendingBoard, runAuthenticatedRequest]);
+  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium, user?.orgId, user?.orgSubdomain, recentQuestions.refreshAfterAnswer, pendingBoard, runAuthenticatedRequest]);
 
   /* ── image / OCR ── */
   const handleImageCapture = useCallback(async (fromCamera: boolean) => {

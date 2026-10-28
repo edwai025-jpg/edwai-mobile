@@ -406,6 +406,7 @@ export default function OwnBooksScreen() {
         id: `${selectedDoc.id}:${Date.now()}`, question: originalQuestion, answer: finalRes.answer,
         language: resolveStudyLanguage(finalRes.answer_language ?? finalRes.language, user?.medium, finalRes.answer),
         bookTitle, pageNumber: finalRes.sources?.[0]?.page ?? null,
+        orgSubdomain: user?.orgId ? user.orgSubdomain : undefined,
       });
       setResponse(finalRes); setStreaming(false); setQueryLoading(false);
       void refreshUsage();
@@ -420,7 +421,7 @@ export default function OwnBooksScreen() {
       }
       setStreaming(false); setQueryLoading(false);
     }
-  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium, recentQuestions.refreshAfterAnswer]);
+  }, [question, selectedDoc, accessToken, refreshUsage, user?.medium, user?.orgId, user?.orgSubdomain, recentQuestions.refreshAfterAnswer]);
 
   /* ── youtube: generate notes ── */
   const handleGenerateNotes = useCallback(() => {

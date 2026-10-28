@@ -94,11 +94,11 @@ test("flashcards keep original answer and question; report truncates context and
   const c = client(async (url, options) => {
     sent.push({ url, body: JSON.parse(options.body) });
     return url.endsWith("/flashcards")
-      ? Response.json({ flashcards: [{ front: "F", back: "B", type: "diagram" }] })
+      ? Response.json({ flashcards: [{ front: "F", back: "B", type: "diagram" }, { front: "F2", back: "B2", type: "concept" }], count: 2 })
       : Response.json({ ok: true });
   });
   const context = Object.freeze({ id: "answer1", question: "original", answer: "**Answer** $x$", language: "english", bookTitle: "Book", pageNumber: 52 });
-  assert.equal((await c.studyResources.flashcards("test", context)).length, 1);
+  assert.equal((await c.studyResources.flashcards("test", context)).length, 2);
   assert.deepEqual(sent[0].body, { question: "original", answer: "**Answer** $x$" });
   await c.studyResources.report("test", { book_title: "Book", page_number: 52, question: context.question, ai_response: "a".repeat(600), issue_type: "wrong_source", description: "  details  " });
   assert.equal(sent[1].body.ai_response.length, 500);

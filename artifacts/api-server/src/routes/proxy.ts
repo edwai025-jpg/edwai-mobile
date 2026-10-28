@@ -19,6 +19,9 @@ async function proxyHandler(req: any, res: any) {
   if (req.headers.authorization) {
     forwardHeaders["authorization"] = req.headers.authorization as string;
   }
+  if (typeof req.headers["x-org-subdomain"] === "string") {
+    forwardHeaders["x-org-subdomain"] = req.headers["x-org-subdomain"];
+  }
 
   try {
     const init: RequestInit = {

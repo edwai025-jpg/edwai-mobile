@@ -7,6 +7,7 @@
 - [Profile session contract](profile-session-contract.md) — Bearer-only native sessions cannot identify the current device; external timezone-less session times are UTC.
 - [External API testing](external-api-browser-tests.md) — Fail-closed browser fixtures, one-time auth seeding, and module-mock interoperability.
 - [Study resource scope](study-resource-scope.md) — Completed-answer controls use frozen context and existing APIs; voice quota and replay are distinct from question usage.
+- [Flashcards web parity](flashcards-web-parity.md) — Backend owns answer-dependent counts; exact type palettes and local mastery follow the supplied web handoff.
 - [Profile completion contract](completion-contracts.md) — Required order and full onboarding scope; preserve server completion truth and non-idempotent request limitations.
 - [Question input scope](input-mode-scope.md) — Detailed PDF parity boundaries; voice capture is independent of books and answer/explanation quotas.
 - [Answer formatting parity](answer-formatting-scope.md) — One renderer, unchanged answer APIs, no notation repair or extra generation; chemistry tests must match module conditions.
