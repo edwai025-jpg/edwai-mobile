@@ -48,3 +48,4 @@ Thumbs.db
 .cache/
 .local/
 /artifacts/mobile/generated-artifacts/
+/generated-artifacts/
