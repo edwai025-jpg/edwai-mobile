@@ -44,3 +44,9 @@ For Expo bundle checks, discover the managed port and entry URL instead of assum
 **Why:** The managed server used a different port and a workspace-relative entry URL. The guessed URLs failed while the actual iOS and Android bundles compiled successfully.
 
 **How to apply:** Read the running workflow's port and the served HTML script URL or launch manifest before requesting native bundles. Do not treat a guessed URL's 404 as a compilation failure.
+
+Copy primitive measurements from React Native events synchronously before using them inside deferred state updaters.
+
+**Why:** Native event pooling can clear `nativeEvent` after the handler returns, while React runs functional state updates later. Browser behavior does not establish native safety.
+
+**How to apply:** Keep event objects out of queued callbacks. Regression tests should release the event before executing the queued updater.

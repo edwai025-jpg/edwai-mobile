@@ -120,7 +120,11 @@ export default function RecentQuestionsPanel(p: Props) {
             )}
             <ScrollView style={styles.list} nestedScrollEnabled keyboardShouldPersistTaps="handled" scrollEventThrottle={48}
               onScroll={event => setViewport({ y: event.nativeEvent.contentOffset.y, height: event.nativeEvent.layoutMeasurement.height })}
-              onLayout={event => setViewport(value => ({ ...value, height: event.nativeEvent.layout.height }))}>
+              onLayout={event => {
+                // Native events may be released before React runs the updater.
+                const height = event.nativeEvent.layout.height;
+                setViewport(value => value.height === height ? value : { ...value, height });
+              }}>
               {filtered.length === 0 ? (
                 <Text style={[styles.empty, { color: c.text }]}>No matching questions</Text>
               ) : filtered.map((h, index) => {
