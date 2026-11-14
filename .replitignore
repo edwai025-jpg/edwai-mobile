@@ -5,3 +5,11 @@
 .local
 /artifacts/mobile/generated-artifacts/
 /generated-artifacts/
+
+# Development reference files are not part of the running app.
+/attached_assets/*
+!/attached_assets/*.md
+/exports/*
+!/exports/*.md
+/.canvas/assets/
+/footer_scroll.png

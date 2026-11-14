@@ -18,3 +18,4 @@
 - [API contract freshness](api-contract-freshness.md) — Legacy handoff routes can be stale; verify the live API before blaming connectivity or hiding warnings.
 - [Native upload transport](native-photo-transport.md) — Bounded photo bytes; larger PDFs avoid JavaScript buffers and iOS background retries.
 - [Mobile website links](website-link-destination.md) — User-requested login destination for legacy dashboard and Profile website links.
+- [Repository cleanup scope](repository-cleanup-scope.md) — Keep project Markdown, automated test code, and required app images; remove only unused reference assets.

@@ -49,3 +49,11 @@ Thumbs.db
 .local/
 /artifacts/mobile/generated-artifacts/
 /generated-artifacts/
+
+# Development references: keep project Markdown, not screenshots or uploads.
+/attached_assets/*
+!/attached_assets/*.md
+/exports/*
+!/exports/*.md
+/.canvas/assets/
+/footer_scroll.png
