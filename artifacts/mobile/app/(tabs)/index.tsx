@@ -23,6 +23,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnswerCard from "@/components/study/AnswerCard";
+import RightsFooter from "@/components/RightsFooter";
 import { resolveStudyLanguage, type StudyAnswerContext } from "@/services/studyResources";
 import QuestionComposer, { type QuestionComposerHandle } from "@/components/study/QuestionComposer";
 import RecentQuestionsPanel from "@/components/study/RecentQuestionsPanel";
@@ -724,6 +725,7 @@ export default function TextbooksScreen() {
           <Feather name="alert-triangle" size={11} color={MUTED} />
           <Text style={sc.footerText}>AI responses should be verified with citations.</Text>
         </View>
+        <RightsFooter isDark={isDark} />
       </ScrollView>
       </KeyboardAvoidingView>
 

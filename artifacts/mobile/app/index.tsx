@@ -19,6 +19,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GoogleAuthWebView } from "@/components/GoogleAuthWebView";
+import RightsFooter from "@/components/RightsFooter";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import api, { ApiError } from "@/services/api";
@@ -281,6 +282,7 @@ export default function LoginScreen() {
               <Feather name="shield" size={14} color={Colors.success} />
               <Text style={styles.trustText}>Evaluated by trusted teachers  {"\u00B7"}  🇮🇳 Made in India</Text>
             </View>
+            <RightsFooter />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
