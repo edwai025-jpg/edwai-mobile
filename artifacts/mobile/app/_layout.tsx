@@ -43,6 +43,7 @@ function RootLayoutNav() {
       <Stack.Screen name="otp" />
       <Stack.Screen name="complete-profile" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="subscription" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

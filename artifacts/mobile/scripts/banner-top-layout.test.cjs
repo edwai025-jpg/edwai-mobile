@@ -68,6 +68,7 @@ function renderBanner({ status, dismissed, inset, platform }) {
       useState: initial => [stateIndex++ === 1 ? dismissed : initial, () => {}],
       useEffect: () => {},
       useCallback: callback => callback,
+      useRef: initial => ({ current: initial }),
     };
     if (name === "react-native") return {
       Platform: { OS: platform },
@@ -78,7 +79,9 @@ function renderBanner({ status, dismissed, inset, platform }) {
         pushStackEntry: props => { statusBarCalls.push(["push", props.barStyle]); return props; },
         popStackEntry: entry => statusBarCalls.push(["pop", entry.barStyle]),
       },
-      View: "View", Text: "Text", Pressable: "Pressable",
+      View: "View", Text: "Text", Pressable: "Pressable", Modal: "Modal",
+      Dimensions: { get: () => ({ width: 390, height: 844 }) },
+      Animated: { Value: class { setValue() {} stopAnimation() {} interpolate() { return 0; } }, View: "Animated.View", timing: () => ({ start: () => {} }) },
     };
     if (name === "expo-router") return {
       useRouter: () => ({ push: () => {} }),
@@ -87,6 +90,7 @@ function renderBanner({ status, dismissed, inset, platform }) {
     if (name === "react-native-safe-area-context") return { useSafeAreaInsets: () => ({ top: inset }) };
     if (name === "@/context/auth") return { useAuth: () => ({ user: { name: "Student" } }) };
     if (name === "@/constants/colors") return { Colors: colors };
+    if (name === "@/constants/storePolicy") return { SHOW_WEB_PAYMENTS: true };
     if (name === "@/services/bannerTopLayout") return layoutModule;
     if (name === "@/services/bannerUsage") return { getBannerUsage: () => ({ percent: 0, countLabel: "0/200 Q" }) };
     if (name === "@/constants/shadow") return { platformShadow: () => ({}) };

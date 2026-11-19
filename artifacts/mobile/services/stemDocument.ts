@@ -10,8 +10,11 @@ export function stemDocument(id: string, payload: { html: string; css: string; r
   (function(){
     var id=${JSON.stringify(id)}, revision=0, answer=document.getElementById('answer');
     function measure(){
-      var height=Math.max(24,Math.ceil(answer.getBoundingClientRect().height));
-      var message={type:'eduwai-answer-size',id:id,revision:revision,height:height};
+      var height=Math.max(24,Math.ceil(Math.max(answer.getBoundingClientRect().height,answer.scrollHeight)));
+      // Also report the page width so the app can convert CSS px to its own units: on some Android
+      // display settings (screen-resolution override) the WebView's CSS px differ from React Native dp.
+      var width=document.documentElement.clientWidth||window.innerWidth||0;
+      var message={type:'eduwai-answer-size',id:id,revision:revision,height:height,width:width};
       if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify(message));
       else window.parent.postMessage(message,'*');
     }

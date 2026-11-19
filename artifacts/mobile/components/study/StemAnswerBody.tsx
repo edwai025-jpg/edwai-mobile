@@ -38,10 +38,25 @@ export default function StemAnswerBody({ content, isDark, typography, streaming,
     else native.current?.injectJavaScript(`window.renderAnswer&&window.renderAnswer(${JSON.stringify(latest.current).replace(/</g, "\\u003c")});true;`);
   }, []);
   useEffect(update, [formatted.html, css, update]);
-  const acceptSize = useCallback((message: { type?: string; id?: string; revision?: number; height?: number }) => {
+  /* Width of this view in app units (dp); used to convert the web page's CSS px height. */
+  const layoutWidth = useRef(0);
+  const lastCss = useRef<{ height: number; width: number } | null>(null);
+  const applySize = useCallback(() => {
+    const css = lastCss.current;
+    if (!css) return;
+    // Old: setHeight(message.height) — assumed 1 CSS px == 1 dp, which cut long answers short on
+    // phones with a screen-resolution override (the page couldn't scroll to the end).
+    const ratio = css.width > 0 && layoutWidth.current > 0 ? layoutWidth.current / css.width : 1;
+    const safeRatio = ratio > 0.5 && ratio < 3 ? ratio : 1;
+    setHeight(Math.ceil(css.height * safeRatio) + 8); // small buffer for the last line's margin
+  }, []);
+  const acceptSize = useCallback((message: { type?: string; id?: string; revision?: number; height?: number; width?: number }) => {
     if (message.type === "eduwai-answer-size" && message.id === id && message.revision === latest.current.revision
-      && typeof message.height === "number" && Number.isFinite(message.height) && message.height >= 24 && message.height < 100_000) setHeight(message.height);
-  }, [id]);
+      && typeof message.height === "number" && Number.isFinite(message.height) && message.height >= 24 && message.height < 100_000) {
+      lastCss.current = { height: message.height, width: typeof message.width === "number" && Number.isFinite(message.width) ? message.width : 0 };
+      applySize();
+    }
+  }, [id, applySize]);
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const listener = (event: MessageEvent) => { if (event.source === frame.current?.contentWindow) acceptSize(event.data ?? {}); };
@@ -54,7 +69,10 @@ export default function StemAnswerBody({ content, isDark, typography, streaming,
     <Text style={{ color: isDark ? "#fbbf24" : "#b45309" }}>Some notation could not be formatted. The original answer is shown below.</Text>
     <Text selectable style={{ color: isDark ? "#e5e7eb" : "#1f2937", fontSize: 16 }}>{content}</Text>
   </View>;
-  return <View style={styles.container}>
+  return <View style={styles.container} onLayout={event => {
+    const width = event.nativeEvent.layout.width;
+    if (width > 0 && Math.abs(width - layoutWidth.current) > 0.5) { layoutWidth.current = width; applySize(); }
+  }}>
     {formatted.incomplete && <Text accessibilityRole="text" accessibilityLiveRegion="polite" style={{ color: isDark ? "#fbbf24" : "#b45309", fontSize: 12, marginBottom: 6 }}>
       Notation looks incomplete, so the source is shown as typed.
     </Text>}

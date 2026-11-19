@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { ActivityIndicator, Keyboard, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Animated, Keyboard, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { NativeSyntheticEvent, TextInputKeyPressEventData } from "react-native";
 import Markdown from "react-native-markdown-display";
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import api from "@/services/api";
@@ -12,12 +13,44 @@ import { getMdStyles, preprocessMarkdown } from "./AnswerCard";
 import QuestionKeyboard from "./QuestionKeyboard";
 
 const MODES: { value: InputMode; label: string }[] = [
-  { value: "normal", label: "✍️ Normal" }, { value: "transliterate", label: "🔤 Transliterate" },
-  { value: "keyboard", label: "⌨️ Keyboard" }, { value: "voice", label: "🎙️ Voice" },
+  // { value: "normal", label: "✍️ Normal" },   // hidden: tap the active mode again to return to normal typing
+  // { value: "transliterate", label: "🔤 Transliterate" }, // label replaced by the animated language name
+  { value: "transliterate", label: "🔤 Languages" }, // used for accessibility; the button shows the language names
+  // { value: "keyboard", label: "⌨️ Keyboard" }, // hidden
+  { value: "voice", label: "🎙️ Voice" },
 ];
+/* Native names of the languages the app supports, e.g. "తెలుగు", "हिंदी". */
+const LANGUAGE_NAMES = INPUT_LANGUAGES.map(item => item.label.split(" - ")[0]);
+
+/* Small fade + slide animation that cycles through the supported languages.
+   When `fixed` is given (Transliterate is active) it shows that language instead. */
+function RotatingLanguage({ color, fixed, style }: { color: string; fixed?: string; style?: object }) {
+  const [index, setIndex] = useState(0);
+  const anim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (fixed) { anim.setValue(1); return; }
+    const timer = setInterval(() => {
+      Animated.timing(anim, { toValue: 0, duration: 220, useNativeDriver: true }).start(({ finished }) => {
+        if (!finished) return;
+        setIndex(i => (i + 1) % LANGUAGE_NAMES.length);
+        Animated.timing(anim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+      });
+    }, 1800);
+    return () => { clearInterval(timer); anim.stopAnimation(); };
+  }, [fixed, anim]);
+  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] });
+  return (
+    <Animated.Text numberOfLines={1} accessible={false} style={[s.rotating, style, { color, opacity: anim, transform: [{ translateY }] }]}>
+      {fixed ?? LANGUAGE_NAMES[index]}
+    </Animated.Text>
+  );
+}
+
 export type QuestionComposerHandle = { replaceDraft: (text: string) => void };
-type Props = { ref?: React.Ref<QuestionComposerHandle>; value: string; onChange: (text: string) => void; documentKey: string; isDark: boolean; disabled?: boolean; imageBusy?: boolean; tools?: React.ReactNode; placeholder?: string };
-export default function QuestionComposer({ ref, value, onChange, documentKey, isDark, disabled, imageBusy, tools, placeholder }: Props) {
+/** Plan question allowance shown in the text box, e.g. { remaining: 8, limit: 10 } → "8/10 questions left". */
+export type QuestionAllowance = { remaining: number | null; limit: number | null };
+type Props = { ref?: React.Ref<QuestionComposerHandle>; value: string; onChange: (text: string) => void; documentKey: string; isDark: boolean; disabled?: boolean; imageBusy?: boolean; tools?: React.ReactNode; placeholder?: string; questionsLeft?: QuestionAllowance };
+export default function QuestionComposer({ ref, value, onChange, documentKey, isDark, disabled, imageBusy, tools, placeholder, questionsLeft }: Props) {
   const { accessToken } = useAuth();
   const input = useRef<TextInput>(null);
   const valueRef = useRef(value); valueRef.current = value;
@@ -28,6 +61,7 @@ export default function QuestionComposer({ ref, value, onChange, documentKey, is
   const [mode, setMode] = useState<InputMode>("normal");
   const [language, setLanguage] = useState("te");
   const [languagesOpen, setLanguagesOpen] = useState(false);
+  const [languagePicked, setLanguagePicked] = useState(false); // stops the label animation once a language is chosen
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [candidates, setCandidates] = useState<string[]>([]);
@@ -147,8 +181,29 @@ export default function QuestionComposer({ ref, value, onChange, documentKey, is
         {MODES.map(item => {
           const active = mode === item.value && (item.value !== "keyboard" || keyboardOpen);
           return <Pressable key={item.value} testID={`input-mode-${item.value}`} accessibilityRole="button" accessibilityLabel={item.label} accessibilityState={{ selected: active }}
-            onPress={() => switchMode(item.value)} style={[s.mode, { backgroundColor: active ? Colors.primary : background, borderColor: active ? Colors.primary : border }]}>
-            <Text style={[s.modeText, { color: active ? Colors.white : textColor }]}>{item.label}</Text>
+            onPress={() => switchMode(mode === item.value ? "normal" : item.value)} style={[s.mode, { backgroundColor: active ? Colors.primary : background, borderColor: active ? Colors.primary : border }]}>
+            {item.value === "transliterate" ? (
+              /* Label is the language name itself: rotates until a language is picked (or the mode is on). */
+              <View style={s.langLabel}>
+                {/* Old: <Text style={[s.modeText, { color: active ? Colors.white : textColor }]}>🔤 </Text> — the 🔤 emoji renders blue */}
+                {active ? (
+                  <View style={[s.langBadge, { backgroundColor: Colors.white }]}><Text style={[s.langBadgeText, { color: "#7c3aed" }]}>A→अ</Text></View>
+                ) : (
+                  <LinearGradient colors={["#667eea", "#a855f7"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.langBadge}>
+                    <Text style={s.langBadgeText}>A→अ</Text>
+                  </LinearGradient>
+                )}
+                <RotatingLanguage color={active ? Colors.white : textColor} style={s.modeText}
+                  fixed={active || languagePicked ? INPUT_LANGUAGES.find(l => l.code === language)?.label.split(" - ")[0] : undefined} />
+              </View>
+            ) : (
+              <Text style={[s.modeText, { color: active ? Colors.white : textColor }]} numberOfLines={1}>{item.label}</Text>
+            )}
+            {/* Old secondary line under "Transliterate":
+            {item.value === "transliterate" && (
+              <RotatingLanguage color={active ? "rgba(255,255,255,0.85)" : muted}
+                fixed={active ? INPUT_LANGUAGES.find(l => l.code === language)?.label.split(" - ")[0] : undefined} />
+            )} */}
           </Pressable>;
         })}
       </View>
@@ -159,7 +214,7 @@ export default function QuestionComposer({ ref, value, onChange, documentKey, is
         </Pressable>
         {languagesOpen && <ScrollView horizontal keyboardShouldPersistTaps="handled" contentContainerStyle={s.languages}>
           {INPUT_LANGUAGES.map(item => <Pressable key={item.code} testID={`transliteration-language-${item.code}`} accessibilityRole="button" accessibilityState={{ selected: language === item.code }}
-            onPress={() => { setLanguage(item.code); setLanguagesOpen(false); clearCandidates(); }} style={[s.chip, { backgroundColor: language === item.code ? Colors.primary : background }]}>
+            onPress={() => { setLanguage(item.code); setLanguagePicked(true); setLanguagesOpen(false); clearCandidates(); }} style={[s.chip, { backgroundColor: language === item.code ? Colors.primary : background }]}>
             <Text style={{ color: language === item.code ? Colors.white : textColor }}>{item.label}</Text>
           </Pressable>)}
         </ScrollView>}
@@ -202,11 +257,21 @@ export default function QuestionComposer({ ref, value, onChange, documentKey, is
         <View style={s.toolbar}>
           <View style={s.tools}>{tools}</View>
           <View style={s.voiceBottom}>
+            {/* Old: voice-recording allowance
             {voice.usage && <Text style={[s.balance, { color: muted }]}>{voice.usage.remaining}/{voice.usage.limit} voice questions left</Text>}
+            */}
+            {/* Plan questions left — goes down after each answer (e.g. 2 asked of 10 → 8/10) */}
+            {questionsLeft && questionsLeft.remaining != null && questionsLeft.limit != null && (
+              <Text testID="questions-left" style={[s.balance, { color: questionsLeft.remaining === 0 ? (isDark ? "#fcd34d" : "#b45309") : muted }]}>
+                {questionsLeft.remaining}/{questionsLeft.limit} questions left
+              </Text>
+            )}
+            {/* MIC button in the text area hidden — use the Voice mode button above to record.
             <Pressable testID="voice-mic-action" accessibilityRole="button" accessibilityLabel={recording ? "Stop recording" : busy ? "Please wait for transcription" : "Record a voice question"} disabled={!recording && startDisabled}
               onPress={recording ? () => { void voice.stop(); } : start} style={[s.mic, { backgroundColor: recording ? Colors.danger : Colors.primary }, !recording && startDisabled && s.disabled]}>
               <Feather name={recording ? "square" : busy ? "loader" : "mic"} size={16} color={Colors.white} /><Text style={s.micText}>{recording ? "Stop" : busy ? "Wait" : "Mic"}</Text>
             </Pressable>
+            */}
           </View>
         </View>
       </View>
@@ -231,8 +296,12 @@ export default function QuestionComposer({ ref, value, onChange, documentKey, is
   );
 }
 const s = StyleSheet.create({
-  modes: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 }, mode: { flexBasis: "23%", flexGrow: 1, minWidth: 130, minHeight: 48, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, justifyContent: "center" },
-  modeText: { fontSize: 13, fontFamily: "Inter_600SemiBold" }, language: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 48, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, marginBottom: 6 },
+  // Transliterate + Voice always share one line, half width each.
+  modes: { flexDirection: "row", flexWrap: "nowrap", gap: 6, marginBottom: 10 }, mode: { flexBasis: 0, flexGrow: 1, minWidth: 0, minHeight: 48, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8, borderWidth: 1, justifyContent: "center" },
+  modeText: { fontSize: 13, fontFamily: "Inter_600SemiBold" }, rotating: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 1 },
+  langLabel: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden" },
+  langBadge: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  langBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#fff" }, language: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 48, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, marginBottom: 6 },
   languages: { gap: 6, paddingVertical: 4 }, chip: { minHeight: 48, paddingHorizontal: 12, borderRadius: 8, justifyContent: "center" },
   hint: { fontSize: 13, lineHeight: 20, marginVertical: 5 }, voicePanel: { padding: 14, borderWidth: 1, borderRadius: 8, marginBottom: 12 },
   voiceHeading: { flexDirection: "row", alignItems: "center", gap: 8 }, title: { flex: 1, fontSize: 15, fontFamily: "Inter_600SemiBold" },

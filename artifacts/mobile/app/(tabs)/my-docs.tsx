@@ -27,6 +27,7 @@ import { resolveStudyLanguage, type StudyAnswerContext } from "@/services/studyR
 import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { useAuth } from "@/context/auth";
 import { useBannerUsage } from "@/hooks/useBannerUsage";
+import { getBannerUsage } from "@/services/bannerUsage";
 import { useTheme } from "@/context/theme";
 import api, {
   ApiError,
@@ -647,7 +648,8 @@ export default function OwnBooksScreen() {
                   onSelect={q => { if (composer.current) composer.current.replaceDraft(q); else setQuestion(q); }} />
 
                 <QuestionComposer ref={composer} value={question} onChange={setQuestion} documentKey={`own-book:${selectedDoc!.id}`}
-                  isDark={isDark} disabled={isQuerying} placeholder={isYoutube ? "Ask anything about this video…" : undefined} />
+                  isDark={isDark} disabled={isQuerying} placeholder={isYoutube ? "Ask anything about this video…" : undefined}
+                  questionsLeft={getBannerUsage(usage)} />
 
                 <View style={sc.actionRow}>
                   <Pressable

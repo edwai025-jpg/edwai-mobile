@@ -1,13 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Animated, Easing, Pressable, Share, StyleSheet, Text, View } from "react-native";
 
 import { FLASHCARD_COLORS as F, flashcardType } from "@/constants/flashcardPalette";
 import { STUDY_ACTION_COLORS } from "@/constants/studyActionColors";
 import { useTheme } from "@/context/theme";
 import type { Flashcard } from "@/services/api";
 import { studyResources, type StudyAnswerContext } from "@/services/studyResources";
+import { buildFlashcardShareText } from "@/services/flashcardShare";
 
 import { errMsg, type StudyRun } from "./studyRequests";
 
@@ -154,6 +155,13 @@ export default function StudyFlashcards({
       return n;
     });
 
+  /* Share the deck as text via the phone's share menu (WhatsApp, SMS, …) with the app name + link at the bottom. */
+  const shareDeck = () => {
+    if (!cards.length) return;
+    const message = buildFlashcardShareText(cards, { question: context.question, bookTitle: context.bookTitle });
+    Share.share({ message, title: "EDUwAI Flashcards" }).catch(() => {});
+  };
+
   if (!open) return null;
 
   const muted = isDark ? "#9ca3af" : "#6b7280";
@@ -184,6 +192,7 @@ export default function StudyFlashcards({
             <Text style={[s.sub, { color: muted }]}>{total} cards · {mastered.size} mastered</Text>
           ) : null}
         </View>
+        <IconBtn icon="share-social-outline" label="Share flashcards" onPress={shareDeck} disabled={status !== "ready"} />
         <IconBtn icon="refresh" label="Regenerate flashcards" onPress={generate} disabled={status === "loading"} />
         <IconBtn icon="reload-circle-outline" label="Reset progress" onPress={() => { setMastered(new Set()); go(0); }} disabled={status !== "ready"} />
         <IconBtn icon="chevron-up" label="Collapse flashcards" onPress={onCollapse} />

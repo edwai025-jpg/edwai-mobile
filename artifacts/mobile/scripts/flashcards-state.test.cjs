@@ -56,6 +56,7 @@ function harness(operation = async () => cards) {
         Animated: { Value, View: "Animated", timing: (_, options) => { animations.push(options); return { start() {} }; } },
         Easing: { bezier: (...args) => args },
         AccessibilityInfo: { isReduceMotionEnabled: async () => false, addEventListener: () => ({ remove() {} }) },
+        Share: { share: async () => ({}) },
       };
       if (name === "expo-linear-gradient") return { LinearGradient: "Gradient" };
       if (name === "@expo/vector-icons") return { Ionicons: "Icon" };
@@ -65,6 +66,7 @@ function harness(operation = async () => cards) {
       if (name.includes("services/studyResources")) return { studyResources: { flashcards: (token, ctx, signal) => {
         calls.push({ ctx, signal }); return operation(calls.length);
       } } };
+      if (name.includes("services/flashcardShare")) return { buildFlashcardShareText: () => "" };
       if (name === "./studyRequests") return { errMsg: (e, fallback) => e.message || fallback };
       throw new Error(`Unexpected import ${name}`);
     },

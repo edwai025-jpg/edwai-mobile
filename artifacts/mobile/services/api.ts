@@ -159,6 +159,23 @@ export type UsageInfo = {
   renewal_date?: string;
 };
 
+/* Free plan: the UI shows only the first 10 questions. Display-only — the server
+   still enforces its own limit until the backend is updated. */
+export const FREE_QUESTION_DISPLAY_LIMIT = 10;
+
+export function applyFreeDisplayLimit(usage: UsageInfo): UsageInfo {
+  if (!usage) return usage;
+  const isFree = !usage.tier_slug || usage.tier_slug === "free";
+  if (!isFree) return usage;
+  const used = typeof usage.questions_used === "number" && Number.isFinite(usage.questions_used) ? usage.questions_used : 0;
+  return {
+    ...usage,
+    question_limit: FREE_QUESTION_DISPLAY_LIMIT,
+    questions_limit: FREE_QUESTION_DISPLAY_LIMIT,
+    percent_used: Math.min(100, (used / FREE_QUESTION_DISPLAY_LIMIT) * 100),
+  };
+}
+
 export type BoardStatus = {
   has_board: boolean;
   board_id?: number;
@@ -431,6 +448,13 @@ const api = {
         body: JSON.stringify({ email }),
       }),
 
+    /** Sign in with Apple. Backend verifies the identity token with Apple and returns a session. */
+    appleSignIn: (body: { identity_token: string; authorization_code: string | null; full_name: string | null; email: string | null }) =>
+      request<AuthResponse>("/api/auth/apple", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+
     verifyEmailOtp: (email: string, otp: string) =>
       request<AuthResponse>("/api/auth/email/verify-otp", {
         method: "POST",
@@ -661,8 +685,8 @@ const api = {
   },
 
   study: {
-    getUsage: (token: string) =>
-      request<UsageInfo>("/api/billing/usage/me", {}, token),
+    getUsage: async (token: string): Promise<UsageInfo> =>
+      applyFreeDisplayLimit(await request<UsageInfo>("/api/billing/usage/me", {}, token)),
 
     getBoardStatus: async (token: string): Promise<BoardStatus> => {
       const result = await request<unknown>("/api/student/board-status", {}, token);

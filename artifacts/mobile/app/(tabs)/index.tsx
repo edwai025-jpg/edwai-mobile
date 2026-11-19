@@ -34,6 +34,7 @@ import { HomeBanner, UpgradeModal } from "@/components/shared/HomeBanner";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import { useBannerUsage } from "@/hooks/useBannerUsage";
+import { getBannerUsage } from "@/services/bannerUsage";
 import { useTheme } from "@/context/theme";
 import { pickStudyImage } from "@/services/studyImageCapture";
 import { academicClassName, initialAcademicClass, isInstituteStudent } from "@/services/academicClassSelection";
@@ -50,6 +51,9 @@ const CARD_BG = "#1e1e3a";
 const BORDER = "rgba(255,255,255,0.10)";
 const TEXT_COLOR = "#f9fafb";
 const MUTED = "#9ca3af";
+/* Side padding for the footer so its text never sits under the floating chat bubble (right: 24, ~56 wide). */
+const FOOTER_SIDE_GAP = 84;
+const FOOTER_LEFT_GAP = 8; // footer keeps the bubble gap on the right only, so lines fit on one line
 
 /* ─── Picker ─────────────────────────────────────────────────────────────── */
 function DarkPicker({
@@ -238,6 +242,10 @@ export default function TextbooksScreen() {
   const [selectedClass, setSelectedClass] = useState<{ id: number; name: string } | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Phase1Document | null>(null);
+  /* Book selection card: collapses once class + subject are chosen and a textbook is loaded; tap to reopen. */
+  const [bookPanelOpen, setBookPanelOpen] = useState(true);
+  useEffect(() => { if (selectedDoc) setBookPanelOpen(false); }, [selectedDoc?.id]);
+  const bookPanelCollapsed = !bookPanelOpen && !!selectedClass && !!selectedSubject && !!selectedDoc;
 
   /* session config */
   const [typographySettings, setTypographySettings] = useState<TypographySettings | null>(null);
@@ -405,7 +413,8 @@ export default function TextbooksScreen() {
         const books = await api.study.getDocuments(accessToken, cls.id, subjs[0]);
         if (request !== catalogRequest.current) return;
         setDocuments(books);
-        if (books.length === 1) setSelectedDoc(books[0]);
+        // if (books.length === 1) setSelectedDoc(books[0]);
+        if (books.length >= 1) setSelectedDoc(books[0]); // Textbook picker is hidden: use the first textbook
       }
     } catch {} finally { if (request === catalogRequest.current) setDocsLoading(false); }
   }, [accessToken]);
@@ -430,7 +439,8 @@ export default function TextbooksScreen() {
       const books = await api.study.getDocuments(accessToken, selectedClass.id, subj);
       if (request !== catalogRequest.current) return;
       setDocuments(books);
-      if (books.length === 1) setSelectedDoc(books[0]);
+      // if (books.length === 1) setSelectedDoc(books[0]);
+      if (books.length >= 1) setSelectedDoc(books[0]); // Textbook picker is hidden: use the first textbook
     } catch {} finally { if (request === catalogRequest.current) setDocsLoading(false); }
   }, [accessToken, selectedClass]);
 
@@ -580,7 +590,11 @@ export default function TextbooksScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={[sc.scroll, { paddingBottom: bottomInset + 16 }]}
+        // Extra bottom space so the floating chat bubble never covers the footer text.
+        // contentContainerStyle={[sc.scroll, { paddingBottom: bottomInset + 16 }]}
+        // Tried flexGrow: 1 here (to push the footer down on short pages) — it stopped the page scrolling on Android. Don't re-add.
+        // contentContainerStyle={[sc.scroll, { paddingBottom: bottomInset + 88, flexGrow: 1 }]}
+        contentContainerStyle={[sc.scroll, { paddingBottom: bottomInset + 88 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
@@ -622,10 +636,32 @@ export default function TextbooksScreen() {
         {/* ─── BOOK SELECTION ─── */}
         {boardReady && !hasNoBoard && (
           <View style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-            <Text style={[sc.cardTitle, { color: textCol }]}>📖 Select Your Textbook</Text>
+            {/* <Text style={[sc.cardTitle, { color: textCol }]}>📖 Select Your Textbook</Text> */}
+            <Pressable
+              onPress={() => { if (selectedClass && selectedSubject && selectedDoc) setBookPanelOpen(open => !open); }}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: !bookPanelCollapsed }}
+              accessibilityLabel={bookPanelCollapsed ? `Change class and subject. Current: ${selectedClass?.name}, ${selectedSubject}` : "Select your textbook"}
+              hitSlop={6}
+              style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: bookPanelCollapsed ? 0 : 12 }}
+            >
+              <Text style={[sc.cardTitle, { color: textCol, marginBottom: 0, flexShrink: 0 }]}>📖 {bookPanelCollapsed ? "" : "Select Your Textbook"}</Text>
+              {bookPanelCollapsed && (
+                <Text style={[sc.cardTitle, { color: textCol, marginBottom: 0, flex: 1 }]} numberOfLines={1}>
+                  {academicClassName(selectedClass!, user)} · {selectedSubject}
+                </Text>
+              )}
+              {!bookPanelCollapsed && <View style={{ flex: 1 }} />}
+              {!!(selectedClass && selectedSubject && selectedDoc) && (
+                <Feather name={bookPanelCollapsed ? "chevron-down" : "chevron-up"} size={18} color={mutedCol} />
+              )}
+            </Pressable>
+            {!bookPanelCollapsed && <>
             <DarkPicker label="Class / Year" options={classes.map(cls => ({ ...cls, name: academicClassName(cls, user) }))} selected={selectedClass?.id ?? null} onSelect={(v) => onClassSelect({ id: v.id as number, name: v.name })} placeholder="Select Class" loading={classesLoading} disabled={classes.length === 0 && !classesLoading} />
             <DarkPicker label="Subject" options={subjects.map((s) => ({ id: s, name: s }))} selected={selectedSubject} onSelect={(v) => onSubjectSelect(v.name)} placeholder="Select Subject" disabled={!selectedClass || subjects.length === 0} loading={docsLoading && !!selectedClass && !selectedSubject} />
+            {/* Textbook picker hidden — only Class / Year and Subject are shown; the first textbook is used automatically.
             <DarkPicker label="Textbook" options={documents.map((d) => ({ id: d.id, name: d.title }))} selected={selectedDoc?.id ?? null} onSelect={(v) => { const d = documents.find((x) => x.id === v.id); if (d) onDocSelect(d); }} onClear={() => onDocSelect(null)} placeholder="Select Textbook" disabled={!selectedSubject || documents.length === 0} loading={docsLoading && !!selectedSubject && !selectedDoc} />
+            */}
             {!selectedClass && classes.length > 0 && (
               <View style={sc.hint}><Text style={sc.hintText}>👆 Select a class to see available subjects</Text></View>
             )}
@@ -641,6 +677,7 @@ export default function TextbooksScreen() {
             {selectedClass && selectedSubject && documents.length === 0 && !docsLoading && (
               <View style={[sc.hint, sc.hintAmber]}><Text style={sc.hintAmberText}>📚 No textbooks available for this combination yet.</Text></View>
             )}
+            </>}
           </View>
         )}
 
@@ -656,21 +693,25 @@ export default function TextbooksScreen() {
 
         {/* ─── QUESTION INTERFACE ─── */}
         {selectedDoc && <View testID="academic-question-section" style={[sc.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-            <View style={sc.qHeader}>
+            <View style={[sc.qHeader, { alignItems: "center" }]}>
               <View style={[sc.qIconBox, !isDark && { backgroundColor: "rgba(102,126,234,0.10)" }]}><Text style={{ fontSize: 18 }}>💬</Text></View>
-              <View style={{ flex: 1 }}>
-                <Text style={[sc.cardTitle, { color: textCol }]}>Ask a Question</Text>
-                <Text style={[sc.qDocName, { color: mutedCol }]} numberOfLines={1}>{selectedDoc ? `From: ${selectedDoc.title}` : "Select a textbook before submitting"}</Text>
+              {/* Title and "From:" on a single line */}
+              <View style={{ flex: 1, flexDirection: "row", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                <Text style={[sc.cardTitle, { color: textCol, marginBottom: 0, flexShrink: 0 }]}>Ask a Question</Text>
+                <Text style={[sc.qDocName, { color: mutedCol, marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>{selectedDoc ? `From: ${selectedDoc.title}` : "Select a textbook before submitting"}</Text>
               </View>
             </View>
 
+            {/* Recent Questions moved below the question input
             <RecentQuestionsPanel key={recentQuestions.scopeKey} {...recentQuestions} phase="shared"
               onSelect={q => { if (composer.current) composer.current.replaceDraft(q); else setQuestion(q); }} />
+            */}
 
             <QuestionComposer
               ref={composer}
               value={question} onChange={setQuestion} documentKey={`textbook:${selectedDoc?.id ?? "none"}`} isDark={isDark}
               disabled={isQuerying} imageBusy={ocrLoading}
+              questionsLeft={getBannerUsage(usage)}
               tools={<>
                 <Pressable accessibilityRole="button" accessibilityLabel="Capture question with camera" style={sc.toolBtn} onPress={() => handleImageCapture(true)} disabled={isQuerying || ocrLoading}>
                   <Feather name="camera" size={15} color={isQuerying ? MUTED : "#a78bfa"} />
@@ -680,6 +721,11 @@ export default function TextbooksScreen() {
                 </Pressable>
               </>}
             />
+
+            {/* Recent Questions moved again — now below the Answer from Book / Learn Concept buttons
+            <RecentQuestionsPanel key={recentQuestions.scopeKey} {...recentQuestions} phase="shared"
+              onSelect={q => { if (composer.current) composer.current.replaceDraft(q); else setQuestion(q); }} />
+            */}
 
             {/* OCR feedback */}
             {captureUri && (
@@ -694,12 +740,25 @@ export default function TextbooksScreen() {
 
             {/* Action buttons */}
             <View style={sc.actionRow}>
+              {/* Old flat colors: Answer from Book = PRIMARY (#667eea), Learn Concept = "#059669" (green, off-theme).
               <Pressable style={[sc.actionBtn, { backgroundColor: PRIMARY }, (!selectedDoc || !question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("retrieve")} disabled={!selectedDoc || !question.trim() || isQuerying}>
+              <Pressable style={[sc.actionBtn, { backgroundColor: "#059669" }, (!selectedDoc || !question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("explain")} disabled={!selectedDoc || !question.trim() || isQuerying}>
+              */}
+              {/* Brand purple gradients, matching the banner, chat bubble and icons */}
+              <Pressable style={[sc.actionBtn, sc.actionBtnClip, (!selectedDoc || !question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("retrieve")} disabled={!selectedDoc || !question.trim() || isQuerying}>
+                <LinearGradient colors={["#667eea", "#764ba2"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {isQuerying && mode === "retrieve" ? <ActivityIndicator size="small" color="#fff" /> : <Text style={sc.actionBtnText}>📖 Answer from Book</Text>}
               </Pressable>
-              <Pressable style={[sc.actionBtn, { backgroundColor: "#059669" }, (!selectedDoc || !question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("explain")} disabled={!selectedDoc || !question.trim() || isQuerying}>
+              <Pressable style={[sc.actionBtn, sc.actionBtnClip, (!selectedDoc || !question.trim() || isQuerying) && sc.actionBtnDim]} onPress={() => handleQuery("explain")} disabled={!selectedDoc || !question.trim() || isQuerying}>
+                <LinearGradient colors={["#7c3aed", "#a855f7"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
                 {isQuerying && mode === "explain" ? <ActivityIndicator size="small" color="#fff" /> : <Text style={sc.actionBtnText}>💡 Learn Concept</Text>}
               </Pressable>
+            </View>
+
+            {/* Recent Questions — under the action buttons */}
+            <View style={{ marginTop: 12 }}>
+              <RecentQuestionsPanel key={recentQuestions.scopeKey} {...recentQuestions} phase="shared"
+                onSelect={q => { if (composer.current) composer.current.replaceDraft(q); else setQuestion(q); }} />
             </View>
         </View>}
 
@@ -721,11 +780,17 @@ export default function TextbooksScreen() {
           />
         )}
 
-        <View style={sc.footer}>
+        {/* Previous approach: side padding (FOOTER_SIDE_GAP) kept text clear of the chat bubble but wrapped each line.
+        <View style={[sc.footer, { paddingHorizontal: FOOTER_SIDE_GAP }]}> … <RightsFooter … style={{ marginTop: 2, paddingHorizontal: FOOTER_SIDE_GAP }} />
+        */}
+        {/* Removed: <View style={{ flexGrow: 1 }} /> spacer (went with flexGrow above; blocked scrolling).
+            Instead the footer leaves space only on the RIGHT (the chat bubble's side), so each line stays on one line. */}
+        <View style={[sc.footer, { paddingLeft: FOOTER_LEFT_GAP, paddingRight: FOOTER_SIDE_GAP }]}>
           <Feather name="alert-triangle" size={11} color={MUTED} />
-          <Text style={sc.footerText}>AI responses should be verified with citations.</Text>
+          <Text style={sc.footerText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>AI responses should be verified with citations.</Text>
         </View>
-        <RightsFooter isDark={isDark} />
+        {/* Both footer lines sit together as one block (rights line + contact line) */}
+        <RightsFooter isDark={isDark} style={{ marginTop: 2, paddingLeft: FOOTER_LEFT_GAP, paddingRight: FOOTER_SIDE_GAP }} />
       </ScrollView>
       </KeyboardAvoidingView>
 
@@ -787,9 +852,10 @@ const sc = StyleSheet.create({
   clearBtn: { fontSize: 12, color: "#ef4444", marginTop: 4 },
   actionRow: { flexDirection: "row", gap: 10 },
   actionBtn: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: "center", justifyContent: "center" },
-  actionBtnDim: { opacity: 0.4 },
+  actionBtnClip: { overflow: "hidden" },
+  actionBtnDim: { opacity: 0.5 }, // was 0.4 — the gradient looked muddy when dimmed
   actionBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
-  footer: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center", paddingTop: 8, paddingBottom: 16 },
+  footer: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center", paddingTop: 8, paddingBottom: 6 }, // was paddingBottom: 16
   footerText: { fontSize: 11, color: MUTED },
   errorBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(245,158,11,0.12)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(245,158,11,0.3)", paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12 },
   errorBannerText: { flex: 1, fontSize: 13, lineHeight: 19, color: "#fcd34d", fontFamily: "Inter_500Medium" },

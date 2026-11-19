@@ -5,10 +5,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   DimensionValue,
+  Dimensions,
   Linking,
   Modal,
   Platform,
@@ -23,15 +25,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/auth";
 import { Colors } from "@/constants/colors";
+import { SHOW_WEB_PAYMENTS } from "@/constants/storePolicy";
 import { getProfilePhotoSource, UsageInfo } from "@/services/api";
 import { getBannerUsage } from "@/services/bannerUsage";
 import { getBannerTopLayout } from "@/services/bannerTopLayout";
 import { BannerBackground } from "@/components/shared/BannerBackground";
 
 const PRIMARY = "#667eea";
+/* Gold-orange from the EDUwAI lotus logo — replaces the blue 🆓 emoji */
+const FREE_BADGE = ["#f59e0b", "#f97316"] as const;
 
 /* ─── Upgrade Modal ──────────────────────────────────────────────────────── */
 export function UpgradeModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  if (!SHOW_WEB_PAYMENTS) return null;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={um.backdrop}>
@@ -135,6 +141,35 @@ export function HomeBanner({
   const pct = Math.max(0, Math.min(100, Number.isFinite(bu.percent) ? bu.percent : 0));
   const barColors = pct >= 90 ? Colors.bannerBarHigh : pct >= 70 ? Colors.bannerBarMid : Colors.bannerBarLow;
   const planLabel = usage?.tier_name ?? usage?.plan_name ?? "Plan";
+  const isFreePlan = !usage?.tier_slug || usage.tier_slug === "free";
+
+  /* Free card animation: fade + slide between "Free 5/10 Q" and "Upgrade to Pro" */
+  const [showPro, setShowPro] = useState(false);
+  const proAnim = useRef(new Animated.Value(1)).current;
+  const proShift = proAnim.interpolate({ inputRange: [0, 1], outputRange: [5, 0] });
+  useEffect(() => {
+    if (!isFreePlan) { setShowPro(false); proAnim.setValue(1); return; }
+    const timer = setInterval(() => {
+      Animated.timing(proAnim, { toValue: 0, duration: 220, useNativeDriver: true }).start(({ finished }) => {
+        if (!finished) return;
+        setShowPro(p => !p);
+        Animated.timing(proAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+      });
+    }, 30000); // switch every 30 seconds (was 2200 ms)
+    return () => { clearInterval(timer); proAnim.stopAnimation(); };
+  }, [isFreePlan, proAnim]);
+
+  /* plan menu — positioned under the plan card */
+  const planWidgetRef = useRef<View>(null);
+  const [planMenu, setPlanMenu] = useState<{ top: number; right: number } | null>(null);
+  const openPlanMenu = () => {
+    const node = planWidgetRef.current;
+    if (!node) { setPlanMenu({ top: insets.top + 120, right: 12 }); return; }
+    node.measureInWindow((x, y, width, height) => {
+      const screenW = Dimensions.get("window").width;
+      setPlanMenu({ top: y + height + 6, right: Math.max(8, screenW - (x + width)) });
+    });
+  };
 
   /* reset date — "↺ 2 Jun" format */
   const resetLabel = (() => {
@@ -153,13 +188,13 @@ export function HomeBanner({
           <View style={bn.graceInner}>
             <View style={{ flex: 1 }}>
               <Text style={bn.graceText}>
-                ⚠️ Your last payment failed. Update your payment method to avoid losing access.
+                {SHOW_WEB_PAYMENTS ? "⚠️ Your last payment failed. Update your payment method to avoid losing access." : "⚠️ There is an issue with your plan."}
                 {usage?.grace_period_ends
                   ? ` (${Math.max(0, Math.ceil((new Date(usage.grace_period_ends).getTime() - Date.now()) / 86400000))} days remaining)`
                   : ""}
               </Text>
             </View>
-            <Pressable
+            {SHOW_WEB_PAYMENTS && <Pressable
               onPress={() => {
                 if (usage?.payment_method_update_url) {
                   Linking.openURL(usage.payment_method_update_url).catch(() => {});
@@ -172,7 +207,7 @@ export function HomeBanner({
               <Text style={bn.graceCtaText}>
                 {usage?.payment_method_update_url ? "Update Card →" : "Resolve Now →"}
               </Text>
-            </Pressable>
+            </Pressable>}
           </View>
         </View>
       )}
@@ -182,11 +217,11 @@ export function HomeBanner({
         <View style={[bn.pastDue, { paddingTop: topLayout.alertPaddingTop }]}>
           <View style={bn.pastDueInner}>
             <View style={{ flex: 1 }}>
-              <Text style={bn.pastDueText}>⛔ Your account has been downgraded. Questions are now limited. Renew to restore full access.</Text>
+              <Text style={bn.pastDueText}>{SHOW_WEB_PAYMENTS ? "⛔ Your account has been downgraded. Questions are now limited. Renew to restore full access." : "⛔ Your account has been downgraded. Questions are now limited."}</Text>
             </View>
-            <Pressable onPress={onUpgrade} style={bn.pastDueCta}>
+            {SHOW_WEB_PAYMENTS && <Pressable onPress={onUpgrade} style={bn.pastDueCta}>
               <Text style={bn.pastDueCtaText}>Restore Access →</Text>
-            </Pressable>
+            </Pressable>}
           </View>
         </View>
       )}
@@ -197,7 +232,7 @@ export function HomeBanner({
           <View style={bn.phoneInner}>
             <Pressable style={{ flex: 1 }} onPress={() => router.push("/(tabs)/profile")}>
               <Text style={bn.phoneText}>
-                📱 Add your mobile number to enable phone OTP login and faster payments →{" "}
+                {SHOW_WEB_PAYMENTS ? "📱 Add your mobile number to enable phone OTP login and faster payments →" : "📱 Add your mobile number to enable phone OTP login →"}{" "}
                 <Text style={bn.phoneCta}>My Profile › Account</Text>
               </Text>
             </Pressable>
@@ -286,9 +321,9 @@ export function HomeBanner({
         </View>
       </View>
 
-      {/* ── Layer 2: Sub-Row ── */}
-      <View style={nb.subRow}>
-        {/* Board + Class chips */}
+      {/* ── Layer 2: Sub-Row — Board / Class chips hidden; Free plan widget shown (right-aligned) ── */}
+      <View style={[nb.subRow, { justifyContent: "flex-end" }]}>
+        {/* ── Board + Class chips — hidden for now, uncomment to restore ──
         <View style={nb.chipsGroup}>
           {user?.board ? (
             <View style={nb.chip}>
@@ -303,6 +338,7 @@ export function HomeBanner({
             <Text style={nb.chipValue}>{user?.className ?? "Individual"}</Text>
           </View>
         </View>
+        ── end Board + Class chips ── */}
 
         {/* Plan widget + Upgrade */}
         <View style={nb.planGroup}>
@@ -310,19 +346,46 @@ export function HomeBanner({
             <ActivityIndicator size="small" color="rgba(255,255,255,0.5)" />
           ) : usage ? (
             <>
+              {/* Old: tap only worked on web (opened the upgrade modal)
+              <Pressable style={nb.planWidget} onPress={SHOW_WEB_PAYMENTS ? onUpgrade : undefined} disabled={!SHOW_WEB_PAYMENTS} ...>
+              */}
+              {/* Previous version: tap opened a Free / Pro dropdown menu (kept below, no longer opened)
+              <Pressable ref={planWidgetRef} style={nb.planWidget} onPress={openPlanMenu} ...>
+              */}
+              {/* Free plan: card animates between "FREE · Free 5/10 Q" and "PRO · Upgrade to Pro"
+                  (like the language button); tap goes straight to the subscription page. */}
               <Pressable
+                ref={planWidgetRef}
                 style={nb.planWidget}
-                onPress={onUpgrade}
+                onPress={isFreePlan ? () => router.push("/subscription") : undefined}
+                disabled={!isFreePlan}
                 hitSlop={6}
                 accessibilityRole="button"
-                accessibilityLabel={`${planLabel}, ${bu.countLabel} questions used${bu.remaining != null && isFinite(bu.remaining) ? `, ${bu.remaining} remaining` : ""}`}
+                accessibilityLabel={`${planLabel}, ${bu.countLabel} questions used${bu.remaining != null && isFinite(bu.remaining) ? `, ${bu.remaining} remaining` : ""}${isFreePlan ? ". Upgrade to Pro" : ""}`}
               >
-                <Text style={nb.planEmoji}>{planEmoji(usage.tier_slug)}</Text>
+                {/* Old: <Text style={nb.planEmoji}>{planEmoji(usage.tier_slug)}</Text> — the 🆓 emoji renders blue */}
+                {isFreePlan ? (
+                  <Animated.View style={{ opacity: proAnim, transform: [{ translateY: proShift }] }}>
+                    <LinearGradient colors={showPro ? ["#667eea", "#a855f7"] : [...FREE_BADGE]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={nb.freeBadge}>
+                      <Text style={nb.freeBadgeText}>{showPro ? "PRO" : "FREE"}</Text>
+                    </LinearGradient>
+                  </Animated.View>
+                ) : (
+                  <Text style={nb.planEmoji}>{planEmoji(usage.tier_slug)}</Text>
+                )}
                 <View style={{ gap: 2 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                    <Text style={nb.planName} numberOfLines={1}>{planLabel}</Text>
-                    <Text style={nb.planCount}>{bu.countLabel}</Text>
-                  </View>
+                  <Animated.View style={[{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6, minWidth: 84 }, isFreePlan && { opacity: proAnim, transform: [{ translateY: proShift }] }]}>
+                    {isFreePlan && showPro ? (
+                      <Text style={[nb.planName, { maxWidth: 90 }]} numberOfLines={1}>Upgrade to Pro</Text>
+                    ) : (
+                      <>
+                        {/* Free plan: the FREE badge already says it, so the "Free" name isn't repeated.
+                            Old: <Text style={nb.planName} numberOfLines={1}>{planLabel}</Text> (shown for every plan) */}
+                        {!isFreePlan && <Text style={nb.planName} numberOfLines={1}>{planLabel}</Text>}
+                        <Text style={[nb.planCount, isFreePlan && nb.planCountFree]}>{bu.countLabel}</Text>
+                      </>
+                    )}
+                  </Animated.View>
                   <View style={nb.planBarBg}>
                     <LinearGradient
                       colors={[...barColors]}
@@ -331,26 +394,73 @@ export function HomeBanner({
                       style={[nb.planBarFill, { width: `${pct}%` as DimensionValue }]}
                     />
                   </View>
-                  {resetLabel ? <Text style={nb.planReset}>{resetLabel}</Text> : null}
+                  {/* Reset date hidden on the plan card: {resetLabel ? <Text style={nb.planReset}>{resetLabel}</Text> : null} */}
                 </View>
+                {/* <Feather name={planMenu ? "chevron-up" : "chevron-down"} size={12} color="rgba(255,255,255,0.7)" /> */}
+                {isFreePlan && <Feather name="chevron-right" size={12} color="rgba(255,255,255,0.7)" />}
               </Pressable>
-              <Pressable style={nb.upgradeBtn} onPress={onUpgrade} hitSlop={6} accessibilityRole="button" accessibilityLabel="Upgrade plan">
+              {SHOW_WEB_PAYMENTS && <Pressable style={nb.upgradeBtn} onPress={onUpgrade} hitSlop={6} accessibilityRole="button" accessibilityLabel="Upgrade plan">
                 <Text style={nb.upgradeBtnText}>Upgrade</Text>
-              </Pressable>
+              </Pressable>}
             </>
           ) : null}
         </View>
       </View>
       </LinearGradient>
 
+      {/* ── Plan menu (opens under the plan card) ── */}
+      <Modal visible={planMenu !== null} transparent animationType="fade" onRequestClose={() => setPlanMenu(null)}>
+        <Pressable style={pm.backdrop} onPress={() => setPlanMenu(null)} accessibilityLabel="Close plans">
+          <View style={[pm.menu, { top: planMenu?.top ?? 120, right: planMenu?.right ?? 12 }]} onStartShouldSetResponder={() => true}>
+            {/* Free — current plan */}
+            <View style={[pm.row, isFreePlan && pm.rowActive]}>
+              <LinearGradient colors={[...FREE_BADGE]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={nb.freeBadge}>
+                <Text style={nb.freeBadgeText}>FREE</Text>
+              </LinearGradient>
+              <View style={{ flex: 1 }}>
+                <Text style={pm.rowTitle}>Free</Text>
+                <Text style={pm.rowSub}>
+                  {bu.limit ?? "—"} questions{bu.remaining != null ? ` · ${bu.remaining} left` : ""}{resetLabel ? ` · resets ${resetLabel.replace("↺ ", "")}` : ""}
+                </Text>
+              </View>
+              {isFreePlan && <Feather name="check" size={16} color="#fbbf24" />}
+            </View>
+
+            {/* Pro */}
+            <View style={pm.row}>
+              <LinearGradient colors={["#667eea", "#a855f7"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={nb.freeBadge}>
+                <Text style={nb.freeBadgeText}>PRO</Text>
+              </LinearGradient>
+              <View style={{ flex: 1 }}>
+                <Text style={pm.rowTitle}>Pro</Text>
+                <Text style={pm.rowSub}>Unlimited questions & premium features</Text>
+              </View>
+              {!isFreePlan && <Feather name="check" size={16} color="#fbbf24" />}
+            </View>
+
+            {isFreePlan && (
+              <Pressable
+                onPress={() => { setPlanMenu(null); router.push("/subscription"); }}
+                accessibilityRole="button"
+                accessibilityLabel="Upgrade to Pro"
+                style={({ pressed }) => [pm.upgrade, pressed && { opacity: 0.85 }]}
+              >
+                <LinearGradient colors={["#667eea", "#764ba2"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
+                <Text style={pm.upgradeText}>⭐ Upgrade to Pro</Text>
+              </Pressable>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
+
       {/* ── Payhall Banner ── */}
       {payhallVisible && (
         <View style={bn.payhall}>
-          <Text style={bn.payhallText}>🎯 You've used your last free question. Upgrade to keep learning!</Text>
+          <Text style={bn.payhallText}>{SHOW_WEB_PAYMENTS ? "🎯 You've used your last free question. Upgrade to keep learning!" : "🎯 You've used all your free questions for this period."}</Text>
           <View style={bn.payhallActions}>
-            <Pressable style={bn.payhallUpgrade} onPress={onUpgrade}>
+            {SHOW_WEB_PAYMENTS && <Pressable style={bn.payhallUpgrade} onPress={onUpgrade}>
               <Text style={bn.payhallUpgradeText}>Upgrade Now</Text>
-            </Pressable>
+            </Pressable>}
             <Pressable onPress={() => setPayhallVisible(false)} hitSlop={10}>
               <Feather name="x" size={16} color="#92400e" />
             </Pressable>
@@ -412,11 +522,26 @@ const nb = StyleSheet.create({
   planGroup: { flexDirection: "row", alignItems: "center", gap: 6 },
   planWidget: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(10,6,40,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
   planEmoji: { fontSize: 14 },
+  freeBadge: { minWidth: 34, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 3, alignItems: "center", justifyContent: "center" },
+  freeBadgeText: { fontSize: 8, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: 0.5 },
   planName: { fontSize: 9, fontFamily: "Inter_600SemiBold", color: "#fff", maxWidth: 64 },
   planBarBg: { width: 60, height: 5, borderRadius: 2.5, backgroundColor: "rgba(255,255,255,0.18)", overflow: "hidden" },
   planBarFill: { height: "100%", borderRadius: 2.5 },
   planCount: { fontSize: 9, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.7)" },
+  planCountFree: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#fff" }, // count is the only text on the Free card
   planReset: { fontSize: 9, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.55)" },
   upgradeBtn: { backgroundColor: "rgba(10,6,40,0.55)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   upgradeBtnText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#fff" },
+});
+
+/* Plan menu styles */
+const pm = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.25)" },
+  menu: { position: "absolute", width: 270, backgroundColor: "#1b1240", borderWidth: 1, borderColor: "rgba(167,139,250,0.35)", borderRadius: 12, padding: 8, gap: 4, ...platformShadow("#000", 0, 6, 0.35, 16), elevation: 8 },
+  row: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 10, paddingVertical: 10, borderRadius: 8 },
+  rowActive: { backgroundColor: "rgba(167,139,250,0.14)" },
+  rowTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  rowSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginTop: 1 },
+  upgrade: { marginTop: 4, minHeight: 44, borderRadius: 10, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  upgradeText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff" },
 });
