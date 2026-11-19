@@ -9,7 +9,7 @@ test("Firebase client configurations match the approved Android/iOS identity and
   const android = JSON.parse(fs.readFileSync(path.join(root, config.android.googleServicesFile), "utf8"));
   const ios = fs.readFileSync(path.join(root, config.ios.googleServicesFile), "utf8");
   const field = key => ios.match(new RegExp(`<key>${key}</key>\\s*<string>([^<]+)</string>`))?.[1];
-  assert.equal(config.android.package, "com.edwai.app");
+  assert.equal(config.android.package, "in.eduwai.app");
   assert.equal(config.ios.bundleIdentifier, "com.edwai.app");
   assert.ok(
     android.client.some(c => c.client_info?.android_client_info?.package_name === config.android.package),

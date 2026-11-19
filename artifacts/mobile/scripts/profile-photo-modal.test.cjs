@@ -49,6 +49,8 @@ function fixture(os = "ios", overrides = {}) {
     "@/hooks/useAccountDetails": { useAccountDetails: () => ({ name: "Pending Draft", email: "", phone: "" }) },
     "@/hooks/useProfilePhoto": { useProfilePhoto: () => photo },
     "@/services/api": { default: {} },
+    "@/services/onboarding": { legalUrls: { privacy: "https://eduwai.in/privacy-policy", terms: "https://eduwai.in/terms" } },
+    "@/constants/storePolicy": { SHOW_WEB_PAYMENTS: true },
     "@/services/profilePhotoCrop": load("services/profilePhotoCrop.ts"),
     "@/components/EducationEditModal": { default: "EducationEditModal" },
     "@/components/SessionsModal": { default: "SessionsModal" },

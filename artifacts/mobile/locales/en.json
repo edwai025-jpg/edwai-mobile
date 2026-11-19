@@ -1,5 +1,7 @@
 {
-  "CFBundleDisplayName": "EdwAI",
-  "NSCameraUsageDescription": "Camera is used to scan textbook pages",
-  "NSPhotoLibraryUsageDescription": "Photo library is used to upload study materials"
+  "ios": {
+    "CFBundleDisplayName": "EdwAI",
+    "NSCameraUsageDescription": "Camera is used to scan textbook pages",
+    "NSPhotoLibraryUsageDescription": "Photo library is used to upload study materials"
+  }
 }

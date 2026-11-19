@@ -18,18 +18,28 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import * as AppleAuthentication from "expo-apple-authentication";
 import { GoogleAuthWebView } from "@/components/GoogleAuthWebView";
 import RightsFooter from "@/components/RightsFooter";
+import { APPLE_SIGNIN_ENABLED, SHOW_GOOGLE_LOGIN } from "@/constants/storePolicy";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import api, { ApiError } from "@/services/api";
 
 type LoginTab = "phone" | "email";
 
+/* Trust labels under the headline. Keep these to facts you can back up. */
+const TRUST_LABELS = [
+  { icon: "📈", text: "100K+ visits / month" },
+  { icon: "📚", text: "Answers from your textbooks" },
+  { icon: "🌐", text: "10 Indian languages" },
+] as const;
+
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { loginWithGoogleToken } = useAuth();
+  const { loginWithGoogleToken, loginWithApple } = useAuth();
+  const [appleLoading, setAppleLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<LoginTab>("phone");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -102,6 +112,33 @@ export default function LoginScreen() {
     }
   };
 
+  const handleApple = async () => {
+    setErrorMsg("");
+    try {
+      const cred = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!cred.identityToken) throw new Error("Apple did not return an identity token.");
+      setAppleLoading(true);
+      const fullName = [cred.fullName?.givenName, cred.fullName?.familyName].filter(Boolean).join(" ") || null;
+      const { profileComplete } = await loginWithApple({
+        identity_token: cred.identityToken,
+        authorization_code: cred.authorizationCode ?? null,
+        full_name: fullName,
+        email: cred.email ?? null,
+      });
+      router.replace(profileComplete ? "/(tabs)" : "/complete-profile");
+    } catch (e: unknown) {
+      if ((e as { code?: string })?.code === "ERR_REQUEST_CANCELED") return;
+      setErrorMsg(e instanceof ApiError ? e.message : "Apple sign-in failed. Please try again.");
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
   const handleGoogle = () => {
     if (Platform.OS === "web") {
       Linking.openURL(api.googleAuthUrl);
@@ -169,6 +206,16 @@ export default function LoginScreen() {
               <Text style={styles.subtitleMuted}>for </Text>
               <Text style={styles.subtitleAccent}>Indian Exam Preparation</Text>
             </Text>
+
+            {/* Trust labels — real facts only (edit TRUST_LABELS to change) */}
+            <View style={styles.trustLabels} accessibilityRole="text" accessibilityLabel={TRUST_LABELS.map(l => l.text).join(", ")}>
+              {TRUST_LABELS.map(label => (
+                <View key={label.text} style={styles.trustLabel}>
+                  <Text style={styles.trustLabelIcon}>{label.icon}</Text>
+                  <Text style={styles.trustLabelText}>{label.text}</Text>
+                </View>
+              ))}
+            </View>
 
             <Text style={styles.heading}>Login / Sign Up with</Text>
             <View style={styles.tabRow} accessibilityRole="tablist">
@@ -256,13 +303,24 @@ export default function LoginScreen() {
               )}
             </Pressable>
 
-            <View style={styles.orRow}>
+            {(APPLE_SIGNIN_ENABLED || SHOW_GOOGLE_LOGIN) && <View style={styles.orRow}>
               <View style={styles.orLine} />
               <Text style={styles.orText}>OR CONTINUE WITH</Text>
               <View style={styles.orLine} />
-            </View>
+            </View>}
 
-            <Pressable
+            {APPLE_SIGNIN_ENABLED && (
+              <AppleAuthentication.AppleAuthenticationButton
+                testID="login-apple"
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={12}
+                style={[styles.appleBtn, appleLoading && { opacity: 0.6 }]}
+                onPress={appleLoading ? () => {} : handleApple}
+              />
+            )}
+
+            {SHOW_GOOGLE_LOGIN && <Pressable
               testID="login-google"
               accessibilityRole="button"
               accessibilityLabel="Continue with Google"
@@ -276,7 +334,7 @@ export default function LoginScreen() {
                 <FontAwesome name="google" size={18} color="#EA4335" />
               )}
               <Text style={styles.googleBtnText}>Continue with Google</Text>
-            </Pressable>
+            </Pressable>}
 
             <View style={styles.trustRow}>
               <Feather name="shield" size={14} color={Colors.success} />
@@ -298,6 +356,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  appleBtn: { height: 50, width: "100%", marginBottom: 12 },
   root: { flex: 1, backgroundColor: Colors.authBg },
   topBar: { paddingHorizontal: 20, paddingBottom: 8 },
   homeButton: {
@@ -309,7 +368,12 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, justifyContent: "center" },
   column: { width: "100%", maxWidth: 440, alignSelf: "center" },
   logo: { width: 170, height: 124, alignSelf: "center", marginBottom: 10 },
-  subtitle: { textAlign: "center", fontSize: 14, marginBottom: 32 },
+  // subtitle: { textAlign: "center", fontSize: 14, marginBottom: 32 }, — space now taken by the trust labels
+  subtitle: { textAlign: "center", fontSize: 14, marginBottom: 14 },
+  trustLabels: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, marginBottom: 26 },
+  trustLabel: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(102,126,234,0.08)", borderWidth: 1, borderColor: "rgba(102,126,234,0.22)" },
+  trustLabelIcon: { fontSize: 12 },
+  trustLabelText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.authInk },
   subtitleDark: { color: Colors.authInk, fontFamily: "Inter_500Medium" },
   subtitleMuted: { color: Colors.gray400, fontFamily: "Inter_500Medium" },
   subtitleAccent: { color: Colors.authAccent, fontFamily: "Inter_500Medium" },

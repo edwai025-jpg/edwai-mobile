@@ -57,3 +57,7 @@ Thumbs.db
 !/exports/*.md
 /.canvas/assets/
 /footer_scroll.png
+
+# App Store Connect API key (never commit)
+*.p8
+asc-api-key.env

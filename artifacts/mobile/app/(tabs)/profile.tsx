@@ -26,6 +26,8 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 import { useTheme } from "@/context/theme";
 import api, { getProfilePhotoSource, UsageInfo } from "@/services/api";
+import { legalUrls } from "@/services/onboarding";
+import { SHOW_WEB_PAYMENTS } from "@/constants/storePolicy";
 import { useProfileAlert } from "@/hooks/useProfileAlert";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
@@ -389,7 +391,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* ── Payment ── */}
-        <View style={st.section}>
+        {SHOW_WEB_PAYMENTS && <View style={st.section}>
           <Text style={[st.sectionLabel, { color: textMuted }]}>Payment</Text>
           <View style={[st.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <View style={st.payNotice}>
@@ -405,7 +407,7 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
-        </View>
+        </View>}
 
         {/* ── Info & Legal ── */}
         <View style={st.section}>
@@ -421,13 +423,13 @@ export default function ProfileScreen() {
             <MenuRow
               icon={<Feather name={"shield" as FeatherName} size={17} color={Colors.primary} />}
               title="Privacy Policy"
-              onPress={() => Linking.openURL("https://eduwai.in/login").catch(() => showAlert("Privacy Policy", "Visit https://eduwai.in/login to access our full privacy policy."))}
+              onPress={() => Linking.openURL(legalUrls.privacy).catch(() => showAlert("Privacy Policy", `Visit ${legalUrls.privacy} to read our privacy policy.`))}
             />
             <RowDivider />
             <MenuRow
               icon={<Feather name={"file-text" as FeatherName} size={17} color={Colors.primary} />}
               title="Terms of Service"
-              onPress={() => Linking.openURL("https://eduwai.in/login").catch(() => showAlert("Terms of Service", "Visit https://eduwai.in/login to access our terms of service."))}
+              onPress={() => Linking.openURL(legalUrls.terms).catch(() => showAlert("Terms of Service", `Visit ${legalUrls.terms} to read our terms of service.`))}
             />
           </View>
         </View>

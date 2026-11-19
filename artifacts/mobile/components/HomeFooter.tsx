@@ -12,12 +12,13 @@ import {
 import { Path, Svg } from "react-native-svg";
 
 import { Colors } from "@/constants/colors";
+import { SHOW_WEB_PAYMENTS } from "@/constants/storePolicy";
 
 const QUICK_LINKS = [
   { label: "Home", href: "https://eduwai.in/login" },
   { label: "Features", href: "https://eduwai.in/login" },
   { label: "How It Works", href: "https://eduwai.in/login" },
-  { label: "Pricing", href: "https://eduwai.in/login" },
+  ...(SHOW_WEB_PAYMENTS ? [{ label: "Pricing", href: "https://eduwai.in/login" }] : []),
   { label: "For Schools & Institutes", href: "https://eduwai.in/login" },
   { label: "Project Vaigyaan", href: "https://eduwai.in/login", isNew: true },
   { label: "Login / Sign Up", href: "https://eduwai.in/login" },

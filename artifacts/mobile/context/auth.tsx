@@ -90,6 +90,7 @@ type AuthState = {
   verifyPhoneOtp: (phone: string, otp: string) => Promise<{ profileComplete: boolean }>;
   verifyEmailOtp: (email: string, otp: string) => Promise<{ profileComplete: boolean }>;
   loginWithGoogleToken: (accessToken: string, refreshToken: string, profileComplete: boolean) => Promise<void>;
+  loginWithApple: (body: { identity_token: string; authorization_code: string | null; full_name: string | null; email: string | null }) => Promise<{ profileComplete: boolean }>;
   completeProfile: (data: {
     name: string;
     stateId?: number;
@@ -258,6 +259,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const verifyEmailOtp = useCallback(
     async (email: string, otp: string) => {
       const res = await api.auth.verifyEmailOtp(email, otp);
+      const profile = apiUserToProfile(res.user);
+      await storeSession(profile, res.access_token, res.refresh_token, res.profile_complete);
+      return { profileComplete: res.profile_complete };
+    },
+    [storeSession]
+  );
+
+  const loginWithApple = useCallback(
+    async (body: { identity_token: string; authorization_code: string | null; full_name: string | null; email: string | null }) => {
+      const res = await api.auth.appleSignIn(body);
       const profile = apiUserToProfile(res.user);
       await storeSession(profile, res.access_token, res.refresh_token, res.profile_complete);
       return { profileComplete: res.profile_complete };
@@ -499,6 +510,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         verifyPhoneOtp,
         verifyEmailOtp,
         loginWithGoogleToken,
+        loginWithApple,
         completeProfile,
         verifyProfilePhone,
         acceptOrgTerms,
